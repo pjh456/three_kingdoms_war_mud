@@ -259,119 +259,124 @@ namespace tkw
 
         // ── 回合入口 ────────────────────────────────────────────────────
 
-        /**
-         * @brief 执行 player 的一个完整回合：判定 → 摸2 → 出牌 → 弃牌。
-         * @note 出牌阶段循环向 DecisionSource 要动作直到结束；非法动作
-         *       （手牌不存在/目标非法/超杀次数）立即报错并中止本回合。
-         * @note 角色在回合中死亡（闪电/决斗等）即终止本回合，不再摸牌/出牌/
-         *       弃牌；死亡实体已被移除，必须重新 find 以免悬垂指针。
-         */
-        inline TurnResult<void> execute_turn(
-            GameContext &ctx,
-            DecisionSource &ai,
-            const std::string &player)
+        /** @brief 角色是否仍在场（回合中可能因闪电/决斗等死亡被移除）。 */
+        inline bool is_alive(const GameContext &ctx, const std::string &player)
         {
-            if (ctx.entities->find(player).is_none())
-                return TurnResult<void>::Err(TurnError::UnknownPlayer);
+            return ctx.entities->find(player).is_some();
+        }
 
-            const auto alive = [&]()
-            { return ctx.entities->find(player).is_some(); };
-
-            // 1. 判定阶段
+        /**
+         * @brief 判定阶段：按判定区顺序结算延时锦囊。
+         * @return 是否跳过出牌阶段（乐不思蜀判定非红桃）；角色中途死亡时调用方
+         *         经 is_alive 判断，本函数不再继续结算。
+         */
+        inline TurnResult<bool> run_judgement_phase(
+            GameContext &ctx, DecisionSource &ai, const std::string &player)
+        {
             bool skip_play = false;
             const auto judge_zone = ctx.cards->judge(player);  // 拷贝
             for (const auto &delayed : judge_zone)
             {
                 auto r = resolve_delayed(ctx, ai, player, delayed);
                 if (r.is_err())
-                    return TurnResult<void>::Err(r.unwrap_err());
+                    return TurnResult<bool>::Err(r.unwrap_err());
                 if (r.unwrap() == DelayedOutcome::SkipPlay)
                     skip_play = true;
-                if (!alive())
-                    return TurnResult<void>::Ok();  // 闪电劈死 → 回合终止
+                if (!is_alive(ctx, player))
+                    break;  // 闪电劈死 → 回合终止
             }
+            return TurnResult<bool>::Ok(skip_play);
+        }
 
-            // 2. 摸牌阶段
-            if (!alive())
-                return TurnResult<void>::Ok();
+        /** @brief 摸牌阶段：摸 rules.draw_per_turn 张。 */
+        inline void run_draw_phase(GameContext &ctx, const std::string &player)
+        {
             apply_draw(ctx, player, rules_of(ctx).draw_per_turn);
+        }
 
-            // 3. 出牌阶段
-            if (!skip_play)
+        /**
+         * @brief 出牌阶段：循环向 DecisionSource 要动作直到结束。
+         * @note 非法动作（手牌不存在/目标非法/超杀次数）立即报错并中止本回合；
+         *       角色中途死亡（决斗自伤等）即返回 Ok，由调用方判断。
+         */
+        inline TurnResult<void> run_play_phase(
+            GameContext &ctx, DecisionSource &ai, const std::string &player)
+        {
+            int sha_played = 0;
+            const int limit = sha_limit(ctx, player);
+            while (true)
             {
-                int sha_played = 0;
-                const int limit = sha_limit(ctx, player);
-                while (true)
+                if (!is_alive(ctx, player))
+                    return TurnResult<void>::Ok();
+                const TurnContext turn{player, sha_played, limit};
+                auto action = ai.choose_play(ctx, turn);
+                if (action.is_none())
+                    break;
+
+                const auto card =
+                    find_in_hand(ctx, player, action.unwrap().instance_id);
+                if (card.is_none())
+                    return TurnResult<void>::Err(TurnError::CardNotInHand);
+
+                const auto def_opt = ctx.catalog->find(card.unwrap().def_id);
+                if (def_opt.is_none())
+                    return TurnResult<void>::Err(TurnError::UnknownCard);
+                const card::CardDef &def = *def_opt.unwrap();
+
+                if (def.type == card::CardType::Equipment)
                 {
-                    if (!alive())
-                        return TurnResult<void>::Ok();
-                    const TurnContext turn{player, sha_played, limit};
-                    auto action = ai.choose_play(ctx, turn);
-                    if (action.is_none())
-                        break;
-
-                    const auto card =
-                        find_in_hand(ctx, player, action.unwrap().instance_id);
-                    if (card.is_none())
-                        return TurnResult<void>::Err(TurnError::CardNotInHand);
-
-                    const auto def_opt = ctx.catalog->find(card.unwrap().def_id);
-                    if (def_opt.is_none())
-                        return TurnResult<void>::Err(TurnError::UnknownCard);
-                    const card::CardDef &def = *def_opt.unwrap();
-
-                    if (def.type == card::CardType::Equipment)
-                    {
-                        auto er = equip_card(ctx, player, card.unwrap());
-                        if (er.is_err())
-                            return TurnResult<void>::Err(er.unwrap_err());
-                        continue;
-                    }
-
-                    if (is_delayed_trick(def))
-                    {
-                        auto dr = place_delayed(
-                            ctx, ai, player, card.unwrap(),
-                            action.unwrap().targets);
-                        if (dr.is_err())
-                            return TurnResult<void>::Err(dr.unwrap_err());
-                        continue;
-                    }
-
-                    if (is_sha(def))
-                    {
-                        if (sha_played >= sha_limit(ctx, player))
-                            return TurnResult<void>::Err(TurnError::ShaLimitExceeded);
-                    }
-
-                    auto rr = resolve_play(
-                        ctx, ai, player, card.unwrap(), action.unwrap().targets);
-                    if (rr.is_err())
-                    {
-                        switch (rr.unwrap_err())
-                        {
-                        case EffectError::OutOfRange:
-                        case EffectError::InvalidTarget:
-                            return TurnResult<void>::Err(TurnError::InvalidTarget);
-                        case EffectError::CardNotOwned:
-                            return TurnResult<void>::Err(TurnError::CardNotInHand);
-                        default:
-                            return TurnResult<void>::Err(TurnError::PlayRejected);
-                        }
-                    }
-                    if (is_sha(def))
-                        ++sha_played;
-                    if (!alive())
-                        return TurnResult<void>::Ok();  // 决斗等自伤致死
+                    auto er = equip_card(ctx, player, card.unwrap());
+                    if (er.is_err())
+                        return TurnResult<void>::Err(er.unwrap_err());
+                    continue;
                 }
-            }
 
-            // 4. 弃牌阶段：手牌上限 = 体力上限
-            if (!alive())
-                return TurnResult<void>::Ok();
+                if (is_delayed_trick(def))
+                {
+                    auto dr = place_delayed(
+                        ctx, ai, player, card.unwrap(), action.unwrap().targets);
+                    if (dr.is_err())
+                        return TurnResult<void>::Err(dr.unwrap_err());
+                    continue;
+                }
+
+                if (is_sha(def))
+                {
+                    if (sha_played >= sha_limit(ctx, player))
+                        return TurnResult<void>::Err(TurnError::ShaLimitExceeded);
+                }
+
+                auto rr = resolve_play(
+                    ctx, ai, player, card.unwrap(), action.unwrap().targets);
+                if (rr.is_err())
+                {
+                    switch (rr.unwrap_err())
+                    {
+                    case EffectError::OutOfRange:
+                    case EffectError::InvalidTarget:
+                        return TurnResult<void>::Err(TurnError::InvalidTarget);
+                    case EffectError::CardNotOwned:
+                        return TurnResult<void>::Err(TurnError::CardNotInHand);
+                    default:
+                        return TurnResult<void>::Err(TurnError::PlayRejected);
+                    }
+                }
+                if (is_sha(def))
+                    ++sha_played;
+                if (!is_alive(ctx, player))
+                    return TurnResult<void>::Ok();  // 决斗等自伤致死
+            }
+            return TurnResult<void>::Ok();
+        }
+
+        /** @brief 弃牌阶段：手牌上限 = 体力上限。 */
+        inline TurnResult<void> run_discard_phase(
+            GameContext &ctx, DecisionSource &ai, const std::string &player)
+        {
             const int hand_limit =
                 ctx.entities->find(player).unwrap()->get_hp_bar().get_max();
-            const int over = static_cast<int>(ctx.cards->hand_size(player)) - hand_limit;
+            const int over =
+                static_cast<int>(ctx.cards->hand_size(player)) - hand_limit;
             if (over > 0)
             {
                 const auto discards =
@@ -389,6 +394,44 @@ namespace tkw
                 }
             }
             return TurnResult<void>::Ok();
+        }
+
+        /**
+         * @brief 执行 player 的一个完整回合：判定 → 摸2 → 出牌 → 弃牌。
+         * @note 各阶段见 run_*_phase；角色在任意阶段死亡即终止本回合（死亡实体
+         *       已被移除，阶段函数内均重新 find 以免悬垂指针）。
+         */
+        inline TurnResult<void> execute_turn(
+            GameContext &ctx,
+            DecisionSource &ai,
+            const std::string &player)
+        {
+            if (ctx.entities->find(player).is_none())
+                return TurnResult<void>::Err(TurnError::UnknownPlayer);
+
+            // 1. 判定阶段
+            auto jr = run_judgement_phase(ctx, ai, player);
+            if (jr.is_err())
+                return TurnResult<void>::Err(jr.unwrap_err());
+            const bool skip_play = jr.unwrap();
+            if (!is_alive(ctx, player))
+                return TurnResult<void>::Ok();
+
+            // 2. 摸牌阶段
+            run_draw_phase(ctx, player);
+
+            // 3. 出牌阶段
+            if (!skip_play)
+            {
+                auto pr = run_play_phase(ctx, ai, player);
+                if (pr.is_err())
+                    return TurnResult<void>::Err(pr.unwrap_err());
+            }
+
+            // 4. 弃牌阶段
+            if (!is_alive(ctx, player))
+                return TurnResult<void>::Ok();
+            return run_discard_phase(ctx, ai, player);
         }
     }
 }
