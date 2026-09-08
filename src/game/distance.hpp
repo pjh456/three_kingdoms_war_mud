@@ -71,12 +71,10 @@ namespace tkw
         }
 
         /**
-         * @brief 距离判定：from 到 to 的距离（含马修正）是否 ≤ range。
-         * @note 顺手牵羊（range=1）等按距离结算的牌走这里。
+         * @brief from 到 to 的调整后距离（含坐骑修正，下限 1）。
          */
-        inline bool distance_le(
-            const GameContext &ctx, const std::string &from,
-            const std::string &to, int range)
+        inline int distance_between(
+            const GameContext &ctx, const std::string &from, const std::string &to)
         {
             int d = seat_distance(ctx, from, to);
             const auto fs = summarize_equipment(ctx, from);
@@ -85,8 +83,18 @@ namespace tkw
                 --d;
             if (ts.defensive_horse)
                 ++d;
-            d = std::max(d, 1);
-            return d <= range;
+            return std::max(d, 1);
+        }
+
+        /**
+         * @brief 距离判定：from 到 to 的距离（含马修正）是否 ≤ range。
+         * @note 顺手牵羊（range=1）等按距离结算的牌走这里。
+         */
+        inline bool distance_le(
+            const GameContext &ctx, const std::string &from,
+            const std::string &to, int range)
+        {
+            return distance_between(ctx, from, to) <= range;
         }
 
         /** @brief 攻击距离判定：from 能否攻击 to（武器 range，无武器为 1）。 */

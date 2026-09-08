@@ -55,7 +55,8 @@ target_compile_definitions(
 
 doctest_discover_tests(card_tests)
 
-add_executable(game_tests test_main.cpp game/game_test.cpp game/replay_test.cpp)
+add_executable(game_tests test_main.cpp game/game_test.cpp game/replay_test.cpp
+                           game/ai_test.cpp)
 
 target_link_libraries(game_tests PRIVATE tkw_game doctest)
 
