@@ -3,7 +3,6 @@
     "name": "爪黄飞电",
     "type": "equipment",
     "subtype": "horse",
-    "set": "standard",
     "copies": [
         { "suit": "heart", "number": 13 }
     ],

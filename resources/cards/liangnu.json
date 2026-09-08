@@ -3,7 +3,6 @@
     "name": "诸葛连弩",
     "type": "equipment",
     "subtype": "weapon",
-    "set": "standard",
     "copies": [
         { "suit": "club", "number": 1 },
         { "suit": "diamond", "number": 1 }

@@ -192,7 +192,6 @@ namespace tkw
             std::string name;
             CardType type = CardType::Basic;
             std::string subtype;
-            std::string set;
             std::vector<CardCopy> copies;
             std::string text;
             Option<CardEffect> effect = Option<CardEffect>::None();

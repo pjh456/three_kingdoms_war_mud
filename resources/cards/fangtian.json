@@ -3,7 +3,6 @@
     "name": "方天画戟",
     "type": "equipment",
     "subtype": "weapon",
-    "set": "standard",
     "copies": [
         { "suit": "diamond", "number": 12 }
     ],

@@ -3,7 +3,6 @@
     "name": "桃",
     "type": "basic",
     "subtype": "heal",
-    "set": "standard",
     "copies": [
         { "suit": "heart", "number": 3 },
         { "suit": "heart", "number": 4 },

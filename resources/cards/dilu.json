@@ -3,7 +3,6 @@
     "name": "的卢",
     "type": "equipment",
     "subtype": "horse",
-    "set": "standard",
     "copies": [
         { "suit": "club", "number": 5 }
     ],

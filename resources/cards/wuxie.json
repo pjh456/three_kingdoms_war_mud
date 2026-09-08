@@ -3,7 +3,6 @@
     "name": "无懈可击",
     "type": "trick",
     "subtype": "instant",
-    "set": "ex",
     "copies": [
         { "suit": "spade", "number": 11 },
         { "suit": "club", "number": 12 },

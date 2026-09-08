@@ -3,7 +3,6 @@
     "name": "仁王盾",
     "type": "equipment",
     "subtype": "armor",
-    "set": "ex",
     "copies": [
         { "suit": "club", "number": 2 }
     ],

@@ -3,7 +3,6 @@
     "name": "乐不思蜀",
     "type": "trick",
     "subtype": "delayed",
-    "set": "standard",
     "copies": [
         { "suit": "spade", "number": 6 },
         { "suit": "club", "number": 6 },

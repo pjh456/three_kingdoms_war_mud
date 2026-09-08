@@ -395,11 +395,6 @@ namespace tkw
                         cfg::ConfigErrorKind::InvalidValue,
                         key_path(path, "subtype"));
 
-                auto set = cfg::opt_string(root, "set", "standard", path);
-                if (set.is_err())
-                    return cfg::ConfigResult<CardDef>::Err(set.unwrap_err());
-                def.set = set.unwrap();
-
                 auto text = cfg::opt_string(root, "text", "", path);
                 if (text.is_err())
                     return cfg::ConfigResult<CardDef>::Err(text.unwrap_err());

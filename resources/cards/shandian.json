@@ -3,7 +3,6 @@
     "name": "闪电",
     "type": "trick",
     "subtype": "delayed",
-    "set": "ex",
     "copies": [
         { "suit": "spade", "number": 1 },
         { "suit": "heart", "number": 12 }

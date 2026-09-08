@@ -3,7 +3,6 @@
     "name": "闪",
     "type": "basic",
     "subtype": "dodge",
-    "set": "standard",
     "copies": [
         { "suit": "heart", "number": 2 },
         { "suit": "heart", "number": 2 },

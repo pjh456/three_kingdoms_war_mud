@@ -3,7 +3,6 @@
     "name": "万箭齐发",
     "type": "trick",
     "subtype": "instant",
-    "set": "standard",
     "copies": [
         { "suit": "heart", "number": 1 }
     ],

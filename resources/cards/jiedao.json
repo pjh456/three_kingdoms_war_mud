@@ -3,7 +3,6 @@
     "name": "借刀杀人",
     "type": "trick",
     "subtype": "instant",
-    "set": "standard",
     "copies": [
         { "suit": "club", "number": 12 },
         { "suit": "club", "number": 13 }

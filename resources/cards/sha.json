@@ -3,7 +3,6 @@
     "name": "杀",
     "type": "basic",
     "subtype": "attack",
-    "set": "standard",
     "copies": [
         { "suit": "spade", "number": 7 },
         { "suit": "spade", "number": 8 },

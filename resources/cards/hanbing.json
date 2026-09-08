@@ -3,7 +3,6 @@
     "name": "寒冰剑",
     "type": "equipment",
     "subtype": "weapon",
-    "set": "ex",
     "copies": [
         { "suit": "spade", "number": 2 }
     ],

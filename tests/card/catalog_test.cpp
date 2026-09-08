@@ -38,7 +38,6 @@ TEST_CASE("card: parse_card_def basic card")
 {
     const auto d = doc(R"({
         "id": "sha", "name": "杀", "type": "basic", "subtype": "attack",
-        "set": "standard",
         "copies": [ {"suit": "spade", "number": 7}, {"suit": "heart", "number": 10} ],
         "text": "出牌阶段……",
         "effect": {"kind": "damage", "amount": 1, "scope": "one_other", "response": "jink"}
@@ -50,7 +49,6 @@ TEST_CASE("card: parse_card_def basic card")
     CHECK(def.name == "杀");
     CHECK(def.type == CardType::Basic);
     CHECK(def.subtype == "attack");
-    CHECK(def.set == "standard");
     CHECK(def.copies.size() == 2);
     CHECK(def.copies[0] == CardCopy{Suit::Spade, 7});
     REQUIRE(def.effect.is_some());
@@ -65,7 +63,6 @@ TEST_CASE("card: parse_card_def equipment with horse direction")
 {
     const auto d = doc(R"({
         "id": "chitu", "name": "赤兔", "type": "equipment", "subtype": "horse",
-        "set": "standard",
         "copies": [ {"suit": "heart", "number": 5} ],
         "text": "坐骑·-1。锁定技，你与其他角色的距离-1。",
         "equip": {"slot": "offensive_horse"}
@@ -123,7 +120,6 @@ TEST_CASE("card: parse_card_def default set / missing optionals")
     })");
     auto r = parse_card_def(d.root(), "a");
     REQUIRE(r.is_ok());
-    CHECK(r.unwrap().set == "standard");
     CHECK(r.unwrap().subtype.empty());
     CHECK(r.unwrap().effect.is_none());
     CHECK(r.unwrap().equip.is_none());

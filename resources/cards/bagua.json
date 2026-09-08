@@ -3,7 +3,6 @@
     "name": "八卦阵",
     "type": "equipment",
     "subtype": "armor",
-    "set": "standard",
     "copies": [
         { "suit": "spade", "number": 2 },
         { "suit": "club", "number": 2 }
