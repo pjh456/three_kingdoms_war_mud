@@ -13,7 +13,7 @@
 
 #include "card/catalog.hpp"
 #include "card/def.hpp"
-#include "game/resolver.hpp"
+#include "game/resolve/resolver.hpp"
 
 namespace tkw
 {

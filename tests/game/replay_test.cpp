@@ -13,7 +13,7 @@
 
 #include "event_log.hpp"
 #include "game/ai/simple.hpp"
-#include "game/loop.hpp"
+#include "game/flow/loop.hpp"
 #include "test_game.hpp"
 
 namespace

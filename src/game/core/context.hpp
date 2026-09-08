@@ -16,7 +16,7 @@
 #include "card/manager.hpp"
 #include "entity/manager.hpp"
 #include "event/event_bus.hpp"
-#include "game/rules.hpp"
+#include "game/core/rules.hpp"
 #include "util/rng.hpp"
 
 namespace tkw

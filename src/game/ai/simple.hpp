@@ -15,10 +15,10 @@
 
 #include "card/card.hpp"
 #include "card/def.hpp"
-#include "game/context.hpp"
-#include "game/decision.hpp"
-#include "game/effect.hpp"
-#include "game/resolver.hpp"
+#include "game/core/context.hpp"
+#include "game/core/decision.hpp"
+#include "game/core/effect.hpp"
+#include "game/resolve/resolver.hpp"
 #include "util/types.hpp"
 
 namespace tkw

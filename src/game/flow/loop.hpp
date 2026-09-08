@@ -16,10 +16,10 @@
 #include "card/catalog.hpp"
 #include "card/manager.hpp"
 #include "entity/manager.hpp"
-#include "game/context.hpp"
-#include "game/decision.hpp"
-#include "game/state.hpp"
-#include "game/turn.hpp"
+#include "game/core/context.hpp"
+#include "game/core/decision.hpp"
+#include "game/core/state.hpp"
+#include "game/flow/turn.hpp"
 #include "util/types.hpp"
 
 namespace tkw

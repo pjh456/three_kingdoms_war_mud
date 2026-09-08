@@ -18,7 +18,7 @@
 #include <vector>
 
 #include "card/def.hpp"
-#include "game/context.hpp"
+#include "game/core/context.hpp"
 #include "util/types.hpp"
 
 namespace tkw

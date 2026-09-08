@@ -18,7 +18,7 @@
 #include "entity/hp.hpp"
 #include "entity/manager.hpp"
 #include "event/event_bus.hpp"
-#include "game/context.hpp"
+#include "game/core/context.hpp"
 #include "util/rng.hpp"
 
 namespace tkw

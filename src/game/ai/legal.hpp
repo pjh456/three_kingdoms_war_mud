@@ -15,12 +15,12 @@
 #include "card/card.hpp"
 #include "card/def.hpp"
 #include "card/manager.hpp"
-#include "game/context.hpp"
-#include "game/decision.hpp"
-#include "game/distance.hpp"
-#include "game/effect.hpp"
-#include "game/equip.hpp"
-#include "game/resolver.hpp"
+#include "game/core/context.hpp"
+#include "game/core/decision.hpp"
+#include "game/query/distance.hpp"
+#include "game/core/effect.hpp"
+#include "game/query/equip.hpp"
+#include "game/resolve/resolver.hpp"
 
 namespace tkw
 {

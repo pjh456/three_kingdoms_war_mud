@@ -19,9 +19,9 @@
 #include "card/catalog.hpp"
 #include "card/def.hpp"
 #include "entity/manager.hpp"
-#include "game/loop.hpp"
-#include "game/rules.hpp"
-#include "game/table.hpp"
+#include "game/flow/loop.hpp"
+#include "game/core/rules.hpp"
+#include "game/flow/table.hpp"
 #include "save/format.hpp"
 
 namespace tkw

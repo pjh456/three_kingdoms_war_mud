@@ -12,7 +12,7 @@
 #include "entity/event.hpp"
 #include "event/event_bus.hpp"
 #include "event/handler.hpp"
-#include "game/card_event.hpp"
+#include "game/core/card_event.hpp"
 
 namespace tkw
 {

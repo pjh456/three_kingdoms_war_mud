@@ -24,12 +24,12 @@
 #include "card/catalog.hpp"
 #include "card/def.hpp"
 #include "card/manager.hpp"
-#include "game/combat.hpp"
-#include "game/context.hpp"
-#include "game/decision.hpp"
-#include "game/equip.hpp"
-#include "game/response.hpp"
-#include "game/state.hpp"
+#include "game/resolve/combat.hpp"
+#include "game/core/context.hpp"
+#include "game/core/decision.hpp"
+#include "game/query/equip.hpp"
+#include "game/resolve/response.hpp"
+#include "game/core/state.hpp"
 #include "util/types.hpp"
 
 namespace tkw

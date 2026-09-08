@@ -10,7 +10,7 @@
 
 #include "card/def.hpp"
 #include "game/ai/view.hpp"
-#include "game/effect.hpp"
+#include "game/core/effect.hpp"
 
 namespace tkw
 {

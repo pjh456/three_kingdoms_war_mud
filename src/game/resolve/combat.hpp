@@ -22,9 +22,9 @@
 #include "entity/event.hpp"
 #include "entity/manager.hpp"
 #include "event/event_bus.hpp"
-#include "game/context.hpp"
-#include "game/decision.hpp"
-#include "game/state.hpp"
+#include "game/core/context.hpp"
+#include "game/core/decision.hpp"
+#include "game/core/state.hpp"
 #include "util/types.hpp"
 
 namespace tkw

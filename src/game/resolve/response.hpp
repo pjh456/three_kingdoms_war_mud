@@ -14,10 +14,10 @@
 #include "card/catalog.hpp"
 #include "card/def.hpp"
 #include "card/manager.hpp"
-#include "game/card_event.hpp"
-#include "game/context.hpp"
-#include "game/decision.hpp"
-#include "game/effect.hpp"
+#include "game/core/card_event.hpp"
+#include "game/core/context.hpp"
+#include "game/core/decision.hpp"
+#include "game/core/effect.hpp"
 #include "util/types.hpp"
 
 namespace tkw

@@ -16,7 +16,7 @@
 #include "event/event.hpp"
 #include "event/event_bus.hpp"
 #include "event/marco.hpp"
-#include "game/context.hpp"
+#include "game/core/context.hpp"
 
 namespace tkw
 {

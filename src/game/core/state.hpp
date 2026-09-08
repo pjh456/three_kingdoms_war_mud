@@ -14,8 +14,8 @@
 #include "card/def.hpp"
 #include "card/manager.hpp"
 #include "entity/manager.hpp"
-#include "game/card_event.hpp"
-#include "game/context.hpp"
+#include "game/core/card_event.hpp"
+#include "game/core/context.hpp"
 #include "util/types.hpp"
 
 namespace tkw

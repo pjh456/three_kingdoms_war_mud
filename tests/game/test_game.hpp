@@ -19,8 +19,8 @@
 #include "card/def.hpp"
 #include "config/resource.hpp"
 #include "entity/hp.hpp"
-#include "game/decision.hpp"
-#include "game/table.hpp"
+#include "game/core/decision.hpp"
+#include "game/flow/table.hpp"
 #include "util/rng.hpp"
 
 namespace tkw
