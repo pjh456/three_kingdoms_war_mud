@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <string>
 
@@ -10,6 +11,7 @@
 #include "game/ai/simple.hpp"
 #include "game/loop.hpp"
 #include "game/table.hpp"
+#include "io/file.hpp"
 #include "save/error.hpp"
 #include "save/reader.hpp"
 #include "save/writer.hpp"
@@ -88,4 +90,29 @@ TEST_CASE("save: malformed JSON is rejected")
     auto r = save::read("{not json", *a, s);
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err().kind == save::SaveErrorKind::ParseError);
+}
+
+TEST_CASE("save: atomic write round-trips through a file")
+{
+    const auto dir =
+        std::filesystem::temp_directory_path() / "tkw_save_atomic_test";
+    std::filesystem::remove_all(dir);
+    REQUIRE(std::filesystem::create_directories(dir));
+    const auto path = dir / "save.json";
+
+    REQUIRE(tkw::io::write_text_atomic(path, "{\"a\":1}").is_ok());
+    auto text = tkw::io::read_text(path);
+    REQUIRE(text.is_ok());
+    CHECK(text.unwrap() == "{\"a\":1}");
+
+    // 覆盖已有目标（真实存档内容）
+    auto a = make_game(42);
+    GameSession s;
+    const std::string big = save::write(*a, s, "deck");
+    REQUIRE(tkw::io::write_text_atomic(path, big).is_ok());
+    auto back = tkw::io::read_text(path);
+    REQUIRE(back.is_ok());
+    CHECK(back.unwrap() == big);
+
+    std::filesystem::remove_all(dir);
 }

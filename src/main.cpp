@@ -24,6 +24,9 @@
 #include "game/card_event.hpp"
 #include "game/loop.hpp"
 #include "game/table.hpp"
+#include "io/file.hpp"
+#include "save/reader.hpp"
+#include "save/writer.hpp"
 #include "util/rng.hpp"
 
 namespace
@@ -45,6 +48,7 @@ namespace
         int hand = tkw::game::RulesConfig{}.initial_hand;
         std::uint32_t seed = 42;
         bool verbose = false;
+        std::filesystem::path autosave = "tkw-autosave.json";
     };
 
     /** 从解析上下文读参数（子命令经父链继承根命令的选项）。 */
@@ -58,7 +62,164 @@ namespace
         opt.seed =
             static_cast<std::uint32_t>(ctx.get_or<int, fixed_string("seed")>(42));
         opt.verbose = ctx.get_or<bool, fixed_string("verbose")>(false);
+        opt.autosave =
+            ctx.get_or<std::filesystem::path, fixed_string("autosave")>(
+                std::filesystem::path("tkw-autosave.json"));
         return opt;
+    }
+
+    /** 跨命令持有的对局会话（new/step/run/save/load 共享）。 */
+    struct Session
+    {
+        std::unique_ptr<tkw::game::Game> game;
+        tkw::game::GameSession state;
+        bool active = false;
+    };
+
+    /** 按选项构建一局（加载牌堆 + 建玩家）；失败返回 nullptr 并填 err。 */
+    std::unique_ptr<tkw::game::Game> make_game(const Options &opt, std::string &err)
+    {
+        tkw::config::ResourceStore store(opt.deck);
+        auto catalog = tkw::card::CardDefCatalog::load(store, "deck");
+        if (catalog.is_err())
+        {
+            const auto &e = catalog.unwrap_err();
+            err = "加载牌堆失败 (kind=" + std::to_string(static_cast<int>(e.kind)) +
+                  "): " + e.detail;
+            return nullptr;
+        }
+        auto game = std::make_unique<tkw::game::Game>(
+            std::move(catalog).unwrap(), std::make_unique<tkw::SeededRng>(opt.seed));
+        for (int i = 0; i < opt.players; ++i)
+        {
+            auto r = game->add_player(
+                "P" + std::to_string(i), i,
+                tkw::entity::Hp::make(tkw::game::RulesConfig{}.base_hp));
+            if (r.is_err())
+            {
+                err = "创建玩家失败: P" + std::to_string(i);
+                return nullptr;
+            }
+        }
+        return game;
+    }
+
+    void print_status(const Session &s)
+    {
+        std::cout << "会话: " << (s.active ? "进行中" : "无") << "\n";
+        if (!s.active || !s.game)
+            return;
+        auto ctx = s.game->context();
+        std::cout << "  下一回合: " << s.state.current
+                  << "，已执行回合: " << s.state.turns
+                  << "，存活: " << ctx.entities->size() << "\n";
+    }
+
+    CliResult<void> cmd_new(const Options &opt, Session &s)
+    {
+        std::string err;
+        auto game = make_game(opt, err);
+        if (!game)
+            return CliFailure{CliError(err)};
+        auto ctx = game->context();
+        tkw::game::GameSession state;
+        if (tkw::game::start_session(ctx, state, "P0", opt.hand).is_err())
+            return CliFailure{CliError("开局失败")};
+        s.game = std::move(game);
+        s.state = std::move(state);
+        s.active = true;
+        std::cout << "新对局已开始\n";
+        print_status(s);
+        return CliResult<void>::Ok();
+    }
+
+    CliResult<void> cmd_step(Session &s)
+    {
+        if (!s.active || !s.game)
+            return CliFailure{CliError("没有进行中的对局")};
+        tkw::game::SimpleAI ai;
+        auto ctx = s.game->context();
+        if (tkw::game::session_over(ctx))
+        {
+            std::cout << "对局已结束，胜者: " << tkw::game::session_winner(ctx) << "\n";
+            return CliResult<void>::Ok();
+        }
+        auto r = tkw::game::step_session(ctx, ai, s.state);
+        if (r.is_err())
+        {
+            if (r.unwrap_err() == tkw::game::LoopError::MaxRounds)
+            {
+                std::cout << "平局（达到最大回合数）\n";
+                return CliResult<void>::Ok();
+            }
+            return CliFailure{CliError("回合执行失败")};
+        }
+        print_status(s);
+        if (tkw::game::session_over(ctx))
+            std::cout << "对局结束，胜者: " << tkw::game::session_winner(ctx) << "\n";
+        return CliResult<void>::Ok();
+    }
+
+    CliResult<void> cmd_run(Session &s)
+    {
+        if (!s.active || !s.game)
+            return CliFailure{CliError("没有进行中的对局")};
+        tkw::game::SimpleAI ai;
+        auto ctx = s.game->context();
+        while (!tkw::game::session_over(ctx))
+        {
+            auto r = tkw::game::step_session(ctx, ai, s.state);
+            if (r.is_err())
+            {
+                if (r.unwrap_err() == tkw::game::LoopError::MaxRounds)
+                {
+                    std::cout << "平局（达到最大回合数）\n";
+                    return CliResult<void>::Ok();
+                }
+                return CliFailure{CliError("回合执行失败")};
+            }
+        }
+        std::cout << "胜者: " << tkw::game::session_winner(ctx)
+                  << "，回合数: " << s.state.turns << "\n";
+        return CliResult<void>::Ok();
+    }
+
+    CliResult<void> cmd_save(const std::filesystem::path &file, Session &s)
+    {
+        if (!s.active || !s.game)
+            return CliFailure{CliError("没有进行中的对局")};
+        const std::string text = tkw::save::write(*s.game, s.state, "deck");
+        if (tkw::io::write_text_atomic(file, text).is_err())
+            return CliFailure{CliError("写入存档失败: " + file.string())};
+        std::cout << "已保存: " << file.string() << "\n";
+        return CliResult<void>::Ok();
+    }
+
+    CliResult<void> cmd_load(
+        const Options &opt, const std::filesystem::path &file, Session &s)
+    {
+        auto text = tkw::io::read_text(file);
+        if (text.is_err())
+            return CliFailure{CliError("读取存档失败: " + file.string())};
+        std::string err;
+        auto game = make_game(opt, err);
+        if (!game)
+            return CliFailure{CliError(err)};
+        tkw::game::GameSession state;
+        auto r = tkw::save::read(text.unwrap(), *game, state);
+        if (r.is_err())
+        {
+            const auto &e = r.unwrap_err();
+            return CliFailure{CliError(
+                "存档加载失败 (kind=" + std::to_string(static_cast<int>(e.kind)) +
+                "): " + e.detail)};
+        }
+        s.game = std::move(game);
+        s.state = std::move(state);
+        s.active = true;
+        std::cout << "已加载: " << file.string() << "\n";
+        print_status(s);
+        return CliResult<void>::Ok();
     }
 
     CliResult<void> run_game(const Options &opt)
@@ -164,6 +325,7 @@ int main(int argc, char **argv)
     app.set_extra_args(ExtraArgsPolicy::Error);  // 未知命令/多余参数即报错
 
     const tkw::game::RulesConfig rules{};
+    Session session;  // 跨命令持有的对局会话
 
     // 根命令选项（无子命令时直接跑一局，兼容旧用法）
     app.option<fixed_string("deck")>(
@@ -185,6 +347,9 @@ int main(int argc, char **argv)
         .default_value(42);
     app.option<fixed_string("verbose")>("--verbose", 'v', "打印卡牌/死亡事件日志")
         .boolean();
+    app.option<fixed_string("autosave")>(
+        "--autosave", "REPL 退出时自动存档路径（空串关闭）",
+        std::filesystem::path("tkw-autosave.json"));
 
     app.action([](ParseContext &ctx) -> CliResult<void>
                { return run_game(options_from(ctx)); });
@@ -211,14 +376,61 @@ int main(int argc, char **argv)
             return run_game(opt);
         });
 
+    // new：开新对局（不立即跑），供 step/run/save 续用
+    auto &new_cmd = app.add_leaf("new", "开新对局（用 --players/--seed/--hand）");
+    new_cmd.action(
+        [&session](ParseContext &ctx) -> CliResult<void>
+        { return cmd_new(options_from(ctx), session); });
+
+    // step：执行一个回合
+    auto &step_cmd = app.add_leaf("step", "执行当前会话的一个回合");
+    step_cmd.action(
+        [&session](ParseContext &) -> CliResult<void> { return cmd_step(session); });
+
+    // run：跑到对局结束
+    auto &run_cmd = app.add_leaf("run", "跑到当前会话结束");
+    run_cmd.action(
+        [&session](ParseContext &) -> CliResult<void> { return cmd_run(session); });
+
+    // status：查看会话状态
+    auto &status_cmd = app.add_leaf("status", "查看当前会话状态");
+    status_cmd.action(
+        [&session](ParseContext &) -> CliResult<void>
+        {
+            print_status(session);
+            return CliResult<void>::Ok();
+        });
+
+    // save：保存当前对局
+    auto &save_cmd = app.add_leaf("save", "保存当前对局：save <file>");
+    save_cmd.arg<std::string, 0>("file", "存档路径").required();
+    save_cmd.action(
+        [&session](ParseContext &ctx) -> CliResult<void>
+        { return cmd_save(ctx.get<std::string, 0>(), session); });
+
+    // load：从存档继续
+    auto &load_cmd = app.add_leaf("load", "加载存档：load <file>");
+    load_cmd.arg<std::string, 0>("file", "存档路径").required();
+    load_cmd.action(
+        [&session](ParseContext &ctx) -> CliResult<void>
+        { return cmd_load(options_from(ctx), ctx.get<std::string, 0>(), session); });
+
     // repl：交互模式（对局即 MUD 方向）
     auto &repl = app.add_leaf("repl", "进入交互模式（? 查看命令，quit 退出）");
     repl.set_visibility(Visibility::Cli);
     repl.action(
-        [&app](ParseContext &) -> CliResult<void>
+        [&app, &session](ParseContext &ctx) -> CliResult<void>
         {
             InteractiveConsole console(app, "tkw> ");
             console.run();
+            const Options opt = options_from(ctx);
+            if (session.active && session.game && !opt.autosave.empty())
+            {
+                const std::string text =
+                    tkw::save::write(*session.game, session.state, "deck");
+                if (tkw::io::write_text_atomic(opt.autosave, text).is_ok())
+                    std::cout << "已自动存档: " << opt.autosave.string() << "\n";
+            }
             return CliResult<void>::Ok();
         });
 

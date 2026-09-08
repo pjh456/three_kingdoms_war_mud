@@ -75,6 +75,30 @@ namespace tkw
                 return IOResult<void>::Ok();
             return IOResult<void>::Err(map_error(r.unwrap_err()));
         }
+
+        /**
+         * @brief 原子写：先写 `<path>.tmp`，再 rename 覆盖目标。
+         * @note 失败时清理临时文件，不破坏已有目标文件。
+         */
+        inline IOResult<void> write_text_atomic(
+            const std::filesystem::path &path, std::string_view content)
+        {
+            auto tmp = path;
+            tmp += ".tmp";
+            auto w = write_text(tmp, content);
+            if (w.is_err())
+                return w;
+
+            std::error_code ec;
+            std::filesystem::rename(tmp, path, ec);
+            if (ec)
+            {
+                std::error_code rm_ec;
+                std::filesystem::remove(tmp, rm_ec);
+                return IOResult<void>::Err(IoError::IoFailed);
+            }
+            return IOResult<void>::Ok();
+        }
     }
 }
 
