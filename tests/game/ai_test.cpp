@@ -22,15 +22,22 @@ TEST_CASE("ai: view captures self and others")
 
     const auto v = make_view(g.ctx, "a");
     CHECK(v.self == "a");
+    CHECK(v.self_seat == 0);
     CHECK(v.self_hp == 4);
     CHECK(v.hand.size() == 1);
+    CHECK(v.equip.empty());
+    CHECK(v.judge.empty());
     REQUIRE(v.others.size() == 2);
     CHECK(v.others[0].id == "b");
+    CHECK(v.others[0].seat == 1);
     CHECK(v.others[0].hp == 3);
     CHECK(v.others[0].hand_size == 1);
     CHECK(v.others[0].has_weapon);
     CHECK(v.others[0].distance == 1);
     CHECK(v.others[0].in_attack_range);
+    REQUIRE(v.others[0].equip.size() == 1);
+    CHECK(v.others[0].equip[0].def_id == "qinglong");
+    CHECK(v.others[0].judge.empty());
 }
 
 TEST_CASE("ai: evaluator scores cards and enemies")
