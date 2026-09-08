@@ -209,13 +209,6 @@ namespace tkw
             return TurnResult<void>::Ok();
         }
 
-        /** @brief 该定义是否为「延时锦囊」（锦囊、有判定描述、无主动效果）。 */
-        inline bool is_delayed_trick(const card::CardDef &def)
-        {
-            return def.type == card::CardType::Trick && def.effect.is_none() &&
-                   def.judge.is_some();
-        }
-
         /**
          * @brief 打出延时锦囊：按 judge.scope 校验目标，置入其判定区。
          * @note 同名延时锦囊不可叠加；打出时开无懈窗口，被抵消则直接弃置。

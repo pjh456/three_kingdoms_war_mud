@@ -17,6 +17,7 @@
 #include "game/context.hpp"
 #include "game/decision.hpp"
 #include "game/distance.hpp"
+#include "game/legal.hpp"
 #include "game/loop.hpp"
 #include "game/resolver.hpp"
 #include "game/table.hpp"
@@ -1299,6 +1300,62 @@ TEST_CASE("game: step_session advances past a player who died in their turn")
     REQUIRE(r.is_ok());
     CHECK(g.entities.find("a").is_none());
     CHECK(session.current == "b");  // 下一位 = 座位 1
+}
+
+// ── 合法动作生成 ─────────────────────────────────────────────────────
+
+TEST_CASE("game: legal_actions are all accepted by the engine")
+{
+    auto build = [](TestGame &g)
+    {
+        g.add_player("a", 0, 4);
+        g.add_player("b", 1, 4);
+        g.add_player("c", 2, 4);
+        g.give("a", "sha", "s#1");
+        g.give("a", "guohe", "g#1");
+        g.give("a", "shunshou", "ss#1");
+        g.give("a", "jiedao", "j#1");
+        g.give("a", "lesi", "l#1");
+        g.give("a", "liangnu", "e#1");
+        g.equip("b", "qinglong", "eb#1");
+        g.give("b", "sha", "bs#1");
+    };
+
+    TestGame g("deck");
+    build(g);
+    const TurnContext turn{"a", 0, 1};
+    const auto acts = legal_actions(g.ctx, "a", turn);
+    REQUIRE(!acts.empty());
+
+    for (const auto &act : acts)
+    {
+        TestGame fresh("deck");
+        build(fresh);
+        TestDecider d;
+        d.plays = {PlayAction{act.card.instance_id, act.targets}};
+        auto r = execute_turn(fresh.ctx, d, "a");
+        INFO("card=" << act.card.def_id);
+        CHECK(r.is_ok());
+    }
+}
+
+TEST_CASE("game: legal_actions excludes sha when turn limit reached")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+
+    const TurnContext turn{"a", 1, 1};
+    CHECK(legal_actions(g.ctx, "a", turn).empty());
+}
+
+TEST_CASE("game: legal_actions empty for empty hand")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    CHECK(legal_actions(g.ctx, "a", TurnContext{"a", 0, 1}).empty());
 }
 
 // ── 杀结算：装备效果 ─────────────────────────────────────────────────

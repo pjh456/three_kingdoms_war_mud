@@ -74,6 +74,13 @@ namespace tkw
         {
             return effect_traits(k).sha;
         }
+
+        /** @brief 该定义是否为「延时锦囊」（锦囊、有判定描述、无主动效果）。 */
+        inline bool is_delayed_trick(const card::CardDef &def)
+        {
+            return def.type == card::CardType::Trick && def.effect.is_none() &&
+                   def.judge.is_some();
+        }
     }
 }
 
