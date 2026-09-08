@@ -54,33 +54,43 @@ namespace tkw
         }
 
         /**
-         * @brief 开响应窗口：先看实体是否有响应牌，有则询问决策源，
-         *        决定打出则消费该牌（移除+弃置）。返回是否成功响应。
+         * @brief 开响应窗口：先看实体是否有响应牌，有则询问决策源具体打哪张，
+         *        校验后消费（移除+弃置）。返回实际消费的牌；None = 未响应。
+         */
+        inline Option<card::Card> consume_response(
+            GameContext &ctx, DecisionSource &ai,
+            const std::string &entity_id, card::ResponseKind kind)
+        {
+            if (!has_response_card(ctx, entity_id, kind))
+                return Option<card::Card>::None();
+            const auto chosen = ai.play_response(ctx, entity_id, kind);
+            if (chosen.is_none())
+                return Option<card::Card>::None();
+
+            auto removed = ctx.cards->remove_from_hand(entity_id, chosen.unwrap());
+            if (removed.is_none())
+                return Option<card::Card>::None();
+            card::Card card = std::move(removed).unwrap();
+
+            const auto def = ctx.catalog->find(card.def_id);
+            if (def.is_none() || !is_response_def(*def.unwrap(), kind))
+            {
+                ctx.cards->add_to_hand(entity_id, std::move(card));  // 非法选择退回
+                return Option<card::Card>::None();
+            }
+            ctx.cards->discard(card);
+            emit_card_discarded(ctx, entity_id, card);
+            return Option<card::Card>::Some(std::move(card));
+        }
+
+        /**
+         * @brief 开响应窗口并消费响应牌。返回是否成功响应。
          */
         inline bool request_response(
             GameContext &ctx, DecisionSource &ai,
             const std::string &entity_id, card::ResponseKind kind)
         {
-            if (!has_response_card(ctx, entity_id, kind))
-                return false;
-            if (!ai.play_response(ctx, entity_id, kind))
-                return false;
-            for (const auto &c : ctx.cards->hand(entity_id))
-            {
-                const auto def = ctx.catalog->find(c.def_id);
-                if (def.is_some() && is_response_def(*def.unwrap(), kind))
-                {
-                    auto removed = ctx.cards->remove_from_hand(entity_id, c.instance_id);
-                    if (removed.is_some())
-                    {
-                        card::Card card = std::move(removed).unwrap();
-                        ctx.cards->discard(card);
-                        emit_card_discarded(ctx, entity_id, card);
-                    }
-                    return true;
-                }
-            }
-            return false;
+            return consume_response(ctx, ai, entity_id, kind).is_some();
         }
     }
 }

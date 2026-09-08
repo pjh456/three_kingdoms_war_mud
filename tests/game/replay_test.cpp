@@ -77,8 +77,8 @@ TEST_CASE("replay: 4-player draw is still deterministic")
 TEST_CASE("replay: golden fingerprints pin the rule semantics")
 {
     const auto two = run_game(1, 2);
-    CHECK(two.size() == 76);
-    CHECK(fingerprint(two) == 2337061263401073039ULL);
+    CHECK(two.size() == 77);
+    CHECK(fingerprint(two) == 11210068941957374334ULL);
 
     const auto four = run_game(42, 4);
     CHECK(four.size() == 372);

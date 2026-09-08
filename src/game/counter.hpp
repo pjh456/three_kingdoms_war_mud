@@ -45,24 +45,23 @@ namespace tkw
             return false;
         }
 
-        inline bool consume_counter(GameContext &ctx, const std::string &player)
+        inline bool consume_counter(
+            GameContext &ctx, const std::string &player,
+            const std::string &instance_id)
         {
-            for (const auto &c : ctx.cards->hand(player))
+            auto removed = ctx.cards->remove_from_hand(player, instance_id);
+            if (removed.is_none())
+                return false;
+            card::Card card = std::move(removed).unwrap();
+            const auto def = ctx.catalog->find(card.def_id);
+            if (def.is_none() || !is_counter_def(*def.unwrap()))
             {
-                const auto def = ctx.catalog->find(c.def_id);
-                if (def.is_some() && is_counter_def(*def.unwrap()))
-                {
-                    auto removed = ctx.cards->remove_from_hand(player, c.instance_id);
-                    if (removed.is_some())
-                    {
-                        card::Card card = std::move(removed).unwrap();
-                        ctx.cards->discard(card);
-                        emit_card_discarded(ctx, player, card);
-                    }
-                    return true;
-                }
+                ctx.cards->add_to_hand(player, std::move(card));  // 非法选择退回
+                return false;
             }
-            return false;
+            ctx.cards->discard(card);
+            emit_card_discarded(ctx, player, card);
+            return true;
         }
 
         /** @brief 座位序（从 start 开始环绕）。 */
@@ -78,10 +77,10 @@ namespace tkw
         {
             if (!has_counter_card(ctx, player))
                 return false;
-            if (!ai.play_counter(ctx, player))
+            const auto chosen = ai.play_counter(ctx, player);
+            if (chosen.is_none())
                 return false;
-            consume_counter(ctx, player);
-            return true;
+            return consume_counter(ctx, player, chosen.unwrap());
         }
 
         /**

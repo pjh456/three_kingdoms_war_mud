@@ -49,25 +49,24 @@ namespace tkw
             return false;
         }
 
-        /** @brief 消耗玩家手牌中的一张桃（移除+弃置+事件）。 */
-        inline bool consume_peach(GameContext &ctx, const std::string &player)
+        /** @brief 消耗玩家指定的救场牌（校验确为救场牌）；失败返回 false。 */
+        inline bool consume_peach(
+            GameContext &ctx, const std::string &player,
+            const std::string &instance_id)
         {
-            for (const auto &c : ctx.cards->hand(player))
+            auto removed = ctx.cards->remove_from_hand(player, instance_id);
+            if (removed.is_none())
+                return false;
+            card::Card card = std::move(removed).unwrap();
+            const auto def = ctx.catalog->find(card.def_id);
+            if (def.is_none() || !is_rescue_def(*def.unwrap()))
             {
-                const auto def = ctx.catalog->find(c.def_id);
-                if (def.is_some() && is_rescue_def(*def.unwrap()))
-                {
-                    auto removed = ctx.cards->remove_from_hand(player, c.instance_id);
-                    if (removed.is_some())
-                    {
-                        card::Card card = std::move(removed).unwrap();
-                        ctx.cards->discard(card);
-                        emit_card_discarded(ctx, player, card);
-                    }
-                    return true;
-                }
+                ctx.cards->add_to_hand(player, std::move(card));  // 非法选择退回
+                return false;
             }
-            return false;
+            ctx.cards->discard(card);
+            emit_card_discarded(ctx, player, card);
+            return true;
         }
 
         /** @brief 死亡清场：手牌/装备/判定区全部置入弃牌堆，移除实体并发布死亡事件。 */
@@ -115,9 +114,11 @@ namespace tkw
                 {
                     if (!has_peach(ctx, saver))
                         continue;
-                    if (!ai.play_peach(ctx, saver, dying))
+                    const auto chosen = ai.play_peach(ctx, saver, dying);
+                    if (chosen.is_none())
                         continue;
-                    consume_peach(ctx, saver);
+                    if (!consume_peach(ctx, saver, chosen.unwrap()))
+                        continue;
                     apply_heal(ctx, dying, 1);
                     progress = true;
                     const auto cur = ctx.entities->find(dying);

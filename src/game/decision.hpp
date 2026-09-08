@@ -55,11 +55,11 @@ namespace tkw
             virtual ~DecisionSource() = default;
 
             /**
-             * @brief 响应窗口：entity_id 是否打出指定响应牌（杀/闪）。
-             * @note 实现应只在「打算且能够打出」时返回 true（结算器会先检查
-             *       手牌里是否有对应的响应牌再询问）。
+             * @brief 响应窗口：entity_id 选择打出的响应牌（杀/闪）。
+             * @return 要打出的手牌 instance_id；None = 不响应。结算器会先检查
+             *         手牌里确有该响应牌，并负责消费。
              */
-            virtual bool play_response(
+            virtual Option<std::string> play_response(
                 const GameContext &ctx,
                 const std::string &entity_id,
                 card::ResponseKind kind) = 0;
@@ -100,20 +100,20 @@ namespace tkw
                 const std::vector<card::Card> &options) = 0;
 
             /**
-             * @brief 濒死救场：saver 是否对濒死的 dying 打出一张桃。
-             * @note 实现应只在「打算且能够打出」时返回 true（combat 会先检查
-             *       saver 手牌有桃再询问，并负责消费）。
+             * @brief 濒死救场：saver 对濒死的 dying 打出哪张桃。
+             * @return 要打出的手牌 instance_id；None = 不救。结算器先检查手牌
+             *         确有救场牌再询问，并负责消费。
              */
-            virtual bool play_peach(
+            virtual Option<std::string> play_peach(
                 const GameContext &ctx, const std::string &saver,
                 const std::string &dying) = 0;
 
             /**
-             * @brief 无懈窗口：player 是否打出一张无懈可击抵消当前锦囊效果。
-             * @note 实现应只在「打算且能够打出」时返回 true（counter 会先检查
-             *       手牌有牌再询问，并负责消费）。
+             * @brief 无懈窗口：player 打出哪张无懈可击。
+             * @return 要打出的手牌 instance_id；None = 不出。结算器先检查手牌
+             *         确有牌再询问，并负责消费。
              */
-            virtual bool play_counter(
+            virtual Option<std::string> play_counter(
                 const GameContext &ctx, const std::string &player) = 0;
 
             /**

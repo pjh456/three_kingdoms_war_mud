@@ -192,6 +192,25 @@ TEST_CASE("game: sha blocked by jink")
     CHECK(g.cards.discard_size() == 2);         // 杀 + 闪
 }
 
+TEST_CASE("game: response uses the exact card chosen by decision source")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#0");
+    g.give("b", "shan", "j#1");
+    g.give("b", "shan", "j#2");
+
+    TestDecider decider;
+    decider.response_id = "j#2";  // 指定打出第二张闪
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 4);                             // 闪住
+    CHECK(g.cards.hand_size("b") == 1);
+    CHECK(g.cards.hand("b")[0].instance_id == "j#1");    // 留下的是第一张
+}
+
 TEST_CASE("game: sha out of range is rejected and card kept")
 {
     TestGame g("deck");

@@ -29,22 +29,36 @@ namespace tkw
         class SimpleAI : public DecisionSource
         {
         public:
-            bool play_response(
-                const GameContext &, const std::string &, card::ResponseKind) override
+            Option<std::string> play_response(
+                const GameContext &ctx, const std::string &entity,
+                card::ResponseKind kind) override
             {
-                return true;
+                for (const auto &c : ctx.cards->hand(entity))
+                {
+                    const auto def = ctx.catalog->find(c.def_id);
+                    if (def.is_some() && is_response_def(*def.unwrap(), kind))
+                        return Option<std::string>::Some(c.instance_id);
+                }
+                return Option<std::string>::None();
             }
 
-            bool play_peach(
-                const GameContext &, const std::string &,
+            Option<std::string> play_peach(
+                const GameContext &ctx, const std::string &saver,
                 const std::string &) override
             {
-                return true;
+                for (const auto &c : ctx.cards->hand(saver))
+                {
+                    const auto def = ctx.catalog->find(c.def_id);
+                    if (def.is_some() && def.unwrap()->rescue)
+                        return Option<std::string>::Some(c.instance_id);
+                }
+                return Option<std::string>::None();
             }
 
-            bool play_counter(const GameContext &, const std::string &) override
+            Option<std::string> play_counter(
+                const GameContext &, const std::string &) override
             {
-                return false;
+                return Option<std::string>::None();  // 不出无懈（避免自抵消）
             }
 
             bool trigger_effect(

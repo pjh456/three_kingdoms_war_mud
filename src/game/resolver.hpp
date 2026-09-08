@@ -381,24 +381,18 @@ namespace tkw
                     const std::string &holder = targets[0];
                     const std::string &victim = targets[1];
 
-                    const auto sha = find_sha_in_hand(ctx, holder);
-                    if (sha.is_some() &&
-                        ai.play_response(ctx, holder, card::ResponseKind::Sha))
+                    const auto chosen =
+                        consume_response(ctx, ai, holder, card::ResponseKind::Sha);
+                    if (chosen.is_some())
                     {
-                        auto removed = ctx.cards->remove_from_hand(
-                            holder, sha.unwrap().instance_id);
-                        if (removed.is_some())
-                        {
-                            card::Card sha_card = std::move(removed).unwrap();
-                            emit_card_played(ctx, holder, sha_card);
-                            ctx.cards->discard(sha_card);
-                            int dmg = 1;
-                            const auto sd = ctx.catalog->find(sha_card.def_id);
-                            if (sd.is_some() && sd.unwrap()->effect.is_some())
-                                dmg = sd.unwrap()->effect.unwrap().amount;
-                            resolve_sha(ctx, ai, holder, sha_card, victim, dmg);
-                            return GameResult<void>::Ok();
-                        }
+                        card::Card sha_card = chosen.unwrap();
+                        emit_card_played(ctx, holder, sha_card);
+                        int dmg = 1;
+                        const auto sd = ctx.catalog->find(sha_card.def_id);
+                        if (sd.is_some() && sd.unwrap()->effect.is_some())
+                            dmg = sd.unwrap()->effect.unwrap().amount;
+                        resolve_sha(ctx, ai, holder, sha_card, victim, dmg);
+                        return GameResult<void>::Ok();
                     }
 
                     // 未出杀：使用者获得 holder 的武器

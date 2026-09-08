@@ -88,26 +88,61 @@ namespace tkw
             bool save = false;
             bool counter = false;
             bool bogus_pick = false;  /**< 选牌返回一张不存在的牌（校验测试用） */
+            std::string response_id;  /**< 非空时响应窗口固定打出该牌 */
             std::vector<Ability> triggers;
             std::vector<PlayAction> plays;
             std::size_t play_cursor = 0;
 
-            bool play_response(
-                const GameContext &, const std::string &, ResponseKind) override
+            Option<std::string> play_response(
+                const GameContext &ctx, const std::string &entity,
+                ResponseKind kind) override
             {
-                return respond;
+                if (!response_id.empty())
+                    return Option<std::string>::Some(response_id);
+                if (!respond)
+                    return Option<std::string>::None();
+                for (const auto &c : ctx.cards->hand(entity))
+                {
+                    const auto def = ctx.catalog->find(c.def_id);
+                    if (def.is_none() || def.unwrap()->effect.is_none())
+                        continue;
+                    const auto ek = def.unwrap()->effect.unwrap().kind;
+                    if ((kind == ResponseKind::Sha &&
+                         ek == tkw::card::CardEffectKind::Damage) ||
+                        (kind == ResponseKind::Jink &&
+                         ek == tkw::card::CardEffectKind::Jink))
+                        return Option<std::string>::Some(c.instance_id);
+                }
+                return Option<std::string>::None();
             }
 
-            bool play_peach(
-                const GameContext &, const std::string &,
+            Option<std::string> play_peach(
+                const GameContext &ctx, const std::string &saver,
                 const std::string &) override
             {
-                return save;
+                if (!save)
+                    return Option<std::string>::None();
+                for (const auto &c : ctx.cards->hand(saver))
+                {
+                    const auto def = ctx.catalog->find(c.def_id);
+                    if (def.is_some() && def.unwrap()->rescue)
+                        return Option<std::string>::Some(c.instance_id);
+                }
+                return Option<std::string>::None();
             }
 
-            bool play_counter(const GameContext &, const std::string &) override
+            Option<std::string> play_counter(
+                const GameContext &ctx, const std::string &player) override
             {
-                return counter;
+                if (!counter)
+                    return Option<std::string>::None();
+                for (const auto &c : ctx.cards->hand(player))
+                {
+                    const auto def = ctx.catalog->find(c.def_id);
+                    if (def.is_some() && def.unwrap()->counter)
+                        return Option<std::string>::Some(c.instance_id);
+                }
+                return Option<std::string>::None();
             }
 
             bool trigger_effect(
