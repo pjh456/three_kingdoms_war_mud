@@ -109,3 +109,33 @@ TEST_CASE("manager: ordered_ids/next/order_from follow seat, not creation order"
     CHECK(mgr.ordered_ids() == std::vector<std::string>({"a", "c", "d"}));
     CHECK(mgr.next("a") == "c");  // 跳过已移除
 }
+
+TEST_CASE("manager: snapshot/restore round-trips order, seat and hp")
+{
+    EventBus bus;
+    EntityManager mgr(bus);
+    REQUIRE(mgr.create("c", 2, Hp::make(4)).is_ok());
+    REQUIRE(mgr.create("a", 0, Hp::make(3)).is_ok());
+    auto *b = mgr.create("b", 1, Hp::make(5)).unwrap();
+    b->take_damage("a", 2, false);                         // b: 3
+    mgr.find("a").unwrap()->take_damage("b", 1, false);    // a: 2
+
+    const auto snap = mgr.snapshot();
+    REQUIRE(snap.size() == 3);
+    CHECK(snap[0].id == "c");  // 创建序
+    CHECK(snap[1].id == "a");
+    CHECK(snap[2].id == "b");
+    CHECK(snap[2].hp == 3);
+    CHECK(snap[2].max_hp == 5);
+
+    mgr.clear();
+    CHECK(mgr.empty());
+
+    mgr.restore(snap);
+    REQUIRE(mgr.size() == 3);
+    CHECK(mgr.ordered_ids() == std::vector<std::string>({"a", "b", "c"}));
+    CHECK(mgr.find("a").unwrap()->get_hp() == 2);
+    CHECK(mgr.find("b").unwrap()->get_hp() == 3);
+    CHECK(mgr.find("b").unwrap()->get_hp_bar().get_max() == 5);
+    CHECK(mgr.find("c").unwrap()->get_seat() == 2);
+}

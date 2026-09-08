@@ -17,6 +17,15 @@
 
 namespace tkw
 {
+    /** @brief 实体快照：身份 + 座位 + 体力（按创建序导出）。 */
+    struct EntitySnapshot
+    {
+        std::string id;
+        int seat = 0;
+        int hp = 0;
+        int max_hp = 0;
+    };
+
     /**
      * @class EntityManager
      * @brief 对局作用域的实体容器 + id 索引。总线由拥有它的上下文注入
@@ -90,6 +99,37 @@ namespace tkw
 
         std::size_t size() const noexcept { return entities.size(); }
         bool empty() const noexcept { return entities.empty(); }
+
+        /** @brief 按创建序导出快照（含体力与上限）。 */
+        std::vector<EntitySnapshot> snapshot() const
+        {
+            std::vector<EntitySnapshot> out;
+            out.reserve(entities.size());
+            for (const auto &e : entities)
+                out.push_back(EntitySnapshot{
+                    e->get_id(), e->get_seat(), e->get_hp(),
+                    e->get_hp_bar().get_max()});
+            return out;
+        }
+
+        /** @brief 清空后按快照顺序重建（id/座位/体力原样恢复）。 */
+        void restore(const std::vector<EntitySnapshot> &in)
+        {
+            clear();
+            for (const auto &s : in)
+            {
+                entity::Hp hp = entity::Hp::make(s.max_hp);
+                hp.set_cur(s.hp);
+                (void)create(s.id, s.seat, std::move(hp));
+            }
+        }
+
+        /** @brief 清空全部实体与索引。 */
+        void clear()
+        {
+            entities.clear();
+            index.clear();
+        }
 
         /**
          * @brief 按座位序返回全部实体 id（同座位按创建序稳定）。

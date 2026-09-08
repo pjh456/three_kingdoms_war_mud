@@ -170,4 +170,38 @@ TEST_CASE("card: build_deck is idempotent")
     CHECK(mgr.draw_size() == once);
     CHECK(mgr.draw_size() == 108);
 }
+
+TEST_CASE("card: snapshot/restore round-trips piles and zones")
+{
+    tkw::config::ResourceStore store(TKW_TEST_RESOURCE_DIR);
+    auto cat = tkw::card::CardDefCatalog::load(store, "deck").unwrap();
+
+    tkw::card::CardManager mgr;
+    mgr.build_deck(cat);
+    for (int i = 0; i < 5; ++i)
+        mgr.add_to_hand("a", mgr.draw().unwrap());
+    mgr.add_to_equip("a", mgr.draw().unwrap());
+    mgr.add_to_judge("b", mgr.draw().unwrap());
+    mgr.discard(mgr.draw().unwrap());
+
+    const auto snap = mgr.snapshot();
+    const auto hand_a = mgr.hand("a");
+    const auto equip_a = mgr.equip("a");
+    const auto judge_b = mgr.judge("b");
+    const auto draw_top = mgr.draw_top().unwrap()->instance_id;
+
+    mgr.clear();
+    CHECK(mgr.draw_size() == 0);
+    CHECK(mgr.hand_size("a") == 0);
+
+    mgr.restore(snap);
+    CHECK(mgr.draw_size() == snap.draw.size());
+    CHECK(mgr.discard_size() == 1);
+    CHECK(mgr.hand("a") == hand_a);
+    CHECK(mgr.equip("a") == equip_a);
+    CHECK(mgr.judge("b") == judge_b);
+    REQUIRE(mgr.draw_top().is_some());
+    CHECK(mgr.draw_top().unwrap()->instance_id == draw_top);
+    CHECK(mgr.snapshot().instance_seq == snap.instance_seq);
+}
 #endif  // TKW_TEST_RESOURCE_DIR

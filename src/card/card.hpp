@@ -55,6 +55,9 @@ namespace tkw
             std::size_t size() const noexcept { return cards.size(); }
             bool empty() const noexcept { return cards.empty(); }
 
+            /** @brief 底层牌序列（堆底→堆顶）只读视图，供快照/存档。 */
+            const std::vector<Card> &view() const noexcept { return cards; }
+
             /** @brief 置顶（弃牌/置入牌堆底语义由调用方决定）。 */
             void push(Card card) { cards.push_back(std::move(card)); }
 

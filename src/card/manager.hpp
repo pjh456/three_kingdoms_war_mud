@@ -60,6 +60,19 @@ namespace tkw
         };
 
         /**
+         * @brief 卡牌容器完整快照（保序；区域按 entity id 排序保证确定性）。
+         */
+        struct CardManagerSnapshot
+        {
+            std::uint64_t instance_seq = 0;
+            std::vector<Card> draw;    /**< 堆底→堆顶 */
+            std::vector<Card> discard; /**< 堆底→堆顶 */
+            std::vector<std::pair<std::string, std::vector<Card>>> hand;
+            std::vector<std::pair<std::string, std::vector<Card>>> equip;
+            std::vector<std::pair<std::string, std::vector<Card>>> judge;
+        };
+
+        /**
          * @class CardManager
          * @brief 卡牌容器 + 按 entity id 的区（hand/equip/judge）。
          * @note 实体引用一律用 id 字符串（跨域约定），不依赖 entity 模块。
@@ -86,6 +99,44 @@ namespace tkw
                     for (const auto &copy : def.copies)
                         draw_pile.push(make_card(def.id, copy));
                 }
+            }
+
+            /** @brief 完整快照（牌堆保序；区域按 entity id 排序）。 */
+            CardManagerSnapshot snapshot() const
+            {
+                CardManagerSnapshot s;
+                s.instance_seq = instance_seq;
+                s.draw = draw_pile.view();
+                s.discard = discard_pile.view();
+                s.hand = zone_snapshot(hand_zones);
+                s.equip = zone_snapshot(equip_zones);
+                s.judge = zone_snapshot(judge_zones);
+                return s;
+            }
+
+            /** @brief 从快照恢复：清空后按序重建（含 instance_seq）。 */
+            void restore(const CardManagerSnapshot &s)
+            {
+                clear();
+                instance_seq = s.instance_seq;
+                for (const auto &c : s.draw)
+                    draw_pile.push(c);
+                for (const auto &c : s.discard)
+                    discard_pile.push(c);
+                restore_zone(hand_zones, s.hand);
+                restore_zone(equip_zones, s.equip);
+                restore_zone(judge_zones, s.judge);
+            }
+
+            /** @brief 清空全部牌与实例序号。 */
+            void clear()
+            {
+                instance_seq = 0;
+                draw_pile = CardStack{};
+                discard_pile = CardStack{};
+                hand_zones.clear();
+                equip_zones.clear();
+                judge_zones.clear();
             }
 
             // ── 摸牌堆 / 弃牌堆 ──────────────────────────────────────────
@@ -281,12 +332,36 @@ namespace tkw
             }
 
         private:
+            using ZoneMap = std::unordered_map<std::string, CardZone>;
+
             std::uint64_t instance_seq = 0;
             CardStack draw_pile;
             CardStack discard_pile;
             std::unordered_map<std::string, CardZone> hand_zones;
             std::unordered_map<std::string, CardZone> equip_zones;
             std::unordered_map<std::string, CardZone> judge_zones;
+
+            static std::vector<std::pair<std::string, std::vector<Card>>> zone_snapshot(
+                const ZoneMap &zones)
+            {
+                std::vector<std::pair<std::string, std::vector<Card>>> out;
+                out.reserve(zones.size());
+                for (const auto &[id, zone] : zones)
+                    out.emplace_back(id, zone.view());
+                std::sort(out.begin(), out.end(),
+                          [](const auto &a, const auto &b)
+                          { return a.first < b.first; });
+                return out;
+            }
+
+            static void restore_zone(
+                ZoneMap &zones,
+                const std::vector<std::pair<std::string, std::vector<Card>>> &in)
+            {
+                for (const auto &[id, cards] : in)
+                    for (const auto &c : cards)
+                        zones[id].add(c);
+            }
 
             static const std::vector<Card> &empty_list()
             {
