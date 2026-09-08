@@ -268,39 +268,57 @@ namespace tkw
                     return GameResult<void>::Ok();
 
                 case card::CardEffectKind::DiscardTarget:
+                {
+                    // 先收集并校验全部选择，再统一落子（事务性）
+                    std::vector<std::pair<std::string, card::Card>> picks;
                     for (const auto &t : targets)
                     {
                         if (nullified())
                             continue;
                         const auto picked = ai.pick_card_from_target(ctx, player, t);
-                        if (picked.is_none())
+                        if (picked.is_none() ||
+                            !ctx.cards->has_card(t, picked.unwrap().instance_id))
                             return GameResult<void>::Err(EffectError::InvalidChoice);
+                        picks.emplace_back(t, picked.unwrap());
+                    }
+                    for (const auto &[owner, picked_card] : picks)
+                    {
                         card::Card removed;
                         if (!remove_card_from_zones(
-                                ctx, t, picked.unwrap().instance_id, removed))
+                                ctx, owner, picked_card.instance_id, removed))
                             return GameResult<void>::Err(EffectError::InvalidChoice);
                         ctx.cards->discard(removed);
-                        emit_card_discarded(ctx, t, removed);
+                        emit_card_discarded(ctx, owner, removed);
                     }
                     return GameResult<void>::Ok();
+                }
 
                 case card::CardEffectKind::Steal:
+                {
+                    // 先收集并校验全部选择，再统一落子（事务性）
+                    std::vector<std::pair<std::string, card::Card>> picks;
                     for (const auto &t : targets)
                     {
                         if (nullified())
                             continue;
                         const auto picked = ai.pick_card_from_target(ctx, player, t);
-                        if (picked.is_none())
+                        if (picked.is_none() ||
+                            !ctx.cards->has_card(t, picked.unwrap().instance_id))
                             return GameResult<void>::Err(EffectError::InvalidChoice);
+                        picks.emplace_back(t, picked.unwrap());
+                    }
+                    for (const auto &[owner, picked_card] : picks)
+                    {
                         card::Card removed;
                         Zone from = Zone::Limbo;
                         if (!remove_card_from_zones(
-                                ctx, t, picked.unwrap().instance_id, removed, &from))
+                                ctx, owner, picked_card.instance_id, removed, &from))
                             return GameResult<void>::Err(EffectError::InvalidChoice);
                         ctx.cards->add_to_hand(player, removed);
-                        emit_card_moved(ctx, t, player, removed, from, Zone::Hand);
+                        emit_card_moved(ctx, owner, player, removed, from, Zone::Hand);
                     }
                     return GameResult<void>::Ok();
+                }
 
                 case card::CardEffectKind::Duel:
                     if (nullified())

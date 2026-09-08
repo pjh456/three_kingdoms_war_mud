@@ -87,6 +87,7 @@ namespace tkw
             bool respond = false;
             bool save = false;
             bool counter = false;
+            bool bogus_pick = false;  /**< 选牌返回一张不存在的牌（校验测试用） */
             std::vector<Ability> triggers;
             std::vector<PlayAction> plays;
             std::size_t play_cursor = 0;
@@ -118,6 +119,9 @@ namespace tkw
                 GameContext &ctx, const std::string &,
                 const std::string &target) override
             {
+                if (bogus_pick)
+                    return Option<card::Card>::Some(
+                        Card{"ghost#0", "sha", tkw::card::Suit::Spade, 7});
                 const auto &hand = ctx.cards->hand(target);
                 if (hand.empty())
                     return Option<card::Card>::None();

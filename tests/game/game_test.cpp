@@ -368,6 +368,25 @@ TEST_CASE("game: failed pick rolls back the played card")
     CHECK(g.cards.discard_size() == 0);
 }
 
+TEST_CASE("game: invalid pick is rejected without partial effect")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "guohe", "g#0");
+    g.give("b", "sha", "s#1");
+
+    TestDecider decider;
+    decider.bogus_pick = true;  // 决策源返回一张不存在的牌
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidChoice);
+    CHECK(g.cards.hand_size("a") == 1);  // 打出的牌已回滚
+    CHECK(g.cards.hand_size("b") == 1);  // 目标牌未被动
+    CHECK(g.cards.discard_size() == 0);
+}
+
 TEST_CASE("game: shunshou steals target card to hand")
 {
     TestGame g("deck");

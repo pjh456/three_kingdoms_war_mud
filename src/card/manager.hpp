@@ -237,6 +237,25 @@ namespace tkw
             }
 
             /**
+             * @brief 该牌是否在实体的任一区域（hand/equip/judge）。
+             * @note 结算前校验用：避免决策源返回不存在的牌时才在结算中途失败。
+             */
+            bool has_card(
+                const std::string &entity_id, const std::string &instance_id) const
+            {
+                for (const auto *zones : {&hand_zones, &equip_zones, &judge_zones})
+                {
+                    auto it = zones->find(entity_id);
+                    if (it == zones->end())
+                        continue;
+                    for (const auto &c : it->second.view())
+                        if (c.instance_id == instance_id)
+                            return true;
+                }
+                return false;
+            }
+
+            /**
              * @brief 死亡清场：手牌/装备/判定区全部置入弃牌堆。
              * @return 被弃置的牌（供调用方发布弃置事件）。
              */
