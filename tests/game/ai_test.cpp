@@ -1,5 +1,8 @@
 #include <doctest/doctest.h>
 
+#include <cstddef>
+#include <string>
+
 #include "game/ai/evaluator.hpp"
 #include "game/ai/legal.hpp"
 #include "game/ai/simple.hpp"
@@ -10,6 +13,34 @@ namespace
 {
     using tkw::test::TestGame;
     using namespace tkw::game::ai;
+
+    struct NoopDecider : Decider
+    {
+        DecisionChoice decide(const DecisionRequest &) override
+        {
+            return DecisionChoice{};
+        }
+    };
+
+    struct RecordingDecider : Decider
+    {
+        DecisionKind last = DecisionKind::Play;
+        std::size_t legal_count = 0;
+
+        DecisionChoice decide(const DecisionRequest &req) override
+        {
+            last = req.kind;
+            legal_count = req.legal.size();
+            DecisionChoice out;
+            if (req.kind == DecisionKind::Play && !req.legal.empty())
+            {
+                out.instance_id = tkw::Option<std::string>::Some(
+                    req.legal.front().card.instance_id);
+                out.targets = req.legal.front().targets;
+            }
+            return out;
+        }
+    };
 }
 
 TEST_CASE("ai: view captures self and others")
@@ -78,4 +109,38 @@ TEST_CASE("ai: simple choose_play only returns legal_actions")
             a.targets == chosen.unwrap().targets)
             found = true;
     CHECK(found);
+}
+
+TEST_CASE("ai: RequestDecisionSource forwards choices to decider")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+
+    NoopDecider noop;
+    RequestDecisionSource src(noop);
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    CHECK(src.choose_play(g.ctx, turn).is_none());
+    CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha).is_none());
+    CHECK(src.choose_discards(g.ctx, "a", 1, tkw::game::DiscardReason::TurnLimit)
+              .empty());
+    CHECK_FALSE(src.trigger_effect(g.ctx, "a", tkw::card::Ability::NoShaLimit));
+}
+
+TEST_CASE("ai: decider receives play request with legal moves")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+
+    RecordingDecider rec;
+    RequestDecisionSource src(rec);
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    const auto act = src.choose_play(g.ctx, turn);
+    CHECK(rec.last == DecisionKind::Play);
+    CHECK(rec.legal_count > 0);
+    REQUIRE(act.is_some());
+    CHECK(act.unwrap().instance_id == "s#1");
 }
