@@ -76,9 +76,11 @@ namespace tkw
             /**
              * @brief 按目录构建摸牌堆：每份副本生成一张实体牌并分配唯一 instance_id。
              * @note 卡牌顺序 = 目录迭代序（deck.json 引用顺序），同 seed 下确定。
+             * @note 幂等：先清空摸牌堆，重复调用不会叠加重复牌。
              */
             void build_deck(const CardDefCatalog &catalog)
             {
+                draw_pile = CardStack{};
                 for (const auto &def : catalog)
                 {
                     for (const auto &copy : def.copies)

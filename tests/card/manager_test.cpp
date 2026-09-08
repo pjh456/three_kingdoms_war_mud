@@ -157,4 +157,17 @@ TEST_CASE("card: build_deck materialises every copy of every def")
     for (const auto &def : cat)
         CHECK(drawn[def.id] == static_cast<int>(def.copies.size()));
 }
+
+TEST_CASE("card: build_deck is idempotent")
+{
+    tkw::config::ResourceStore store(TKW_TEST_RESOURCE_DIR);
+    auto cat = tkw::card::CardDefCatalog::load(store, "deck").unwrap();
+
+    tkw::card::CardManager mgr;
+    mgr.build_deck(cat);
+    const auto once = mgr.draw_size();
+    mgr.build_deck(cat);  // 重复构建不得叠加
+    CHECK(mgr.draw_size() == once);
+    CHECK(mgr.draw_size() == 108);
+}
 #endif  // TKW_TEST_RESOURCE_DIR

@@ -60,16 +60,6 @@ namespace tkw
             return judge_triggered(j.trigger, c) ? j.success : j.failure;
         }
 
-        /** @brief 扣血（纯状态：可扣到非正=濒死值状态，不触发死亡流程）。 */
-        inline void apply_damage(
-            GameContext &ctx, const std::string &source,
-            const std::string &target, int amount)
-        {
-            const auto e = ctx.entities->find(target);
-            if (e.is_some())
-                e.unwrap()->take_damage(source, amount, false);
-        }
-
         /** @brief 回血（按上限钳制）。 */
         inline void apply_heal(GameContext &ctx, const std::string &target, int amount)
         {
