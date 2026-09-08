@@ -327,7 +327,7 @@ namespace tkw
                         // 目标先开始，轮流打出杀；先不出的受对方 1 点伤害。
                         std::string attacker = player;
                         std::string defender = targets.front();
-                        for (int round = 0; round < 64; ++round)
+                        for (int round = 0; round < rules_of(ctx).duel_rounds; ++round)
                         {
                             if (!request_response(
                                     ctx, ai, defender, card::ResponseKind::Sha))

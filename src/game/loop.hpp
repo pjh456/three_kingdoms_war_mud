@@ -51,14 +51,14 @@ namespace tkw
         }
 
         /** @brief 每名存活玩家发 count 张初始手牌（从堆顶摸，发布摸牌事件）。 */
-        inline void deal_initial_hands(GameContext &ctx, int count = 4)
+        inline void deal_initial_hands(GameContext &ctx, int count)
         {
             for (const auto &ent : *ctx.entities)
                 apply_draw(ctx, ent->get_id(), count);
         }
 
         /** @brief 开局准备：构建牌堆 → 洗牌 → 发初始手牌。 */
-        inline void prepare_game(GameContext &ctx, int hand = 4)
+        inline void prepare_game(GameContext &ctx, int hand)
         {
             ctx.cards->build_deck(*ctx.catalog);
             if (ctx.rng)
@@ -68,17 +68,18 @@ namespace tkw
 
         /**
          * @brief 主循环：从 first_player 起轮转执行回合，直到只剩一名存活玩家。
-         * @param hand 每名玩家初始手牌数。
+         * @param hand 每名玩家初始手牌数；< 0 时取规则配置的 initial_hand。
          * @return Ok(GameOutcome) 或 Err(LoopError)。
          */
         inline LoopResult<GameOutcome> play_game(
             GameContext &ctx, DecisionSource &ai, const std::string &first_player,
-            int hand = 4)
+            int hand = -1)
         {
             if (ctx.entities->empty())
                 return LoopResult<GameOutcome>::Err(LoopError::NoPlayers);
 
-            prepare_game(ctx, hand);
+            const int initial = hand >= 0 ? hand : rules_of(ctx).initial_hand;
+            prepare_game(ctx, initial);
 
             std::string current = first_player;
             int turns = 0;
@@ -88,7 +89,7 @@ namespace tkw
                 if (r.is_err())
                     return LoopResult<GameOutcome>::Err(LoopError::TurnFailed);
                 current = next_player(ctx, current);
-                if (++turns > 1000)
+                if (++turns > rules_of(ctx).max_turns)
                     return LoopResult<GameOutcome>::Err(LoopError::MaxRounds);
             }
 

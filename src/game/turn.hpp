@@ -148,7 +148,7 @@ namespace tkw
         {
             if (has_ability(ctx, player, card::Ability::NoShaLimit))
                 return std::numeric_limits<int>::max();
-            return 1;
+            return rules_of(ctx).sha_limit;
         }
 
         /** @brief 从手牌找一张牌（返回副本，便于随后按 instance_id 消费）。 */
@@ -228,7 +228,7 @@ namespace tkw
             }
 
             // 2. 摸牌阶段
-            apply_draw(ctx, player, 2);
+            apply_draw(ctx, player, rules_of(ctx).draw_per_turn);
 
             // 3. 出牌阶段
             if (!skip_play)

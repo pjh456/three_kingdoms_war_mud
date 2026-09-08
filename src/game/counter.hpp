@@ -100,7 +100,7 @@ namespace tkw
             (void)trick;
             const auto order = seat_order_from(ctx, start);
             bool cancelled = false;
-            for (int round = 0; round < 32; ++round)
+            for (int round = 0; round < rules_of(ctx).wuxie_rounds; ++round)
             {
                 bool any = false;
                 for (const auto &p : order)

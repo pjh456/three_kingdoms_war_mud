@@ -42,7 +42,7 @@ namespace
     {
         std::filesystem::path deck = "resources";
         int players = 4;
-        int hand = 4;
+        int hand = tkw::game::RulesConfig{}.initial_hand;
         std::uint32_t seed = 42;
         bool verbose = false;
     };
@@ -89,8 +89,9 @@ namespace
 
         for (int i = 0; i < opt.players; ++i)
         {
-            auto r =
-                game.add_player("P" + std::to_string(i), i, tkw::entity::Hp::make(4));
+            auto r = game.add_player(
+                "P" + std::to_string(i), i,
+                tkw::entity::Hp::make(tkw::game::RulesConfig{}.base_hp));
             if (r.is_err())
                 return CliFailure{CliError("创建玩家失败: P" + std::to_string(i))};
         }
@@ -162,20 +163,22 @@ int main(int argc, char **argv)
     App app("tkw", "0.1.0", "三国杀式卡牌对局引擎");
     app.set_extra_args(ExtraArgsPolicy::Error);  // 未知命令/多余参数即报错
 
+    const tkw::game::RulesConfig rules{};
+
     // 根命令选项（无子命令时直接跑一局，兼容旧用法）
     app.option<fixed_string("deck")>(
         "--deck", 'd', "资源目录（含 deck.json 与 cards/）",
         std::filesystem::path("resources"));
-    app.option<fixed_string("players")>("--players", 'p', "玩家数（2-8）")
+    app.option<fixed_string("players")>("--players", 'p', "玩家数")
         .integer()
-        .min(2)
-        .max(8)
+        .min(rules.min_players)
+        .max(rules.max_players)
         .default_value(4);
     app.option<fixed_string("hand")>("--hand", "初始手牌数")
         .integer()
         .min(0)
         .max(20)
-        .default_value(4);
+        .default_value(rules.initial_hand);
     app.option<fixed_string("seed")>("--seed", 's', "随机种子")
         .integer()
         .min(0)
@@ -198,13 +201,13 @@ int main(int argc, char **argv)
     deal.arg<int, 0>("players", "玩家数").required();
     deal.arg<int, 1>("seed", "随机种子").required();
     deal.action(
-        [](ParseContext &ctx) -> CliResult<void>
+        [&rules](ParseContext &ctx) -> CliResult<void>
         {
             Options opt = options_from(ctx);
             opt.players = ctx.get<int, 0>();
             opt.seed = static_cast<std::uint32_t>(ctx.get<int, 1>());
-            if (opt.players < 2 || opt.players > 8)
-                return CliFailure{CliError("玩家数须在 2..8")};
+            if (opt.players < rules.min_players || opt.players > rules.max_players)
+                return CliFailure{CliError("玩家数超出允许范围")};
             return run_game(opt);
         });
 

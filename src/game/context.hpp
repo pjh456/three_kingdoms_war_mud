@@ -16,6 +16,7 @@
 #include "card/manager.hpp"
 #include "entity/manager.hpp"
 #include "event/event_bus.hpp"
+#include "game/rules.hpp"
 #include "util/rng.hpp"
 
 namespace tkw
@@ -29,8 +30,16 @@ namespace tkw
             EntityManager *entities = nullptr;
             card::CardManager *cards = nullptr;
             const card::CardDefCatalog *catalog = nullptr;
-            Rng *rng = nullptr; /**< 判定/洗牌随机源（由对局持有） */
+            Rng *rng = nullptr;                  /**< 判定/洗牌随机源（由对局持有） */
+            const RulesConfig *rules = nullptr;  /**< 规则数值（由对局持有） */
         };
+
+        /** @brief 取规则数值；ctx 未绑定规则时回落到默认值（测试便利）。 */
+        inline const RulesConfig &rules_of(const GameContext &ctx)
+        {
+            static const RulesConfig fallback{};
+            return ctx.rules ? *ctx.rules : fallback;
+        }
     }
 }
 

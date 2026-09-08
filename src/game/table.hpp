@@ -61,6 +61,7 @@ namespace tkw
                 ctx.cards = &cards;
                 ctx.catalog = &catalog;
                 ctx.rng = rng.get();
+                ctx.rules = &rules;
                 return ctx;
             }
 
@@ -69,6 +70,7 @@ namespace tkw
             card::CardManager cards;               /**< 卡牌容器 */
             card::CardDefCatalog catalog;          /**< 本局卡牌目录 */
             std::unique_ptr<Rng> rng;              /**< 本局随机源 */
+            RulesConfig rules;                     /**< 本局规则数值（可调参） */
         };
     }
 }

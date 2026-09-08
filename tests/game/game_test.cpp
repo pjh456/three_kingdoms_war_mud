@@ -533,6 +533,28 @@ TEST_CASE("game: liangnu lifts sha limit")
     CHECK(g.cards.hand_size("a") == 2); // 4 - 2 = 2（上限 4 不弃）
 }
 
+TEST_CASE("game: rules config drives draw and sha limit")
+{
+    TestGame g("deck");
+    CHECK(g.ctx.rules == &g.rules);  // 对局上下文绑定本局规则
+    g.rules.draw_per_turn = 3;
+    g.rules.sha_limit = 2;
+
+    g.add_player("a", 0, 5);
+    auto *b = g.add_player("b", 1, 5);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "sha", "s#1");
+    g.give("a", "sha", "s#2");
+    g.give("a", "sha", "s#3");
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"s#1", {"b"}}, PlayAction{"s#2", {"b"}}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);             // 杀上限 2 → 两刀
+    CHECK(g.cards.hand_size("a") == 4);  // 3 张杀打出 2 张 + 摸 3 张
+}
+
 TEST_CASE("game: equip weapon and replace same slot")
 {
     TestGame g("deck");

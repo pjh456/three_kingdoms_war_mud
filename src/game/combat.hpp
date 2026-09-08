@@ -128,7 +128,7 @@ namespace tkw
                 }
                 if (!progress)
                     break;
-                if (++rounds > 64)
+                if (++rounds > rules_of(ctx).dying_rounds)
                     break;  // 保险（桃数量有限，理论上到不了）
             }
 
@@ -156,7 +156,7 @@ namespace tkw
             {
                 const auto killer = ctx.entities->find(source);
                 if (killer.is_some())
-                    apply_draw(ctx, source, 3);  // 击杀奖励
+                    apply_draw(ctx, source, rules_of(ctx).kill_reward);  // 击杀奖励
             }
         }
     }
