@@ -106,10 +106,10 @@ TEST_CASE("replay: step_session drives the same log as play_game")
 TEST_CASE("replay: golden fingerprints pin the rule semantics")
 {
     const auto two = run_game(1, 2);
-    CHECK(two.size() == 77);
-    CHECK(fingerprint(two) == 11210068941957374334ULL);
+    CHECK(two.size() == 69);
+    CHECK(fingerprint(two) == 10127578936120532578ULL);
 
     const auto four = run_game(42, 4);
-    CHECK(four.size() == 372);
-    CHECK(fingerprint(four) == 3312002298889173120ULL);
+    CHECK(four.size() == 361);
+    CHECK(fingerprint(four) == 5757600367389828630ULL);
 }

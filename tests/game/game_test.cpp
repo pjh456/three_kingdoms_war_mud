@@ -1249,6 +1249,58 @@ TEST_CASE("game: session starts, steps and reports over/winner")
     CHECK(session_winner(g.ctx) == "a");
 }
 
+TEST_CASE("game: player killed by lightning stops acting that turn")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 3);
+    auto *b = g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");  // 若未被终止，会打向 b
+    g.cards.add_to_judge("a", Card{"L#0", "shandian", Suit::Spade, 1});
+    g.cards.add_to_draw(Card{"j#0", "sha", Suit::Spade, 8});  // 判定：黑桃8
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"s#1", {"b"}}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(g.entities.find("a").is_none());  // 雷伤 3 → 死亡
+    CHECK(b->get_hp() == 4);                 // 未能继续出牌
+    CHECK(g.cards.hand_size("a") == 0);      // 死亡清场
+}
+
+TEST_CASE("game: next_after_seat wraps and skips removed seats")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    CHECK(next_after_seat(g.ctx, 0) == "b");
+    CHECK(next_after_seat(g.ctx, 1) == "c");
+    CHECK(next_after_seat(g.ctx, 2) == "a");  // 环绕
+    g.entities.remove("b");
+    CHECK(next_after_seat(g.ctx, 0) == "c");  // 跳过已移除
+    CHECK(next_after_seat(g.ctx, 2) == "a");
+}
+
+TEST_CASE("game: step_session advances past a player who died in their turn")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 3);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.give("a", "sha", "s#1");
+    g.cards.add_to_judge("a", Card{"L#0", "shandian", Suit::Spade, 1});
+    g.cards.add_to_draw(Card{"j#0", "sha", Suit::Spade, 8});
+
+    TestDecider decider;
+    GameSession session;
+    session.current = "a";
+    session.started = true;
+    auto r = step_session(g.ctx, decider, session);
+    REQUIRE(r.is_ok());
+    CHECK(g.entities.find("a").is_none());
+    CHECK(session.current == "b");  // 下一位 = 座位 1
+}
+
 // ── 杀结算：装备效果 ─────────────────────────────────────────────────
 
 TEST_CASE("game: renwang blocks black sha")

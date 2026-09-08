@@ -270,15 +270,19 @@ namespace tkw
          * @brief 执行 player 的一个完整回合：判定 → 摸2 → 出牌 → 弃牌。
          * @note 出牌阶段循环向 DecisionSource 要动作直到结束；非法动作
          *       （手牌不存在/目标非法/超杀次数）立即报错并中止本回合。
+         * @note 角色在回合中死亡（闪电/决斗等）即终止本回合，不再摸牌/出牌/
+         *       弃牌；死亡实体已被移除，必须重新 find 以免悬垂指针。
          */
         inline TurnResult<void> execute_turn(
             GameContext &ctx,
             DecisionSource &ai,
             const std::string &player)
         {
-            const auto p = ctx.entities->find(player);
-            if (p.is_none())
+            if (ctx.entities->find(player).is_none())
                 return TurnResult<void>::Err(TurnError::UnknownPlayer);
+
+            const auto alive = [&]()
+            { return ctx.entities->find(player).is_some(); };
 
             // 1. 判定阶段
             bool skip_play = false;
@@ -290,9 +294,13 @@ namespace tkw
                     return TurnResult<void>::Err(r.unwrap_err());
                 if (r.unwrap() == DelayedOutcome::SkipPlay)
                     skip_play = true;
+                if (!alive())
+                    return TurnResult<void>::Ok();  // 闪电劈死 → 回合终止
             }
 
             // 2. 摸牌阶段
+            if (!alive())
+                return TurnResult<void>::Ok();
             apply_draw(ctx, player, rules_of(ctx).draw_per_turn);
 
             // 3. 出牌阶段
@@ -302,6 +310,8 @@ namespace tkw
                 const int limit = sha_limit(ctx, player);
                 while (true)
                 {
+                    if (!alive())
+                        return TurnResult<void>::Ok();
                     const TurnContext turn{player, sha_played, limit};
                     auto action = ai.choose_play(ctx, turn);
                     if (action.is_none())
@@ -358,11 +368,16 @@ namespace tkw
                     }
                     if (is_sha(def))
                         ++sha_played;
+                    if (!alive())
+                        return TurnResult<void>::Ok();  // 决斗等自伤致死
                 }
             }
 
             // 4. 弃牌阶段：手牌上限 = 体力上限
-            const int hand_limit = p.unwrap()->get_hp_bar().get_max();
+            if (!alive())
+                return TurnResult<void>::Ok();
+            const int hand_limit =
+                ctx.entities->find(player).unwrap()->get_hp_bar().get_max();
             const int over = static_cast<int>(ctx.cards->hand_size(player)) - hand_limit;
             if (over > 0)
             {

@@ -76,6 +76,21 @@ namespace tkw
             return {};
         }
 
+        /** @brief 座位严格大于 seat 的第一个存活者（环绕到最小座位）。 */
+        inline std::string next_after_seat(const GameContext &ctx, int seat)
+        {
+            const auto ids = ctx.entities->ordered_ids();  // 按座位升序
+            if (ids.empty())
+                return {};
+            for (const auto &id : ids)
+            {
+                const auto e = ctx.entities->find(id);
+                if (e.is_some() && e.unwrap()->get_seat() > seat)
+                    return id;
+            }
+            return ids.front();
+        }
+
         /** @brief 每名存活玩家发 count 张初始手牌（从堆顶摸，发布摸牌事件）。 */
         inline void deal_initial_hands(GameContext &ctx, int count)
         {
@@ -117,12 +132,20 @@ namespace tkw
         inline LoopResult<void> step_session(
             GameContext &ctx, DecisionSource &ai, GameSession &session)
         {
-            if (session.current.empty())
+            const auto actor = ctx.entities->find(session.current);
+            if (actor.is_none())
                 return LoopResult<void>::Err(LoopError::NoPlayers);
+            const int seat = actor.unwrap()->get_seat();
+
             auto r = execute_turn(ctx, ai, session.current);
             if (r.is_err())
                 return LoopResult<void>::Err(LoopError::TurnFailed);
-            session.current = next_player(ctx, session.current);
+
+            if (ctx.entities->find(session.current).is_some())
+                session.current = next_player(ctx, session.current);
+            else
+                session.current = next_after_seat(ctx, seat);  // 回合中死亡
+
             if (++session.turns > rules_of(ctx).max_turns)
                 return LoopResult<void>::Err(LoopError::MaxRounds);
             return LoopResult<void>::Ok();
