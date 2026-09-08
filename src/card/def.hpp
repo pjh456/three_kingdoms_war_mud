@@ -84,6 +84,15 @@ namespace tkw
             BlackShaImmune,        /**< 仁王盾：黑杀无效 */
         };
 
+        /** @brief 效果作用范围（决定结算时如何选目标）。 */
+        enum class Scope : std::uint8_t
+        {
+            Self,      /**< 仅自己 */
+            OneOther,  /**< 一名其他角色 */
+            AllOthers, /**< 所有其他角色 */
+            All,       /**< 所有角色（含自己） */
+        };
+
         /** @brief 判定触发条件（数据描述，不再写死在代码里）。 */
         enum class JudgeTrigger : std::uint8_t
         {
@@ -111,17 +120,10 @@ namespace tkw
             JudgeAction success = JudgeAction::Nothing;
             JudgeAction failure = JudgeAction::Nothing;
             int amount = 0;
+            Option<Scope> scope =
+                Option<Scope>::None(); /**< 打出时的目标范围（延时锦囊用） */
 
             bool operator==(const JudgeEffect &) const = default;
-        };
-
-        /** @brief 效果作用范围（决定结算时如何选目标）。 */
-        enum class Scope : std::uint8_t
-        {
-            Self,      /**< 仅自己 */
-            OneOther,  /**< 一名其他角色 */
-            AllOthers, /**< 所有其他角色 */
-            All,       /**< 所有角色（含自己） */
         };
 
         /** @brief 需要目标打出的响应牌类别。 */

@@ -37,10 +37,7 @@ namespace tkw
                     if (is_unimplemented_active_kind(def.effect.unwrap().kind))
                         out.push_back(def.id);
                 }
-                else if (def.judge.is_some())
-                {
-                    out.push_back(def.id);
-                }
+                // 延时锦囊（无 effect、有 judge）已可在出牌阶段放置，不计入
             }
             return out;
         }

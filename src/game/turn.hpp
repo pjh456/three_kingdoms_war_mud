@@ -25,6 +25,7 @@
 #include "card/manager.hpp"
 #include "game/combat.hpp"
 #include "game/context.hpp"
+#include "game/counter.hpp"
 #include "game/decision.hpp"
 #include "game/distance.hpp"
 #include "game/equip.hpp"
@@ -45,6 +46,7 @@ namespace tkw
             InvalidTarget,       /**< 目标不在合法目标集合内 */
             ShaLimitExceeded,    /**< 本回合杀次数已达上限 */
             NotEquipment,        /**< 装备动作目标不是装备牌 */
+            DelayedDuplicate,    /**< 判定区已有同名的延时锦囊 */
             PlayRejected,        /**< 结算器拒绝该效果 */
             DiscardInsufficient, /**< 弃牌数量不足/引用了不存在的牌 */
             JudgeEmptyDeck,      /**< 判定时摸牌堆与弃牌堆皆空 */
@@ -88,6 +90,14 @@ namespace tkw
             auto removed = ctx.cards->remove_from_judge(player, delayed.instance_id);
             const card::Card delayed_card =
                 removed.is_some() ? std::move(removed).unwrap() : delayed;
+
+            // 无懈窗口：判定结算前可被抵消，抵消则直接弃置
+            if (resolve_nullification(ctx, ai, def, player))
+            {
+                ctx.cards->discard(delayed_card);
+                emit_card_discarded(ctx, player, delayed_card);
+                return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::Normal);
+            }
 
             auto judge = perform_judgement(ctx);
             if (judge.is_none())
@@ -199,6 +209,61 @@ namespace tkw
             return TurnResult<void>::Ok();
         }
 
+        /** @brief 该定义是否为「延时锦囊」（锦囊、有判定描述、无主动效果）。 */
+        inline bool is_delayed_trick(const card::CardDef &def)
+        {
+            return def.type == card::CardType::Trick && def.effect.is_none() &&
+                   def.judge.is_some();
+        }
+
+        /**
+         * @brief 打出延时锦囊：按 judge.scope 校验目标，置入其判定区。
+         * @note 同名延时锦囊不可叠加；打出时开无懈窗口，被抵消则直接弃置。
+         */
+        inline TurnResult<void> place_delayed(
+            GameContext &ctx, DecisionSource &ai, const std::string &player,
+            const card::Card &card, const std::vector<std::string> &targets)
+        {
+            const auto def_opt = ctx.catalog->find(card.def_id);
+            if (def_opt.is_none() || !is_delayed_trick(*def_opt.unwrap()))
+                return TurnResult<void>::Err(TurnError::PlayRejected);
+            const card::CardDef &def = *def_opt.unwrap();
+
+            const auto scope = def.judge.unwrap().scope.unwrap_or(card::Scope::Self);
+            std::vector<std::string> legal;
+            if (scope == card::Scope::Self)
+                legal.push_back(player);
+            else
+                for (const auto &e : *ctx.entities)
+                    if (e->get_id() != player)
+                        legal.push_back(e->get_id());
+
+            if (targets.size() != 1 ||
+                std::find(legal.begin(), legal.end(), targets.front()) == legal.end())
+                return TurnResult<void>::Err(TurnError::InvalidTarget);
+            const std::string &target = targets.front();
+
+            for (const auto &c : ctx.cards->judge(target))
+                if (c.def_id == card.def_id)
+                    return TurnResult<void>::Err(TurnError::DelayedDuplicate);
+
+            auto removed = ctx.cards->remove_from_hand(player, card.instance_id);
+            if (removed.is_none())
+                return TurnResult<void>::Err(TurnError::CardNotInHand);
+            emit_card_played(ctx, player, card);
+
+            if (resolve_nullification(ctx, ai, def, player))
+            {
+                ctx.cards->discard(std::move(removed).unwrap());
+                emit_card_discarded(ctx, player, card);
+                return TurnResult<void>::Ok();
+            }
+
+            ctx.cards->add_to_judge(target, std::move(removed).unwrap());
+            emit_card_moved(ctx, player, target, card, Zone::Hand, Zone::Judge);
+            return TurnResult<void>::Ok();
+        }
+
         // ── 回合入口 ────────────────────────────────────────────────────
 
         /**
@@ -257,6 +322,16 @@ namespace tkw
                         auto er = equip_card(ctx, player, card.unwrap());
                         if (er.is_err())
                             return TurnResult<void>::Err(er.unwrap_err());
+                        continue;
+                    }
+
+                    if (is_delayed_trick(def))
+                    {
+                        auto dr = place_delayed(
+                            ctx, ai, player, card.unwrap(),
+                            action.unwrap().targets);
+                        if (dr.is_err())
+                            return TurnResult<void>::Err(dr.unwrap_err());
                         continue;
                     }
 

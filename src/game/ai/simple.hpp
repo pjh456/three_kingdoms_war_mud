@@ -82,6 +82,41 @@ namespace tkw
                     if (def.type == card::CardType::Equipment)
                         return Option<PlayAction>::Some(PlayAction{c.instance_id, {}});
 
+                    if (def.type == card::CardType::Trick &&
+                        def.effect.is_none() && def.judge.is_some())
+                    {
+                        // 延时锦囊：按 judge.scope 选目标，跳过已有同名者
+                        const auto scope =
+                            def.judge.unwrap().scope.unwrap_or(card::Scope::Self);
+                        std::vector<std::string> targets;
+                        if (scope == card::Scope::Self)
+                            targets.push_back(player);
+                        else
+                            for (const auto &e : *ctx.entities)
+                                if (e->get_id() != player)
+                                    targets.push_back(e->get_id());
+
+                        std::vector<std::string> ok;
+                        for (const auto &t : targets)
+                        {
+                            bool dup = false;
+                            for (const auto &jc : ctx.cards->judge(t))
+                                if (jc.def_id == def.id)
+                                {
+                                    dup = true;
+                                    break;
+                                }
+                            if (!dup)
+                                ok.push_back(t);
+                        }
+                        if (ok.empty())
+                            continue;
+                        if (scope == card::Scope::OneOther)
+                            ok = {lowest_hp(ctx, ok)};
+                        return Option<PlayAction>::Some(
+                            PlayAction{c.instance_id, std::move(ok)});
+                    }
+
                     if (def.effect.is_none())
                         continue;
                     const auto kind = def.effect.unwrap().kind;

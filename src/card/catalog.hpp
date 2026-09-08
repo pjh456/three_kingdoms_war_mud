@@ -299,6 +299,14 @@ namespace tkw
                     return cfg::ConfigResult<JudgeEffect>::Err(amount.unwrap_err());
                 j.amount = static_cast<int>(amount.unwrap());
 
+                auto scope = opt_enum<Scope>(
+                    obj, "scope", path,
+                    {{"self", Scope::Self}, {"one_other", Scope::OneOther},
+                     {"all_others", Scope::AllOthers}, {"all", Scope::All}});
+                if (scope.is_err())
+                    return cfg::ConfigResult<JudgeEffect>::Err(scope.unwrap_err());
+                j.scope = scope.unwrap();
+
                 return cfg::ConfigResult<JudgeEffect>::Ok(std::move(j));
             }
 

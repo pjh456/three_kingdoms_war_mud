@@ -634,6 +634,94 @@ TEST_CASE("game: lesi heart judge allows play")
     CHECK(g.cards.hand_size("a") == 2); // 杀打出，剩摸的 2 张
 }
 
+TEST_CASE("game: lesi can be played onto another player's judge zone")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "lesi", "L#0");
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"L#0", {"b"}}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.judge_size("b") == 1);
+    CHECK(g.cards.judge("b")[0].def_id == "lesi");
+    CHECK(g.cards.hand_size("a") == 2);  // 打出 1 张 + 摸 2 张
+}
+
+TEST_CASE("game: shandian is placed on self")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "shandian", "S#0");
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"S#0", {"a"}}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.judge_size("a") == 1);
+    CHECK(g.cards.judge("a")[0].def_id == "shandian");
+}
+
+TEST_CASE("game: duplicate delayed trick is rejected")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "lesi", "L#0");
+    g.cards.add_to_judge("b", Card{"L#9", "lesi", Suit::Spade, 6});
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"L#0", {"b"}}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == TurnError::DelayedDuplicate);
+}
+
+TEST_CASE("game: delayed trick nullified at placement is discarded")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "lesi", "L#0");
+    g.give("b", "wuxie", "W#0");
+
+    TestDecider decider;
+    decider.counter = true;
+    decider.plays = {PlayAction{"L#0", {"b"}}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.judge_size("b") == 0);  // 未进入判定区
+    CHECK(g.cards.hand_size("b") == 0);   // 无懈被消耗
+}
+
+TEST_CASE("game: delayed trick can be nullified at resolution")
+{
+    TestGame g("deck");
+    auto *a = g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.cards.add_to_judge("a", Card{"L#0", "lesi", Suit::Spade, 6});
+    g.give("a", "sha", "s#1");
+    g.give("a", "wuxie", "W#0");
+    g.cards.add_to_draw(Card{"d#0", "shan", Suit::Diamond, 2});
+    g.cards.add_to_draw(Card{"d#1", "shan", Suit::Diamond, 3});
+
+    TestDecider decider;
+    decider.counter = true;  // 用无懈抵消自己的乐不思蜀
+    decider.plays = {PlayAction{"s#1", {"b"}}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(a->get_hp() == 4);
+    CHECK(b->get_hp() == 3);             // 出牌阶段未被跳过
+    CHECK(g.cards.judge_size("a") == 0);
+}
+
 TEST_CASE("game: lightning strikes on spade 2-9")
 {
     TestGame g("deck");
@@ -952,7 +1040,7 @@ TEST_CASE("game: unsupported deck cards are reported")
 {
     TestGame g("deck");
     CHECK(unsupported_cards(g.catalog) ==
-          std::vector<std::string>({"lesi", "shandian", "jiedao", "wugu"}));
+          std::vector<std::string>({"jiedao", "wugu"}));
 }
 
 TEST_CASE("game: effect traits are the single source of truth")

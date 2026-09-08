@@ -13,6 +13,7 @@
         "trigger": "spade_2_9",
         "success": "damage",
         "failure": "pass_to_next",
-        "amount": 3
+        "amount": 3,
+        "scope": "self"
     }
 }
