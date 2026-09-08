@@ -233,6 +233,37 @@ TEST_CASE("game: aoe rejects partial target list")
     CHECK(g.cards.hand_size("a") == 1);
 }
 
+TEST_CASE("game: card not in hand is rejected without effect")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+
+    TestDecider decider;
+    Card ghost{"ghost#0", "sha", Suit::Spade, 7};  // 不属于任何区域
+    auto r = resolve_play(g.ctx, decider, "a", ghost, {"b"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::CardNotOwned);
+    CHECK(b->get_hp() == 4);           // 未结算
+    CHECK(g.cards.hand_size("a") == 0);
+}
+
+TEST_CASE("game: card owned by another player cannot be played")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.give("b", "sha", "s#1");
+
+    TestDecider decider;
+    const auto stolen = g.cards.hand("b")[0];
+    auto r = resolve_play(g.ctx, decider, "a", stolen, {"b"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::CardNotOwned);
+    CHECK(b->get_hp() == 4);
+    CHECK(g.cards.hand_size("b") == 1);  // b 的牌还在
+}
+
 TEST_CASE("game: tao heals")
 {
     TestGame g("deck");

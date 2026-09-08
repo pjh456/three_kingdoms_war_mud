@@ -43,6 +43,7 @@ namespace tkw
             NoTarget,        /**< 需要至少一个目标 */
             OutOfRange,      /**< 目标不在攻击范围/距离内 */
             InvalidTarget,   /**< 目标数量不符 scope / 不在合法目标集合内 */
+            CardNotOwned,    /**< 打出的牌不在该玩家手牌中 */
             InvalidChoice,   /**< 决策源选中的牌不存在于目标区域 */
         };
 
@@ -212,15 +213,14 @@ namespace tkw
             if (!is_settleable_kind(eff.kind))
                 return GameResult<void>::Err(EffectError::UnsupportedKind);
 
-            // 打出的牌先移出手牌并弃置（防止结算中被再次选中）；失败回滚
-            bool consumed = false;
+            // 打出的牌必须在手牌中，否则拒绝（不消耗、不结算）
             auto played_removed = ctx.cards->remove_from_hand(player, played.instance_id);
-            if (played_removed.is_some())
-            {
-                ctx.cards->discard(std::move(played_removed).unwrap());
-                emit_card_played(ctx, player, played);
-                consumed = true;
-            }
+            if (played_removed.is_none())
+                return GameResult<void>::Err(EffectError::CardNotOwned);
+
+            // 打出的牌先弃置（防止结算中被再次选中）
+            ctx.cards->discard(std::move(played_removed).unwrap());
+            emit_card_played(ctx, player, played);
 
             // 无懈可击只抵消锦囊牌；基本牌（杀/闪/桃）不可无懈
             const bool is_trick = def.type == card::CardType::Trick;
@@ -328,7 +328,7 @@ namespace tkw
             };
 
             const auto rr = apply();
-            if (rr.is_err() && consumed)
+            if (rr.is_err())
             {
                 // 结算失败：把打出的牌从弃牌堆取回手牌（事务性）
                 auto back = ctx.cards->remove_from_discard(played.instance_id);

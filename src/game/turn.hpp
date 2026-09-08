@@ -267,11 +267,18 @@ namespace tkw
                     auto rr = resolve_play(
                         ctx, ai, player, card.unwrap(), action.unwrap().targets);
                     if (rr.is_err())
-                        return TurnResult<void>::Err(
-                            rr.unwrap_err() == EffectError::OutOfRange ||
-                                    rr.unwrap_err() == EffectError::InvalidTarget
-                                ? TurnError::InvalidTarget
-                                : TurnError::PlayRejected);
+                    {
+                        switch (rr.unwrap_err())
+                        {
+                        case EffectError::OutOfRange:
+                        case EffectError::InvalidTarget:
+                            return TurnResult<void>::Err(TurnError::InvalidTarget);
+                        case EffectError::CardNotOwned:
+                            return TurnResult<void>::Err(TurnError::CardNotInHand);
+                        default:
+                            return TurnResult<void>::Err(TurnError::PlayRejected);
+                        }
+                    }
                     if (is_sha(def))
                         ++sha_played;
                 }
