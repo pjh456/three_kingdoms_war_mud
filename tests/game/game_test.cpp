@@ -95,6 +95,45 @@ TEST_CASE("game: horses adjust attack distance")
     CHECK(in_attack_range(g.ctx, "a", "b"));
 }
 
+TEST_CASE("game: offensive and defensive horses coexist")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.add_player("d", 3, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "chitu", "h#1");  // -1马
+    g.give("a", "dilu", "h#2");   // +1马
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"h#1", {}}, PlayAction{"h#2", {}}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.equip_size("a") == 2);      // 两个坐骑槽互不替换
+    CHECK(in_attack_range(g.ctx, "a", "c"));  // a→c: 2-1=1
+
+    g.equip("c", "jueying", "h#3");           // c 的 +1马
+    CHECK(!in_attack_range(g.ctx, "a", "c")); // 1+1=2
+}
+
+TEST_CASE("game: same-direction horse replaces previous")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "chitu", "h#1");  // -1马
+    g.give("a", "dawan", "h#2");  // 也是 -1马
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"h#1", {}}, PlayAction{"h#2", {}}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.equip_size("a") == 1);              // 同方向坐骑互相替换
+    CHECK(g.cards.equip("a")[0].def_id == "dawan");
+}
+
 TEST_CASE("game: valid_targets by scope and range")
 {
     TestGame g("deck");

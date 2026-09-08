@@ -131,23 +131,18 @@ namespace tkw
             Jink,
         };
 
-        /** @brief 装备槽位。 */
+        /**
+         * @brief 装备槽位。
+         * @note 坐骑按方向分两个独立槽位：OffensiveHorse = -1马（你计算与其他
+         *       角色的距离 -1），DefensiveHorse = +1马（其他角色计算与你的距离
+         *       +1）。两者可同时装备。
+         */
         enum class EquipSlot : std::uint8_t
         {
             Weapon,
             Armor,
-            Horse,
-        };
-
-        /**
-         * @brief 坐骑方向。
-         * @note Offensive = -1马（你计算与其他角色的距离 -1）；
-         *       Defensive = +1马（其他角色计算与你的距离 +1）。
-         */
-        enum class HorseDirection : std::uint8_t
-        {
-            Offensive,
-            Defensive,
+            OffensiveHorse,
+            DefensiveHorse,
         };
 
         /** @brief 一张实体牌副本的花色点数（判定/拼点用）。 */
@@ -159,12 +154,11 @@ namespace tkw
             bool operator==(const CardCopy &) const = default;
         };
 
-        /** @brief 装备参数：槽位；武器带攻击范围；坐骑带方向。 */
+        /** @brief 装备参数：槽位；武器带攻击范围。 */
         struct CardEquip
         {
             EquipSlot slot = EquipSlot::Weapon;
             int range = 0;
-            Option<HorseDirection> direction = Option<HorseDirection>::None();
 
             bool operator==(const CardEquip &) const = default;
         };

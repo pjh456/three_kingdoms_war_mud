@@ -244,7 +244,8 @@ namespace tkw
                     obj, "slot", path,
                     {{"weapon", EquipSlot::Weapon},
                      {"armor", EquipSlot::Armor},
-                     {"horse", EquipSlot::Horse}});
+                     {"offensive_horse", EquipSlot::OffensiveHorse},
+                     {"defensive_horse", EquipSlot::DefensiveHorse}});
                 if (slot.is_err())
                     return cfg::ConfigResult<CardEquip>::Err(slot.unwrap_err());
                 eq.slot = slot.unwrap();
@@ -253,14 +254,6 @@ namespace tkw
                 if (range.is_err())
                     return cfg::ConfigResult<CardEquip>::Err(range.unwrap_err());
                 eq.range = static_cast<int>(range.unwrap());
-
-                auto dir = opt_enum<HorseDirection>(
-                    obj, "direction", path,
-                    {{"offensive", HorseDirection::Offensive},
-                     {"defensive", HorseDirection::Defensive}});
-                if (dir.is_err())
-                    return cfg::ConfigResult<CardEquip>::Err(dir.unwrap_err());
-                eq.direction = dir.unwrap();
 
                 return cfg::ConfigResult<CardEquip>::Ok(std::move(eq));
             }

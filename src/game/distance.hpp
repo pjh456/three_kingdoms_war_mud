@@ -62,13 +62,10 @@ namespace tkw
                 const auto &e = eq.unwrap();
                 if (e.slot == card::EquipSlot::Weapon)
                     s.weapon_range = e.range;
-                else if (e.slot == card::EquipSlot::Horse)
-                {
-                    if (e.direction.contains(card::HorseDirection::Offensive))
-                        s.offensive_horse = true;
-                    else if (e.direction.contains(card::HorseDirection::Defensive))
-                        s.defensive_horse = true;
-                }
+                else if (e.slot == card::EquipSlot::OffensiveHorse)
+                    s.offensive_horse = true;
+                else if (e.slot == card::EquipSlot::DefensiveHorse)
+                    s.defensive_horse = true;
             }
             return s;
         }

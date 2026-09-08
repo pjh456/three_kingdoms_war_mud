@@ -9,7 +9,6 @@
     ],
     "text": "坐骑·+1。锁定技，其他角色与你计算距离时+1。",
     "equip": {
-        "slot": "horse",
-        "direction": "defensive"
+        "slot": "defensive_horse"
     }
 }

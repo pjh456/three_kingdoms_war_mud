@@ -97,7 +97,10 @@ namespace tkw
             {
                 const auto def = ctx.catalog->find(c.def_id);
                 if (def.is_some() && def.unwrap()->equip.is_some() &&
-                    def.unwrap()->equip.unwrap().slot == card::EquipSlot::Horse)
+                    (def.unwrap()->equip.unwrap().slot ==
+                         card::EquipSlot::OffensiveHorse ||
+                     def.unwrap()->equip.unwrap().slot ==
+                         card::EquipSlot::DefensiveHorse))
                 {
                     auto removed = ctx.cards->remove_from_equip(target, c.instance_id);
                     if (removed.is_some())

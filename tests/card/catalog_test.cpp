@@ -68,16 +68,15 @@ TEST_CASE("card: parse_card_def equipment with horse direction")
         "set": "standard",
         "copies": [ {"suit": "heart", "number": 5} ],
         "text": "坐骑·-1。锁定技，你与其他角色的距离-1。",
-        "equip": {"slot": "horse", "direction": "offensive"}
+        "equip": {"slot": "offensive_horse"}
     })");
     auto r = parse_card_def(d.root(), "chitu");
     REQUIRE(r.is_ok());
     CHECK(r.unwrap().effect.is_none());
     REQUIRE(r.unwrap().equip.is_some());
     const auto &eq = r.unwrap().equip.unwrap();
-    CHECK(eq.slot == EquipSlot::Horse);
+    CHECK(eq.slot == EquipSlot::OffensiveHorse);
     CHECK(eq.range == 0);
-    CHECK(eq.direction.contains(HorseDirection::Offensive));
 }
 
 TEST_CASE("card: parse_card_def weapon carries range and ability")
@@ -233,7 +232,7 @@ TEST_CASE("card: catalog loads deck + card files")
     CHECK(tkw::io::write_text(dir / "cards" / "chitu.json", R"({
         "id": "chitu", "name": "赤兔", "type": "equipment", "subtype": "horse",
         "copies": [ {"suit": "heart", "number": 5} ],
-        "equip": {"slot": "horse", "direction": "offensive"}
+        "equip": {"slot": "offensive_horse"}
     })").is_ok());
 
     tkw::config::ResourceStore store(dir);
