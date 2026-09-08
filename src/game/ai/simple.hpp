@@ -9,16 +9,18 @@
 #ifndef INCLUDE_TKW_GAME_AI_SIMPLE_HPP
 #define INCLUDE_TKW_GAME_AI_SIMPLE_HPP
 
+#include <algorithm>
+#include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "card/card.hpp"
 #include "card/def.hpp"
+#include "game/ai/legal.hpp"
 #include "game/core/context.hpp"
 #include "game/core/decision.hpp"
-#include "game/core/effect.hpp"
-#include "game/resolve/resolver.hpp"
+#include "game/resolve/response.hpp"
 #include "util/types.hpp"
 
 namespace tkw
@@ -93,89 +95,56 @@ namespace tkw
                 const GameContext &ctx, const TurnContext &turn) override
             {
                 const std::string &player = turn.player;
-                const bool sha_blocked = turn.sha_played >= turn.sha_limit;
 
-                for (const auto &c : ctx.cards->hand(player))
+                // legal_actions 已按手牌序产出全部合法动作；按牌分组以复现
+                // 「取第一张可出的牌，再按贪心偏好选目标」的既有行为。
+                const auto legal = legal_actions(ctx, player, turn);
+                std::vector<std::string> order;
+                std::vector<std::vector<LegalAction>> groups;
+                for (const auto &a : legal)
                 {
+                    const auto it =
+                        std::find(order.begin(), order.end(), a.card.instance_id);
+                    if (it == order.end())
+                    {
+                        order.push_back(a.card.instance_id);
+                        groups.push_back({a});
+                    }
+                    else
+                    {
+                        groups[static_cast<std::size_t>(it - order.begin())]
+                            .push_back(a);
+                    }
+                }
+
+                for (std::size_t i = 0; i < order.size(); ++i)
+                {
+                    const auto &opts = groups[i];
+                    const card::Card &c = opts.front().card;
                     const auto def_opt = ctx.catalog->find(c.def_id);
                     if (def_opt.is_none())
                         continue;
                     const card::CardDef &def = *def_opt.unwrap();
 
-                    if (def.type == card::CardType::Equipment)
-                        return Option<PlayAction>::Some(PlayAction{c.instance_id, {}});
-
-                    if (def.type == card::CardType::Trick &&
-                        def.effect.is_none() && def.judge.is_some())
-                    {
-                        // 延时锦囊：按 judge.scope 选目标，跳过已有同名者
-                        const auto scope =
-                            def.judge.unwrap().scope.unwrap_or(card::Scope::Self);
-                        std::vector<std::string> targets;
-                        if (scope == card::Scope::Self)
-                            targets.push_back(player);
-                        else
-                            for (const auto &e : *ctx.entities)
-                                if (e->get_id() != player)
-                                    targets.push_back(e->get_id());
-
-                        std::vector<std::string> ok;
-                        for (const auto &t : targets)
-                        {
-                            bool dup = false;
-                            for (const auto &jc : ctx.cards->judge(t))
-                                if (jc.def_id == def.id)
-                                {
-                                    dup = true;
-                                    break;
-                                }
-                            if (!dup)
-                                ok.push_back(t);
-                        }
-                        if (ok.empty())
-                            continue;
-                        if (scope == card::Scope::OneOther)
-                            ok = {lowest_hp(ctx, ok)};
-                        return Option<PlayAction>::Some(
-                            PlayAction{c.instance_id, std::move(ok)});
-                    }
-
                     if (def.effect.is_none())
-                        continue;
-                    const auto kind = def.effect.unwrap().kind;
-
-                    if (kind == card::CardEffectKind::BorrowedSword)
                     {
-                        // 借刀：选一个持武器者 A，B 取 A 自身（可为A）
-                        for (const auto &e : *ctx.entities)
-                        {
-                            const std::string &holder = e->get_id();
-                            if (holder == player)
-                                continue;
-                            if (!has_equip_slot(
-                                    ctx, holder, card::EquipSlot::Weapon))
-                                continue;
-                            return Option<PlayAction>::Some(
-                                PlayAction{c.instance_id, {holder, holder}});
-                        }
-                        continue;
-                    }
-
-                    if (kind == card::CardEffectKind::Damage)
-                    {
-                        if (sha_blocked)
-                            continue;
-                        const auto targets = valid_targets(ctx, player, def);
-                        if (targets.empty())
-                            continue;
+                        // 装备/延时锦囊：OneOther 集火最低体力，其余取唯一动作
+                        const auto scope =
+                            def.judge.is_some()
+                                ? def.judge.unwrap().scope.unwrap_or(
+                                      card::Scope::Self)
+                                : card::Scope::Self;
+                        if (scope == card::Scope::OneOther)
+                            return Option<PlayAction>::Some(PlayAction{
+                                c.instance_id, {lowest_hp_action(ctx, opts)}});
                         return Option<PlayAction>::Some(
-                            PlayAction{c.instance_id, {lowest_hp(ctx, targets)}});
+                            PlayAction{c.instance_id, opts.front().targets});
                     }
 
-                    const auto scope =
-                        def.effect.unwrap().scope.unwrap_or(card::Scope::Self);
-                    if (kind == card::CardEffectKind::Heal &&
-                        scope == card::Scope::Self)
+                    const card::CardEffect &eff = def.effect.unwrap();
+                    if (eff.kind == card::CardEffectKind::Heal &&
+                        eff.scope.unwrap_or(card::Scope::Self) ==
+                            card::Scope::Self)
                     {
                         const auto me = ctx.entities->find(player);
                         if (me.is_some() &&
@@ -184,30 +153,23 @@ namespace tkw
                             continue;  // 满血不打桃
                     }
 
-                    if (!is_ai_active_kind(kind))
-                        continue;
-
-                    auto targets = valid_targets(ctx, player, def);
-                    if (targets.empty())
-                        continue;
-
-                    if (effect_traits(kind).target_card)
+                    if (eff.kind == card::CardEffectKind::BorrowedSword)
                     {
-                        std::vector<std::string> with_cards;
-                        for (const auto &t : targets)
-                            if (has_any_card(ctx, t))
-                                with_cards.push_back(t);
-                        if (with_cards.empty())
-                            continue;
-                        targets = std::move(with_cards);
+                        // 借刀：取「B = A 自身」的目标组合
+                        for (const auto &a : opts)
+                            if (a.targets.size() == 2 && a.targets[0] == a.targets[1])
+                                return Option<PlayAction>::Some(
+                                    PlayAction{c.instance_id, a.targets});
                     }
 
                     // 仅指定一名其他角色：集火最低体力（同血取列表序）
-                    if (scope == card::Scope::OneOther)
-                        targets = {lowest_hp(ctx, targets)};
+                    if (eff.scope.unwrap_or(card::Scope::Self) ==
+                        card::Scope::OneOther)
+                        return Option<PlayAction>::Some(PlayAction{
+                            c.instance_id, {lowest_hp_action(ctx, opts)}});
 
                     return Option<PlayAction>::Some(
-                        PlayAction{c.instance_id, std::move(targets)});
+                        PlayAction{c.instance_id, opts.front().targets});
                 }
                 return Option<PlayAction>::None();
             }
@@ -233,28 +195,22 @@ namespace tkw
                 return e.is_some() ? e.unwrap()->get_hp() : 0;
             }
 
-            /** @brief 集火：选体力最低的目标（同血取列表序，保证确定性）。 */
-            static std::string lowest_hp(
-                const GameContext &ctx, const std::vector<std::string> &targets)
+            /** @brief 集火：在单目标动作里选体力最低的目标（同血取列表序）。 */
+            static std::string lowest_hp_action(
+                const GameContext &ctx, const std::vector<LegalAction> &opts)
             {
-                std::string best = targets.front();
+                std::string best = opts.front().targets.front();
                 int best_hp = hp_of(ctx, best);
-                for (const auto &t : targets)
+                for (const auto &a : opts)
                 {
-                    const int h = hp_of(ctx, t);
+                    const int h = hp_of(ctx, a.targets.front());
                     if (h < best_hp)
                     {
-                        best = t;
+                        best = a.targets.front();
                         best_hp = h;
                     }
                 }
                 return best;
-            }
-
-            static bool has_any_card(const GameContext &ctx, const std::string &id)
-            {
-                return ctx.cards->hand_size(id) > 0 || ctx.cards->equip_size(id) > 0 ||
-                       ctx.cards->judge_size(id) > 0;
             }
         };
     }

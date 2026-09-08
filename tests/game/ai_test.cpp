@@ -1,6 +1,8 @@
 #include <doctest/doctest.h>
 
 #include "game/ai/evaluator.hpp"
+#include "game/ai/legal.hpp"
+#include "game/ai/simple.hpp"
 #include "game/ai/view.hpp"
 #include "test_game.hpp"
 
@@ -54,4 +56,26 @@ TEST_CASE("ai: evaluator scores cards and enemies")
     REQUIRE(v.others.size() == 1);
     CHECK(threat_score(v.others[0]) > 0);
     CHECK(kill_priority(v.others[0]) == 1);
+}
+
+TEST_CASE("ai: simple choose_play only returns legal_actions")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+    g.give("a", "tao", "t#1");
+
+    tkw::game::SimpleAI ai;
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    const auto chosen = ai.choose_play(g.ctx, turn);
+    REQUIRE(chosen.is_some());
+
+    const auto legal = tkw::game::legal_actions(g.ctx, "a", turn);
+    bool found = false;
+    for (const auto &a : legal)
+        if (a.card.instance_id == chosen.unwrap().instance_id &&
+            a.targets == chosen.unwrap().targets)
+            found = true;
+    CHECK(found);
 }
