@@ -101,12 +101,13 @@ namespace tkw
                             PlayAction{c.instance_id, {lowest_hp(ctx, targets)}});
                     }
 
-                    if (kind == card::CardEffectKind::Heal)
+                    const auto scope =
+                        def.effect.unwrap().scope.unwrap_or(card::Scope::Self);
+                    if (kind == card::CardEffectKind::Heal &&
+                        scope == card::Scope::Self)
                     {
-                        const auto scope =
-                            def.effect.unwrap().scope.unwrap_or(card::Scope::Self);
                         const auto me = ctx.entities->find(player);
-                        if (scope == card::Scope::Self && me.is_some() &&
+                        if (me.is_some() &&
                             me.unwrap()->get_hp() >=
                                 me.unwrap()->get_hp_bar().get_max())
                             continue;  // 满血不打桃
@@ -115,7 +116,7 @@ namespace tkw
                     if (!is_active_kind(kind))
                         continue;
 
-                    const auto targets = valid_targets(ctx, player, def);
+                    auto targets = valid_targets(ctx, player, def);
                     if (targets.empty())
                         continue;
 
@@ -127,12 +128,15 @@ namespace tkw
                                 with_cards.push_back(t);
                         if (with_cards.empty())
                             continue;
-                        return Option<PlayAction>::Some(
-                            PlayAction{c.instance_id, std::move(with_cards)});
+                        targets = std::move(with_cards);
                     }
 
+                    // 仅指定一名其他角色：集火最低体力（同血取列表序）
+                    if (scope == card::Scope::OneOther)
+                        targets = {lowest_hp(ctx, targets)};
+
                     return Option<PlayAction>::Some(
-                        PlayAction{c.instance_id, targets});
+                        PlayAction{c.instance_id, std::move(targets)});
                 }
                 return Option<PlayAction>::None();
             }

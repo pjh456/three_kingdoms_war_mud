@@ -42,6 +42,7 @@ namespace tkw
             UnsupportedKind, /**< 该 effect.kind 尚未实现 */
             NoTarget,        /**< 需要至少一个目标 */
             OutOfRange,      /**< 目标不在攻击范围/距离内 */
+            InvalidTarget,   /**< 目标数量不符 scope / 不在合法目标集合内 */
             InvalidChoice,   /**< 决策源选中的牌不存在于目标区域 */
         };
 
@@ -172,6 +173,39 @@ namespace tkw
                 for (const auto &t : targets)
                     if (!distance_le(ctx, player, t, eff.range))
                         return GameResult<void>::Err(EffectError::OutOfRange);
+            }
+
+            // 目标合法性：数量须符合 scope，且每个目标都必须在合法集合内
+            {
+                const auto scope = eff.scope.unwrap_or(card::Scope::Self);
+                const auto legal = valid_targets(ctx, player, def);
+                const auto in_legal = [&](const std::string &t)
+                {
+                    return std::find(legal.begin(), legal.end(), t) != legal.end();
+                };
+                bool target_ok = true;
+                switch (scope)
+                {
+                case card::Scope::Self:
+                case card::Scope::OneOther:
+                    target_ok = targets.size() == 1 && in_legal(targets.front());
+                    break;
+                case card::Scope::All:
+                case card::Scope::AllOthers:
+                    target_ok = targets.size() == legal.size();
+                    break;
+                }
+                if (target_ok)
+                {
+                    for (const auto &t : targets)
+                        if (!in_legal(t))
+                        {
+                            target_ok = false;
+                            break;
+                        }
+                }
+                if (!target_ok)
+                    return GameResult<void>::Err(EffectError::InvalidTarget);
             }
 
             // 未实现的效果：不消耗打出的牌

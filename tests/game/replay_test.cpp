@@ -81,6 +81,6 @@ TEST_CASE("replay: golden fingerprints pin the rule semantics")
     CHECK(fingerprint(two) == 280716116005724422ULL);
 
     const auto four = run_game(42, 4);
-    CHECK(four.size() == 297);
-    CHECK(fingerprint(four) == 3528129666623569736ULL);
+    CHECK(four.size() == 296);
+    CHECK(fingerprint(four) == 13672726603904893668ULL);
 }

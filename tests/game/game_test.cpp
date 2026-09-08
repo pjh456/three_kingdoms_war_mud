@@ -169,6 +169,70 @@ TEST_CASE("game: sha out of range is rejected and card kept")
     CHECK(g.cards.hand_size("a") == 1);  // 牌未消耗
 }
 
+TEST_CASE("game: sha rejects multiple targets")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.add_player("d", 3, 4);
+    g.give("a", "sha", "s#0");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "d"});  // 杀只能指定一名目标
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+    CHECK(g.cards.hand_size("a") == 1);
+}
+
+TEST_CASE("game: one-other card rejects self as target")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#0");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"a"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+    CHECK(g.cards.hand_size("a") == 1);
+}
+
+TEST_CASE("game: self card rejects other target")
+{
+    TestGame g("deck");
+    auto *a = g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    a->take_damage("b", 1, false);  // a: 3
+    g.give("a", "tao", "t#0");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});  // 桃只能对自己
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+    CHECK(g.cards.hand_size("a") == 1);
+}
+
+TEST_CASE("game: aoe rejects partial target list")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.give("a", "nanman", "n#0");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});  // 南蛮须覆盖所有其他角色
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+    CHECK(g.cards.hand_size("a") == 1);
+}
+
 TEST_CASE("game: tao heals")
 {
     TestGame g("deck");

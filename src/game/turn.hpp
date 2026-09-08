@@ -268,7 +268,8 @@ namespace tkw
                         ctx, ai, player, card.unwrap(), action.unwrap().targets);
                     if (rr.is_err())
                         return TurnResult<void>::Err(
-                            rr.unwrap_err() == EffectError::OutOfRange
+                            rr.unwrap_err() == EffectError::OutOfRange ||
+                                    rr.unwrap_err() == EffectError::InvalidTarget
                                 ? TurnError::InvalidTarget
                                 : TurnError::PlayRejected);
                     if (is_sha(def))
