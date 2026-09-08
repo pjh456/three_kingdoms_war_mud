@@ -40,8 +40,8 @@ namespace tkw
         /** @brief 对局结果。 */
         struct GameOutcome
         {
-            std::string winner; /**< 最后存活玩家 id */
-            int rounds = 0;     /**< 实际进行的回合数 */
+            std::string winner; /**< 最后存活玩家 id；空串 = 无存活者（同归于尽） */
+            int turns = 0;      /**< 实际进行的回合数（每执行一个玩家回合 +1） */
         };
 
         /** @brief 存活玩家数。 */
@@ -81,21 +81,21 @@ namespace tkw
             prepare_game(ctx, hand);
 
             std::string current = first_player;
-            int rounds = 0;
+            int turns = 0;
             while (ctx.entities->size() > 1)
             {
                 auto r = execute_turn(ctx, ai, current);
                 if (r.is_err())
                     return LoopResult<GameOutcome>::Err(LoopError::TurnFailed);
                 current = next_player(ctx, current);
-                if (++rounds > 1000)
+                if (++turns > 1000)
                     return LoopResult<GameOutcome>::Err(LoopError::MaxRounds);
             }
 
             GameOutcome gr;
-            gr.rounds = rounds;
-            for (const auto &ent : *ctx.entities)
-                gr.winner = ent->get_id();
+            gr.turns = turns;
+            if (ctx.entities->size() == 1)
+                gr.winner = (*ctx.entities->begin())->get_id();
             return LoopResult<GameOutcome>::Ok(std::move(gr));
         }
     }

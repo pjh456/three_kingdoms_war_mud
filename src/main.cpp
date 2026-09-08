@@ -133,7 +133,7 @@ namespace
         }
 
         const auto &out = outcome.unwrap();
-        std::cout << "胜者: " << out.winner << "，回合数: " << out.rounds << "\n";
+        std::cout << "胜者: " << out.winner << "，回合数: " << out.turns << "\n";
         return CliResult<void>::Ok();
     }
 

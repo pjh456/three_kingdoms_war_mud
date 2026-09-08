@@ -984,7 +984,7 @@ TEST_CASE("game: play_game ends when one player kills the other")
     auto r = play_game(g.ctx, decider, "a");
     REQUIRE(r.is_ok());
     CHECK(r.unwrap().winner == "a");
-    CHECK(r.unwrap().rounds >= 1);
+    CHECK(r.unwrap().turns >= 1);
     CHECK(g.entities.find("b").is_none());   // b 已死亡移除
     CHECK(g.entities.find("a").is_some());
 }
