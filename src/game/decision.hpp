@@ -92,6 +92,14 @@ namespace tkw
                 DiscardReason reason) = 0;
 
             /**
+             * @brief 从亮出的若干张牌中选一张（五谷丰登）。
+             * @return 选中的牌；None = 放弃/非法（结算器回落到第一张）。
+             */
+            virtual Option<card::Card> pick_from_revealed(
+                const GameContext &ctx, const std::string &player,
+                const std::vector<card::Card> &options) = 0;
+
+            /**
              * @brief 濒死救场：saver 是否对濒死的 dying 打出一张桃。
              * @note 实现应只在「打算且能够打出」时返回 true（combat 会先检查
              *       saver 手牌有桃再询问，并负责消费）。

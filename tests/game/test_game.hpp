@@ -130,6 +130,15 @@ namespace tkw
                 return Option<card::Card>::Some(hand.front());
             }
 
+            Option<card::Card> pick_from_revealed(
+                const GameContext &, const std::string &,
+                const std::vector<card::Card> &options) override
+            {
+                if (options.empty())
+                    return Option<card::Card>::None();
+                return Option<card::Card>::Some(options.front());
+            }
+
             Option<PlayAction> choose_play(
                 const GameContext &, const TurnContext &) override
             {

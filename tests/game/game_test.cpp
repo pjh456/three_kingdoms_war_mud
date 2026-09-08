@@ -336,6 +336,23 @@ TEST_CASE("game: wuzhong draws two")
     CHECK(g.cards.draw_size() == 108 - 2);
 }
 
+TEST_CASE("game: wugu reveals one card per player and deals one each")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "wugu", "w#0");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"a", "b"});
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.hand_size("a") == 1);  // 打出 1 张 -1，又选得 1 张
+    CHECK(g.cards.hand_size("b") == 1);  // 选得 1 张
+    CHECK(g.cards.draw_size() == 108 - 2);
+}
+
 TEST_CASE("game: guohe discards target card")
 {
     TestGame g("deck");
@@ -1040,7 +1057,7 @@ TEST_CASE("game: unsupported deck cards are reported")
 {
     TestGame g("deck");
     CHECK(unsupported_cards(g.catalog) ==
-          std::vector<std::string>({"jiedao", "wugu"}));
+          std::vector<std::string>({"jiedao"}));
 }
 
 TEST_CASE("game: effect traits are the single source of truth")
@@ -1048,10 +1065,11 @@ TEST_CASE("game: effect traits are the single source of truth")
     using E = tkw::card::CardEffectKind;
     CHECK(is_settleable_kind(E::Damage));
     CHECK(is_settleable_kind(E::Heal));
+    CHECK(is_settleable_kind(E::RevealPick));
     CHECK(!is_settleable_kind(E::Jink));        // 响应牌不可主动打出
-    CHECK(!is_settleable_kind(E::RevealPick));  // 未实现
-    CHECK(is_unimplemented_active_kind(E::RevealPick));
+    CHECK(!is_settleable_kind(E::BorrowedSword));  // 未实现
     CHECK(is_unimplemented_active_kind(E::BorrowedSword));
+    CHECK(!is_unimplemented_active_kind(E::RevealPick));
     CHECK(!is_unimplemented_active_kind(E::Damage));
     CHECK(is_sha_kind(E::Damage));
     CHECK(!is_sha_kind(E::Duel));

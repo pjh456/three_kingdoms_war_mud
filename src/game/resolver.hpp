@@ -312,6 +312,51 @@ namespace tkw
                         return GameResult<void>::Err(EffectError::UnsupportedKind);
                     }
 
+                case card::CardEffectKind::RevealPick:
+                {
+                    if (nullified())
+                        return GameResult<void>::Ok();
+
+                    // 亮出等同存活人数的牌
+                    std::vector<card::Card> revealed;
+                    const int n = static_cast<int>(ctx.entities->size());
+                    for (int i = 0; i < n; ++i)
+                    {
+                        auto c = ctx.cards->draw();
+                        if (c.is_none())
+                            break;
+                        revealed.push_back(std::move(c).unwrap());
+                    }
+
+                    // 按座位序（从使用者开始）依次选一张
+                    for (const auto &p : ctx.entities->order_from(player))
+                    {
+                        if (revealed.empty())
+                            break;
+                        const auto picked = ai.pick_from_revealed(ctx, p, revealed);
+                        std::size_t idx = 0;
+                        if (picked.is_some())
+                            for (std::size_t k = 0; k < revealed.size(); ++k)
+                                if (revealed[k].instance_id ==
+                                    picked.unwrap().instance_id)
+                                {
+                                    idx = k;
+                                    break;
+                                }
+                        card::Card chosen = revealed[idx];
+                        revealed.erase(revealed.begin() + std::ptrdiff_t(idx));
+                        ctx.cards->add_to_hand(p, chosen);
+                        emit_card_moved(ctx, "", p, chosen, Zone::Limbo, Zone::Hand);
+                    }
+                    // 剩余置入弃牌堆
+                    for (const auto &c : revealed)
+                    {
+                        ctx.cards->discard(c);
+                        emit_card_discarded(ctx, "", c);
+                    }
+                    return GameResult<void>::Ok();
+                }
+
                 default:
                     return GameResult<void>::Err(EffectError::UnsupportedKind);
                 }
