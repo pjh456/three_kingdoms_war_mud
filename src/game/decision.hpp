@@ -33,8 +33,21 @@ namespace tkw
         };
 
         /**
+         * @brief 出牌阶段的回合上下文（只读）：让决策源知道当前回合角色与
+         *        已用「杀」次数，无需自行维护跨调用状态。
+         */
+        struct TurnContext
+        {
+            std::string player;  /**< 当前回合角色 id */
+            int sha_played = 0;  /**< 本回合已使用的「杀」数 */
+            int sha_limit = 1;   /**< 本回合「杀」上限（连弩为 INT_MAX） */
+        };
+
+        /**
          * @class DecisionSource
          * @brief 结算/回合期间的玩家决策接口。
+         * @note 只读：收到的 GameContext 为 const，决策源不得直接改状态；
+         *       所有落子（消费牌/改血/移除实体）都由引擎完成。
          */
         class DecisionSource
         {
@@ -47,7 +60,7 @@ namespace tkw
              *       手牌里是否有对应的响应牌再询问）。
              */
             virtual bool play_response(
-                GameContext &ctx,
+                const GameContext &ctx,
                 const std::string &entity_id,
                 card::ResponseKind kind) = 0;
 
@@ -57,24 +70,25 @@ namespace tkw
              *         依赖默认构造的牌）。
              */
             virtual Option<card::Card> pick_card_from_target(
-                GameContext &ctx,
+                const GameContext &ctx,
                 const std::string &source,
                 const std::string &target) = 0;
 
             /**
              * @brief 出牌阶段：选择打出一张手牌及其目标；None = 结束出牌。
              * @note 回合流程负责校验合法性（手牌存在/目标合法/杀次数限制），
-             *       不合法的动作会被拒绝并报错。
+             *       不合法的动作会被拒绝并报错。turn 提供当前回合角色与已用
+             *       杀次数，实现无需自行维护跨调用状态。
              */
             virtual Option<PlayAction> choose_play(
-                GameContext &ctx, const std::string &player) = 0;
+                const GameContext &ctx, const TurnContext &turn) = 0;
 
             /**
              * @brief 弃牌阶段/能力代价：弃置 count 张手牌。
              * @note 回合流程按 count 逐张校验并弃置；数量不符/引用不存在会报错。
              */
             virtual std::vector<std::string> choose_discards(
-                GameContext &ctx, const std::string &player, int count,
+                const GameContext &ctx, const std::string &player, int count,
                 DiscardReason reason) = 0;
 
             /**
@@ -83,7 +97,8 @@ namespace tkw
              *       saver 手牌有桃再询问，并负责消费）。
              */
             virtual bool play_peach(
-                GameContext &ctx, const std::string &saver, const std::string &dying) = 0;
+                const GameContext &ctx, const std::string &saver,
+                const std::string &dying) = 0;
 
             /**
              * @brief 无懈窗口：player 是否打出一张无懈可击抵消当前锦囊效果。
@@ -91,7 +106,7 @@ namespace tkw
              *       手牌有牌再询问，并负责消费）。
              */
             virtual bool play_counter(
-                GameContext &ctx, const std::string &player) = 0;
+                const GameContext &ctx, const std::string &player) = 0;
 
             /**
              * @brief 装备效果触发：player 是否发动 ability 指定的可选装备能力
@@ -99,7 +114,8 @@ namespace tkw
              * @note 实现应只在「有牌可弃/有效果可用」时返回 true。
              */
             virtual bool trigger_effect(
-                GameContext &ctx, const std::string &player, card::Ability ability) = 0;
+                const GameContext &ctx, const std::string &player,
+                card::Ability ability) = 0;
         };
     }
 }

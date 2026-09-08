@@ -234,9 +234,11 @@ namespace tkw
             if (!skip_play)
             {
                 int sha_played = 0;
+                const int limit = sha_limit(ctx, player);
                 while (true)
                 {
-                    auto action = ai.choose_play(ctx, player);
+                    const TurnContext turn{player, sha_played, limit};
+                    auto action = ai.choose_play(ctx, turn);
                     if (action.is_none())
                         break;
 

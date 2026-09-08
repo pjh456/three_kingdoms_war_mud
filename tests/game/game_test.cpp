@@ -21,6 +21,7 @@
 #include "game/resolver.hpp"
 #include "game/table.hpp"
 #include "game/turn.hpp"
+#include "game/ai/simple.hpp"
 #include "game/audit.hpp"
 #include "util/rng.hpp"
 #include "test_game.hpp"
@@ -553,6 +554,24 @@ TEST_CASE("game: rules config drives draw and sha limit")
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 3);             // 杀上限 2 → 两刀
     CHECK(g.cards.hand_size("a") == 4);  // 3 张杀打出 2 张 + 摸 3 张
+}
+
+TEST_CASE("game: simple ai obeys turn sha count without internal state")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+
+    SimpleAI ai;
+    TurnContext turn{"a", 0, 1};
+    auto first = ai.choose_play(g.ctx, turn);
+    REQUIRE(first.is_some());
+    CHECK(first.unwrap().instance_id == "s#1");
+
+    turn.sha_played = 1;  // 引擎已用尽本回合杀次数
+    auto second = ai.choose_play(g.ctx, turn);
+    CHECK(second.is_none());
 }
 
 TEST_CASE("game: equip weapon and replace same slot")

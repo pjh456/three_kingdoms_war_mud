@@ -92,31 +92,33 @@ namespace tkw
             std::vector<PlayAction> plays;
             std::size_t play_cursor = 0;
 
-            bool play_response(GameContext &, const std::string &, ResponseKind) override
+            bool play_response(
+                const GameContext &, const std::string &, ResponseKind) override
             {
                 return respond;
             }
 
             bool play_peach(
-                GameContext &, const std::string &, const std::string &) override
+                const GameContext &, const std::string &,
+                const std::string &) override
             {
                 return save;
             }
 
-            bool play_counter(GameContext &, const std::string &) override
+            bool play_counter(const GameContext &, const std::string &) override
             {
                 return counter;
             }
 
             bool trigger_effect(
-                GameContext &, const std::string &, Ability ability) override
+                const GameContext &, const std::string &, Ability ability) override
             {
                 return std::find(triggers.begin(), triggers.end(), ability) !=
                        triggers.end();
             }
 
             Option<card::Card> pick_card_from_target(
-                GameContext &ctx, const std::string &,
+                const GameContext &ctx, const std::string &,
                 const std::string &target) override
             {
                 if (bogus_pick)
@@ -128,7 +130,8 @@ namespace tkw
                 return Option<card::Card>::Some(hand.front());
             }
 
-            Option<PlayAction> choose_play(GameContext &, const std::string &) override
+            Option<PlayAction> choose_play(
+                const GameContext &, const TurnContext &) override
             {
                 if (play_cursor >= plays.size())
                     return Option<PlayAction>::None();
@@ -136,7 +139,7 @@ namespace tkw
             }
 
             std::vector<std::string> choose_discards(
-                GameContext &ctx, const std::string &player, int count,
+                const GameContext &ctx, const std::string &player, int count,
                 DiscardReason) override
             {
                 const auto &hand = ctx.cards->hand(player);

@@ -1,11 +1,9 @@
 /**
  * @file simple.hpp
  * @brief 确定性贪心策略：CLI 冒烟运行与回放测试用（无随机、无隐藏状态）。
- * @note 只做「合法且能推进」的动作：出杀（每回合至多一张）、可结算锦囊、
- *       装备。不出无懈（避免自抵消）、不主动发动需额外选择的武器效果。
- * @note 回合边界按 player 变化识别（next_player 保证相邻回合不同人），
- *       用于重置每回合杀次数——这是 DecisionSource 缺少回合态的临时手段，
- *       待决策视图（阶段 8）提供回合上下文后移除。
+ * @note 只做「合法且能推进」的动作：出杀（按回合上下文给的次数上限）、
+ *       可结算锦囊、装备。不出无懈（避免自抵消）、不主动发动需额外选择的
+ *       武器效果。杀次数由引擎经 TurnContext 告知，本类不维护跨调用状态。
  */
 
 #ifndef INCLUDE_TKW_GAME_AI_SIMPLE_HPP
@@ -31,30 +29,31 @@ namespace tkw
         {
         public:
             bool play_response(
-                GameContext &, const std::string &, card::ResponseKind) override
+                const GameContext &, const std::string &, card::ResponseKind) override
             {
                 return true;
             }
 
             bool play_peach(
-                GameContext &, const std::string &, const std::string &) override
+                const GameContext &, const std::string &,
+                const std::string &) override
             {
                 return true;
             }
 
-            bool play_counter(GameContext &, const std::string &) override
+            bool play_counter(const GameContext &, const std::string &) override
             {
                 return false;
             }
 
             bool trigger_effect(
-                GameContext &, const std::string &, card::Ability) override
+                const GameContext &, const std::string &, card::Ability) override
             {
                 return true;
             }
 
             Option<card::Card> pick_card_from_target(
-                GameContext &ctx, const std::string &,
+                const GameContext &ctx, const std::string &,
                 const std::string &target) override
             {
                 if (!ctx.cards->hand(target).empty())
@@ -67,13 +66,10 @@ namespace tkw
             }
 
             Option<PlayAction> choose_play(
-                GameContext &ctx, const std::string &player) override
+                const GameContext &ctx, const TurnContext &turn) override
             {
-                if (player != turn_owner_)
-                {
-                    turn_owner_ = player;
-                    sha_played_ = false;
-                }
+                const std::string &player = turn.player;
+                const bool sha_blocked = turn.sha_played >= turn.sha_limit;
 
                 for (const auto &c : ctx.cards->hand(player))
                 {
@@ -91,12 +87,11 @@ namespace tkw
 
                     if (kind == card::CardEffectKind::Damage)
                     {
-                        if (sha_played_)
+                        if (sha_blocked)
                             continue;
                         const auto targets = valid_targets(ctx, player, def);
                         if (targets.empty())
                             continue;
-                        sha_played_ = true;
                         return Option<PlayAction>::Some(
                             PlayAction{c.instance_id, {lowest_hp(ctx, targets)}});
                     }
@@ -142,7 +137,7 @@ namespace tkw
             }
 
             std::vector<std::string> choose_discards(
-                GameContext &ctx, const std::string &player, int count,
+                const GameContext &ctx, const std::string &player, int count,
                 DiscardReason) override
             {
                 std::vector<std::string> out;
@@ -207,9 +202,6 @@ namespace tkw
                 return ctx.cards->hand_size(id) > 0 || ctx.cards->equip_size(id) > 0 ||
                        ctx.cards->judge_size(id) > 0;
             }
-
-            std::string turn_owner_;
-            bool sha_played_ = false;
         };
     }
 }
