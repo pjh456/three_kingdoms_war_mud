@@ -24,28 +24,25 @@ namespace tkw
     {
         namespace json = pjh::json;
 
-        namespace
+        /** 错误消息里的字段路径：path 为空即顶层，detail 就是 key 本身。 */
+        inline std::string field_path(std::string_view path, std::string_view key)
         {
-            /** 错误消息里的字段路径：path 为空即顶层，detail 就是 key 本身。 */
-            std::string field_path(std::string_view path, std::string_view key)
-            {
-                if (path.empty())
-                    return std::string(key);
-                return std::string(path) + "." + std::string(key);
-            }
+            if (path.empty())
+                return std::string(key);
+            return std::string(path) + "." + std::string(key);
+        }
 
-            /** 容器自身路径（空 = 顶层，消息里统一记 "root"）。 */
-            std::string container_path(std::string_view path)
-            {
-                return path.empty() ? std::string("root") : std::string(path);
-            }
+        /** 容器自身路径（空 = 顶层，消息里统一记 "root"）。 */
+        inline std::string container_path(std::string_view path)
+        {
+            return path.empty() ? std::string("root") : std::string(path);
+        }
 
-            /** 构造携带字段路径错误的 Result。 */
-            template <typename T>
-            ConfigResult<T> fail(ConfigErrorKind kind, std::string detail)
-            {
-                return ConfigResult<T>::Err(ConfigError{kind, std::move(detail)});
-            }
+        /** 构造携带字段路径错误的 Result。 */
+        template <typename T>
+        ConfigResult<T> fail(ConfigErrorKind kind, std::string detail)
+        {
+            return ConfigResult<T>::Err(ConfigError{kind, std::move(detail)});
         }
 
         /** @brief 必填整型字段。缺失 → MissingField；类型不符 → TypeMismatch。 */

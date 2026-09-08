@@ -16,6 +16,7 @@
 namespace
 {
     using namespace tkw::card;
+    using tkw::card::detail::parse_card_def;
     using tkw::config::ConfigError;
     using tkw::config::ConfigErrorKind;
 

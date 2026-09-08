@@ -24,19 +24,16 @@ namespace tkw
     {
         namespace plat = pjh::platform;
 
-        namespace
+        inline IoError map_error(plat::ErrorCode code)
         {
-            IoError map_error(plat::ErrorCode code)
+            switch (code)
             {
-                switch (code)
-                {
-                case plat::ErrorCode::NotFound:
-                    return IoError::NotExist;
-                case plat::ErrorCode::PermissionDenied:
-                    return IoError::Permission;
-                default:
-                    return IoError::IoFailed;
-                }
+            case plat::ErrorCode::NotFound:
+                return IoError::NotExist;
+            case plat::ErrorCode::PermissionDenied:
+                return IoError::Permission;
+            default:
+                return IoError::IoFailed;
             }
         }
 
