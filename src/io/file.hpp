@@ -88,14 +88,11 @@ namespace tkw
             auto w = write_text(tmp, content);
             if (w.is_err())
                 return w;
-
-            std::error_code ec;
-            std::filesystem::rename(tmp, path, ec);
-            if (ec)
+            auto r = plat::Fs::rename(tmp, path, /*overwrite=*/true);
+            if (r.is_err())
             {
-                std::error_code rm_ec;
-                std::filesystem::remove(tmp, rm_ec);
-                return IOResult<void>::Err(IoError::IoFailed);
+                (void)plat::Fs::remove_all(tmp);
+                return IOResult<void>::Err(map_error(r.unwrap_err()));
             }
             return IOResult<void>::Ok();
         }
