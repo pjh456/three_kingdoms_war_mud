@@ -62,13 +62,6 @@ namespace tkw
             return t.active && !t.implemented;
         }
 
-        /** @brief 贪心 AI 可直接尝试的主动效果（杀单独走距离选目标）。 */
-        inline constexpr bool is_ai_active_kind(card::CardEffectKind k)
-        {
-            const auto t = effect_traits(k);
-            return t.implemented && t.active && !t.sha;
-        }
-
         /** @brief 该效果是否为「杀」。 */
         inline constexpr bool is_sha_kind(card::CardEffectKind k)
         {
