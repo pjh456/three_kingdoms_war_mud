@@ -593,6 +593,30 @@ TEST_CASE("game: lightning strikes on spade 2-9")
     CHECK(g.cards.judge_size("b") == 0);
 }
 
+TEST_CASE("game: lightning damage has no source")
+{
+    TestGame g("deck");
+    auto *a = g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.cards.add_to_judge("a", Card{"L#0", "shandian", Suit::Spade, 1});
+
+    g.cards.add_to_draw(Card{"d#0", "sha", Suit::Club, 2});
+    g.cards.add_to_draw(Card{"d#1", "shan", Suit::Diamond, 2});
+    g.cards.add_to_draw(Card{"j#0", "sha", Suit::Spade, 8});
+
+    std::vector<std::string> sources;
+    auto h = g.bus.subscribe(tkw::Handler<tkw::EntityDamagedEvent>(
+        [&](tkw::HandlerContext<tkw::EntityDamagedEvent> &c)
+        { sources.push_back(c.event.source); }));
+
+    TestDecider decider;
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    REQUIRE(sources.size() == 1);
+    CHECK(sources[0].empty());  // 闪电为无来源伤害
+    CHECK(a->get_hp() == 1);
+}
+
 TEST_CASE("game: lightning passes to next player")
 {
     TestGame g("deck");

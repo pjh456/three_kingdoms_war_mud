@@ -113,7 +113,7 @@ namespace tkw
             case card::JudgeAction::Damage:
                 ctx.cards->discard(delayed_card);
                 emit_card_discarded(ctx, player, delayed_card);
-                deal_damage(ctx, ai, def.name, player, def.judge.unwrap().amount);
+                deal_damage(ctx, ai, "", player, def.judge.unwrap().amount);
                 return TurnResult<DelayedOutcome>::Ok(
                     DelayedOutcome::LightningStruck);
 
