@@ -955,6 +955,30 @@ TEST_CASE("game: unsupported deck cards are reported")
           std::vector<std::string>({"lesi", "shandian", "jiedao", "wugu"}));
 }
 
+TEST_CASE("game: effect traits are the single source of truth")
+{
+    using E = tkw::card::CardEffectKind;
+    CHECK(is_settleable_kind(E::Damage));
+    CHECK(is_settleable_kind(E::Heal));
+    CHECK(!is_settleable_kind(E::Jink));        // 响应牌不可主动打出
+    CHECK(!is_settleable_kind(E::RevealPick));  // 未实现
+    CHECK(is_unimplemented_active_kind(E::RevealPick));
+    CHECK(is_unimplemented_active_kind(E::BorrowedSword));
+    CHECK(!is_unimplemented_active_kind(E::Damage));
+    CHECK(is_sha_kind(E::Damage));
+    CHECK(!is_sha_kind(E::Duel));
+
+    TestGame g("deck");
+    auto sha = g.catalog.find("sha").unwrap();
+    auto shan = g.catalog.find("shan").unwrap();
+    auto juedou = g.catalog.find("juedou").unwrap();
+    CHECK(is_sha(*sha));
+    CHECK(!is_sha(*shan));
+    CHECK(!is_sha(*juedou));
+    CHECK(is_response_def(*sha, ResponseKind::Sha));
+    CHECK(is_response_def(*shan, ResponseKind::Jink));
+}
+
 TEST_CASE("game: draw emits CardDrawn per card")
 {
     TestGame g("deck");

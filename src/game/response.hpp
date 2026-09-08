@@ -17,6 +17,7 @@
 #include "game/card_event.hpp"
 #include "game/context.hpp"
 #include "game/decision.hpp"
+#include "game/effect.hpp"
 #include "util/types.hpp"
 
 namespace tkw
@@ -32,7 +33,7 @@ namespace tkw
             switch (kind)
             {
             case card::ResponseKind::Sha:
-                return k == card::CardEffectKind::Damage;
+                return is_sha_kind(k);
             case card::ResponseKind::Jink:
                 return k == card::CardEffectKind::Jink;
             }

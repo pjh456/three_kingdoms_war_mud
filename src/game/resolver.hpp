@@ -26,6 +26,7 @@
 #include "game/counter.hpp"
 #include "game/decision.hpp"
 #include "game/distance.hpp"
+#include "game/effect.hpp"
 #include "game/response.hpp"
 #include "game/state.hpp"
 #include "game/weapon.hpp"
@@ -50,36 +51,7 @@ namespace tkw
         template <typename T>
         using GameResult = Result<T, EffectError>;
 
-        /** @brief 引擎已实现的主动结算效果类别（与 resolve_play 分派保持一致）。 */
-        inline bool is_settleable_kind(card::CardEffectKind k)
-        {
-            switch (k)
-            {
-            case card::CardEffectKind::Damage:
-            case card::CardEffectKind::AoeDamage:
-            case card::CardEffectKind::Heal:
-            case card::CardEffectKind::Draw:
-            case card::CardEffectKind::DiscardTarget:
-            case card::CardEffectKind::Steal:
-            case card::CardEffectKind::Duel:
-                return true;
-            default:
-                return false;
-            }
-        }
-
-        /** @brief 本应可主动打出、但引擎尚未实现结算的效果类别（牌堆审计用）。 */
-        inline bool is_unimplemented_active_kind(card::CardEffectKind k)
-        {
-            switch (k)
-            {
-            case card::CardEffectKind::RevealPick:
-            case card::CardEffectKind::BorrowedSword:
-                return true;
-            default:
-                return false;
-            }
-        }
+        // 效果类别属性（is_settleable_kind / is_unimplemented_active_kind）见 effect.hpp
 
         // ── 目标选择 ────────────────────────────────────────────────────
 

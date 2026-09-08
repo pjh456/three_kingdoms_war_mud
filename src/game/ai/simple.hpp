@@ -17,6 +17,7 @@
 #include "card/def.hpp"
 #include "game/context.hpp"
 #include "game/decision.hpp"
+#include "game/effect.hpp"
 #include "game/resolver.hpp"
 #include "util/types.hpp"
 
@@ -108,14 +109,14 @@ namespace tkw
                             continue;  // 满血不打桃
                     }
 
-                    if (!is_active_kind(kind))
+                    if (!is_ai_active_kind(kind))
                         continue;
 
                     auto targets = valid_targets(ctx, player, def);
                     if (targets.empty())
                         continue;
 
-                    if (needs_target_card(kind))
+                    if (effect_traits(kind).target_card)
                     {
                         std::vector<std::string> with_cards;
                         for (const auto &t : targets)
@@ -173,28 +174,6 @@ namespace tkw
                     }
                 }
                 return best;
-            }
-
-            static bool is_active_kind(card::CardEffectKind k)
-            {
-                switch (k)
-                {
-                case card::CardEffectKind::AoeDamage:
-                case card::CardEffectKind::Heal:
-                case card::CardEffectKind::Draw:
-                case card::CardEffectKind::DiscardTarget:
-                case card::CardEffectKind::Steal:
-                case card::CardEffectKind::Duel:
-                    return true;
-                default:
-                    return false;
-                }
-            }
-
-            static bool needs_target_card(card::CardEffectKind k)
-            {
-                return k == card::CardEffectKind::DiscardTarget ||
-                       k == card::CardEffectKind::Steal;
             }
 
             static bool has_any_card(const GameContext &ctx, const std::string &id)

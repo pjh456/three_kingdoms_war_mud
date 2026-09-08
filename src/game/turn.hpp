@@ -137,10 +137,10 @@ namespace tkw
 
         // ── 出牌阶段辅助 ────────────────────────────────────────────────
 
-        /** @brief 该定义是否为「杀」（subtype = attack，数据驱动）。 */
+        /** @brief 该定义是否为「杀」（效果类别 = Damage，单一事实源）。 */
         inline bool is_sha(const card::CardDef &def)
         {
-            return def.subtype == "attack";
+            return def.effect.is_some() && is_sha_kind(def.effect.unwrap().kind);
         }
 
         /** @brief 本回合杀次数上限（诸葛连弩 = 不限）。 */
