@@ -481,18 +481,55 @@ TEST_CASE("game: juedou exchange of sha")
     CHECK(b->get_hp() == 3);  // b 的杀耗尽后受 1 点伤害
 }
 
-TEST_CASE("game: unsupported kind is rejected and card kept")
+TEST_CASE("game: jiedao forces holder to use sha")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("b", "qinglong", "e#0");  // b 持武器
+    g.give("a", "jiedao", "j#0");
+    g.give("b", "sha", "s#1");
+
+    TestDecider decider;
+    decider.respond = true;  // b 选择出杀
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "b"});  // A=b, B=b
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);             // b 对自己出杀，命中
+    CHECK(g.cards.hand_size("b") == 0);  // 杀已消耗
+    CHECK(g.cards.equip_size("b") == 1); // 武器仍在
+}
+
+TEST_CASE("game: jiedao takes weapon when holder does not respond")
 {
     TestGame g("deck");
     g.add_player("a", 0, 4);
     g.add_player("b", 1, 4);
-    g.give("a", "jiedao", "j#0");  // 借刀杀人：未实现
+    g.equip("b", "qinglong", "e#0");
+    g.give("a", "jiedao", "j#0");
+    g.give("b", "sha", "s#1");
+
+    TestDecider decider;  // 不出杀
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "b"});
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.equip_size("b") == 0);  // 武器被拿走
+    CHECK(g.cards.hand_size("a") == 1);
+    CHECK(g.cards.hand("a")[0].def_id == "qinglong");
+}
+
+TEST_CASE("game: jiedao requires holder to have a weapon")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "jiedao", "j#0");
 
     TestDecider decider;
     const auto played = g.cards.hand("a")[0];
-    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "b"});
     REQUIRE(r.is_err());
-    CHECK(r.unwrap_err() == EffectError::UnsupportedKind);
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
     CHECK(g.cards.hand_size("a") == 1);  // 未消耗
 }
 
@@ -1056,8 +1093,7 @@ TEST_CASE("game: same seed yields identical deal, different seed differs")
 TEST_CASE("game: unsupported deck cards are reported")
 {
     TestGame g("deck");
-    CHECK(unsupported_cards(g.catalog) ==
-          std::vector<std::string>({"jiedao"}));
+    CHECK(unsupported_cards(g.catalog).empty());
 }
 
 TEST_CASE("game: effect traits are the single source of truth")
@@ -1066,9 +1102,9 @@ TEST_CASE("game: effect traits are the single source of truth")
     CHECK(is_settleable_kind(E::Damage));
     CHECK(is_settleable_kind(E::Heal));
     CHECK(is_settleable_kind(E::RevealPick));
-    CHECK(!is_settleable_kind(E::Jink));        // 响应牌不可主动打出
-    CHECK(!is_settleable_kind(E::BorrowedSword));  // 未实现
-    CHECK(is_unimplemented_active_kind(E::BorrowedSword));
+    CHECK(is_settleable_kind(E::BorrowedSword));
+    CHECK(!is_settleable_kind(E::Jink));  // 响应牌不可主动打出
+    CHECK(!is_unimplemented_active_kind(E::BorrowedSword));
     CHECK(!is_unimplemented_active_kind(E::RevealPick));
     CHECK(!is_unimplemented_active_kind(E::Damage));
     CHECK(is_sha_kind(E::Damage));

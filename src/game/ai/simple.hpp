@@ -130,6 +130,23 @@ namespace tkw
                         continue;
                     const auto kind = def.effect.unwrap().kind;
 
+                    if (kind == card::CardEffectKind::BorrowedSword)
+                    {
+                        // 借刀：选一个持武器者 A，B 取 A 自身（可为A）
+                        for (const auto &e : *ctx.entities)
+                        {
+                            const std::string &holder = e->get_id();
+                            if (holder == player)
+                                continue;
+                            if (!has_equip_slot(
+                                    ctx, holder, card::EquipSlot::Weapon))
+                                continue;
+                            return Option<PlayAction>::Some(
+                                PlayAction{c.instance_id, {holder, holder}});
+                        }
+                        continue;
+                    }
+
                     if (kind == card::CardEffectKind::Damage)
                     {
                         if (sha_blocked)

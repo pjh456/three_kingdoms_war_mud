@@ -47,6 +47,21 @@ namespace tkw
         {
             return find_equipment(ctx, entity_id, ability) != nullptr;
         }
+
+        /** @brief 实体装备区是否存在指定槽位的装备（如借刀杀人的武器）。 */
+        inline bool has_equip_slot(
+            const GameContext &ctx, const std::string &entity_id,
+            card::EquipSlot slot)
+        {
+            for (const auto &c : ctx.cards->equip(entity_id))
+            {
+                const auto def = ctx.catalog->find(c.def_id);
+                if (def.is_some() && def.unwrap()->equip.is_some() &&
+                    def.unwrap()->equip.unwrap().slot == slot)
+                    return true;
+            }
+            return false;
+        }
     }
 }
 

@@ -42,9 +42,8 @@ namespace tkw
             case E::Steal:
                 return {true, true, false, true};
             case E::RevealPick:
-                return {true, true, false, false};
             case E::BorrowedSword:
-                return {false, true, false, false};
+                return {true, true, false, false};
             }
             return {};
         }

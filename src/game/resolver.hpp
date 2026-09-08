@@ -27,6 +27,7 @@
 #include "game/decision.hpp"
 #include "game/distance.hpp"
 #include "game/effect.hpp"
+#include "game/equip.hpp"
 #include "game/response.hpp"
 #include "game/state.hpp"
 #include "game/weapon.hpp"
@@ -149,6 +150,22 @@ namespace tkw
             }
 
             // 目标合法性：数量须符合 scope，且每个目标都必须在合法集合内
+            if (eff.kind == card::CardEffectKind::BorrowedSword)
+            {
+                // 借刀杀人：targets = {A(持武器者), B(A攻击范围内角色)}
+                if (targets.size() != 2)
+                    return GameResult<void>::Err(EffectError::InvalidTarget);
+                const std::string &holder = targets[0];
+                const std::string &victim = targets[1];
+                if (holder == player || ctx.entities->find(holder).is_none() ||
+                    ctx.entities->find(victim).is_none())
+                    return GameResult<void>::Err(EffectError::InvalidTarget);
+                if (!has_equip_slot(ctx, holder, card::EquipSlot::Weapon))
+                    return GameResult<void>::Err(EffectError::InvalidTarget);
+                if (!in_attack_range(ctx, holder, victim))
+                    return GameResult<void>::Err(EffectError::OutOfRange);
+            }
+            else
             {
                 const auto scope = eff.scope.unwrap_or(card::Scope::Self);
                 const auto legal = valid_targets(ctx, player, def);
@@ -353,6 +370,57 @@ namespace tkw
                     {
                         ctx.cards->discard(c);
                         emit_card_discarded(ctx, "", c);
+                    }
+                    return GameResult<void>::Ok();
+                }
+
+                case card::CardEffectKind::BorrowedSword:
+                {
+                    if (nullified())
+                        return GameResult<void>::Ok();
+                    const std::string &holder = targets[0];
+                    const std::string &victim = targets[1];
+
+                    const auto sha = find_sha_in_hand(ctx, holder);
+                    if (sha.is_some() &&
+                        ai.play_response(ctx, holder, card::ResponseKind::Sha))
+                    {
+                        auto removed = ctx.cards->remove_from_hand(
+                            holder, sha.unwrap().instance_id);
+                        if (removed.is_some())
+                        {
+                            card::Card sha_card = std::move(removed).unwrap();
+                            emit_card_played(ctx, holder, sha_card);
+                            ctx.cards->discard(sha_card);
+                            int dmg = 1;
+                            const auto sd = ctx.catalog->find(sha_card.def_id);
+                            if (sd.is_some() && sd.unwrap()->effect.is_some())
+                                dmg = sd.unwrap()->effect.unwrap().amount;
+                            resolve_sha(ctx, ai, holder, sha_card, victim, dmg);
+                            return GameResult<void>::Ok();
+                        }
+                    }
+
+                    // 未出杀：使用者获得 holder 的武器
+                    for (const auto &c : ctx.cards->equip(holder))
+                    {
+                        const auto d = ctx.catalog->find(c.def_id);
+                        if (d.is_some() && d.unwrap()->equip.is_some() &&
+                            d.unwrap()->equip.unwrap().slot ==
+                                card::EquipSlot::Weapon)
+                        {
+                            auto removed =
+                                ctx.cards->remove_from_equip(holder, c.instance_id);
+                            if (removed.is_some())
+                            {
+                                card::Card weapon = std::move(removed).unwrap();
+                                ctx.cards->add_to_hand(player, weapon);
+                                emit_card_moved(
+                                    ctx, holder, player, weapon, Zone::Equip,
+                                    Zone::Hand);
+                            }
+                            break;
+                        }
                     }
                     return GameResult<void>::Ok();
                 }
