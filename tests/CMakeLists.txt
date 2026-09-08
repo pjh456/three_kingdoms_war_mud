@@ -69,3 +69,12 @@ add_executable(util_tests test_main.cpp util/rng_test.cpp)
 target_link_libraries(util_tests PRIVATE tkw_game doctest)
 
 doctest_discover_tests(util_tests)
+
+add_executable(save_tests test_main.cpp save/save_test.cpp)
+
+target_link_libraries(save_tests PRIVATE tkw_game doctest)
+
+target_compile_definitions(
+    save_tests PRIVATE TKW_TEST_RESOURCE_DIR="${CMAKE_SOURCE_DIR}/resources")
+
+doctest_discover_tests(save_tests)

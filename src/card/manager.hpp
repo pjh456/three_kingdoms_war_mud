@@ -347,7 +347,11 @@ namespace tkw
                 std::vector<std::pair<std::string, std::vector<Card>>> out;
                 out.reserve(zones.size());
                 for (const auto &[id, zone] : zones)
+                {
+                    if (zone.empty())  // 空区域不入快照（规范化，便于往返稳定）
+                        continue;
                     out.emplace_back(id, zone.view());
+                }
                 std::sort(out.begin(), out.end(),
                           [](const auto &a, const auto &b)
                           { return a.first < b.first; });
