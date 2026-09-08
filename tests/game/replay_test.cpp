@@ -36,6 +36,29 @@ namespace
         return log.lines();
     }
 
+    /** 用 start/step_session 手动逐回合驱动，返回完整事件日志。 */
+    std::vector<std::string> run_game_stepwise(std::uint32_t seed, int players)
+    {
+        TestGame g("deck", seed);
+        for (int i = 0; i < players; ++i)
+            g.add_player("P" + std::to_string(i), i, 4);
+
+        EventLog log(g.bus);
+        tkw::game::SimpleAI ai;
+        tkw::game::GameSession session;
+        REQUIRE(tkw::game::start_session(g.ctx, session, "P0").is_ok());
+        while (!tkw::game::session_over(g.ctx))
+        {
+            auto r = tkw::game::step_session(g.ctx, ai, session);
+            if (r.is_err())
+            {
+                REQUIRE(r.unwrap_err() == tkw::game::LoopError::MaxRounds);
+                break;
+            }
+        }
+        return log.lines();
+    }
+
     /** FNV-1a 64 位指纹（对日志逐行逐字节）。 */
     std::uint64_t fingerprint(const std::vector<std::string> &lines)
     {
@@ -72,6 +95,12 @@ TEST_CASE("replay: 4-player draw is still deterministic")
 
     CHECK(!a.empty());
     CHECK(a == b);
+}
+
+TEST_CASE("replay: step_session drives the same log as play_game")
+{
+    CHECK(run_game_stepwise(1, 2) == run_game(1, 2));
+    CHECK(run_game_stepwise(42, 4) == run_game(42, 4));
 }
 
 TEST_CASE("replay: golden fingerprints pin the rule semantics")

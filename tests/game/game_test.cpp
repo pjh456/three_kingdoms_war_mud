@@ -1224,6 +1224,31 @@ TEST_CASE("game: play_game with no players is an error")
     CHECK(r.unwrap_err() == LoopError::NoPlayers);
 }
 
+TEST_CASE("game: session starts, steps and reports over/winner")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 1);
+    g.add_player("b", 1, 1);
+    g.give("a", "sha", "s#1");
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"s#1", {"b"}}};
+
+    GameSession session;
+    REQUIRE(start_session(g.ctx, session, "a").is_ok());
+    CHECK(session.started);
+    CHECK(session.current == "a");
+    CHECK(session.turns == 0);
+    CHECK(!session_over(g.ctx));
+    CHECK(session_winner(g.ctx).empty());
+
+    auto r = step_session(g.ctx, decider, session);
+    REQUIRE(r.is_ok());
+    CHECK(session.turns == 1);
+    CHECK(session_over(g.ctx));
+    CHECK(session_winner(g.ctx) == "a");
+}
+
 // ── 杀结算：装备效果 ─────────────────────────────────────────────────
 
 TEST_CASE("game: renwang blocks black sha")
