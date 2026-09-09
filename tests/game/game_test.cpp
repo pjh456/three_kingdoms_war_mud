@@ -17,6 +17,7 @@
 #include "game/core/context.hpp"
 #include "game/core/decision.hpp"
 #include "game/query/distance.hpp"
+#include "game/query/judge.hpp"
 #include "game/ai/legal.hpp"
 #include "game/flow/loop.hpp"
 #include "game/resolve/resolver.hpp"
@@ -34,6 +35,7 @@ namespace
     using tkw::Option;
     using tkw::card::Ability;
     using tkw::card::Card;
+    using tkw::card::CardDef;
     using tkw::card::CardDefCatalog;
     using tkw::card::CardManager;
     using tkw::card::ResponseKind;
@@ -822,6 +824,27 @@ TEST_CASE("game: duplicate delayed trick is rejected")
     auto r = execute_turn(g.ctx, decider, "a");
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == TurnError::DelayedDuplicate);
+}
+
+TEST_CASE("game: delayed legal targets respect scope and dedup")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+
+    const CardDef &shandian = *g.catalog.find("shandian").unwrap();
+    CHECK((delayed_legal_targets(g.ctx, "a", shandian) ==
+           std::vector<std::string>{"a"}));
+
+    const CardDef &lesi = *g.catalog.find("lesi").unwrap();
+    CHECK((delayed_legal_targets(g.ctx, "a", lesi) ==
+           std::vector<std::string>{"b", "c"}));
+
+    // 判定区已有同名延时锦囊的目标被排除
+    g.cards.add_to_judge("b", Card{"L#0", "lesi", Suit::Spade, 6});
+    CHECK((delayed_legal_targets(g.ctx, "a", lesi) ==
+           std::vector<std::string>{"c"}));
 }
 
 TEST_CASE("game: delayed trick nullified at placement is discarded")

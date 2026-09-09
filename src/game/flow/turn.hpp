@@ -12,7 +12,6 @@
 #ifndef INCLUDE_TKW_GAME_TURN_HPP
 #define INCLUDE_TKW_GAME_TURN_HPP
 
-#include <algorithm>
 #include <cstdint>
 #include <limits>
 #include <random>
@@ -30,6 +29,7 @@
 #include "game/core/effect.hpp"
 #include "game/query/distance.hpp"
 #include "game/query/equip.hpp"
+#include "game/query/judge.hpp"
 #include "game/resolve/resolver.hpp"
 #include "game/core/state.hpp"
 #include "util/types.hpp"
@@ -223,23 +223,14 @@ namespace tkw
                 return TurnResult<void>::Err(TurnError::PlayRejected);
             const card::CardDef &def = *def_opt.unwrap();
 
-            const auto scope = def.judge.unwrap().scope.unwrap_or(card::Scope::Self);
-            std::vector<std::string> legal;
-            if (scope == card::Scope::Self)
-                legal.push_back(player);
-            else
-                for (const auto &e : *ctx.entities)
-                    if (e->get_id() != player)
-                        legal.push_back(e->get_id());
-
-            if (targets.size() != 1 ||
-                std::find(legal.begin(), legal.end(), targets.front()) == legal.end())
+            // 目标数量与 scope 先于同名去重：出 scope 且重名的目标先报 InvalidTarget
+            if (targets.size() != 1)
                 return TurnResult<void>::Err(TurnError::InvalidTarget);
             const std::string &target = targets.front();
-
-            for (const auto &c : ctx.cards->judge(target))
-                if (c.def_id == card.def_id)
-                    return TurnResult<void>::Err(TurnError::DelayedDuplicate);
+            if (!is_delayed_scope_target(player, def, target))
+                return TurnResult<void>::Err(TurnError::InvalidTarget);
+            if (has_same_delayed(ctx, target, def.id))
+                return TurnResult<void>::Err(TurnError::DelayedDuplicate);
 
             auto removed = ctx.cards->remove_from_hand(player, card.instance_id);
             if (removed.is_none())

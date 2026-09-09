@@ -18,6 +18,7 @@
 #include "game/core/context.hpp"
 #include "game/core/decision.hpp"
 #include "game/query/distance.hpp"
+#include "game/query/judge.hpp"
 #include "game/core/effect.hpp"
 #include "game/query/equip.hpp"
 #include "game/resolve/resolver.hpp"
@@ -39,17 +40,6 @@ namespace tkw
         {
             return ctx.cards->hand_size(id) > 0 || ctx.cards->equip_size(id) > 0 ||
                    ctx.cards->judge_size(id) > 0;
-        }
-
-        /** @brief 该实体是否已有同名延时锦囊（判定区不可叠加）。 */
-        inline bool has_same_delayed(
-            const GameContext &ctx, const std::string &entity,
-            const std::string &def_id)
-        {
-            for (const auto &c : ctx.cards->judge(entity))
-                if (c.def_id == def_id)
-                    return true;
-            return false;
         }
 
         /**
@@ -78,24 +68,8 @@ namespace tkw
 
                 case PlayClass::DelayedTrick:
                 {
-                    const auto scope =
-                        def.judge.unwrap().scope.unwrap_or(card::Scope::Self);
-                    if (scope == card::Scope::Self)
-                    {
-                        if (!has_same_delayed(ctx, player, def.id))
-                            out.push_back(LegalAction{c, {player}});
-                    }
-                    else
-                    {
-                        for (const auto &e : *ctx.entities)
-                        {
-                            const std::string &t = e->get_id();
-                            if (t == player)
-                                continue;
-                            if (!has_same_delayed(ctx, t, def.id))
-                                out.push_back(LegalAction{c, {t}});
-                        }
-                    }
+                    for (const auto &t : delayed_legal_targets(ctx, player, def))
+                        out.push_back(LegalAction{c, {t}});
                     continue;
                 }
 
