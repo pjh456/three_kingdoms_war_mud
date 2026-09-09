@@ -82,7 +82,7 @@ doctest_discover_tests(save_tests)
 
 add_executable(cli_tests test_main.cpp cli/cli_test.cpp)
 
-target_link_libraries(cli_tests PRIVATE tkw_core pjh_cli doctest)
+target_link_libraries(cli_tests PRIVATE tkw_cli doctest)
 
 target_compile_definitions(
     cli_tests PRIVATE TKW_TEST_RESOURCE_DIR="${CMAKE_SOURCE_DIR}/resources")

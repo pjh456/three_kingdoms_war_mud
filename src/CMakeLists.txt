@@ -80,8 +80,14 @@ target_include_directories(tkw_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(tkw_core INTERFACE tkw_entity tkw_config tkw_card tkw_game tkw_event tkw_io pjh_result)
 
+add_library(tkw_cli INTERFACE)
+
+target_include_directories(tkw_cli INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(tkw_cli INTERFACE tkw_core pjh_cli)
+
 add_executable(tkw
     main.cpp
 )
 
-target_link_libraries(tkw PRIVATE tkw_core pjh_json pjh_cli pjh_platform)
+target_link_libraries(tkw PRIVATE tkw_cli pjh_json pjh_platform)
