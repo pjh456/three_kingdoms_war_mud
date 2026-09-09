@@ -1,8 +1,8 @@
 /**
  * @file effect.hpp
- * @brief 效果类别属性表：每个 CardEffectKind 的「能否结算 / 可否主动打出 /
- *        是否杀 / 是否需选目标牌」集中一处，消除散落的 switch。
- * @note 新增效果只需在此表加一行，并补 resolve_play 的结算分支。
+ * @brief 效果类别与装备能力的属性表：CardEffectKind 的「能否结算 / 可否主动打出 /
+ *        是否杀 / 是否需选目标牌」、Ability 的实现状态集中一处，消除散落的 switch。
+ * @note 新增效果/能力只需在对应表加一行（效果另需补 resolve_play 结算分支）。
  */
 
 #ifndef INCLUDE_TKW_GAME_EFFECT_HPP
@@ -46,6 +46,37 @@ namespace tkw
                 return {true, true, false, false};
             }
             return {};
+        }
+
+        /** @brief 单个装备能力的静态属性。 */
+        struct AbilityTraits
+        {
+            bool implemented = false; /**< 引擎是否已实现该能力结算 */
+        };
+
+        /** @brief 装备能力 → 属性。未知值一律取默认（未实现）。 */
+        inline constexpr AbilityTraits ability_traits(card::Ability a)
+        {
+            using A = card::Ability;
+            switch (a)
+            {
+            case A::NoShaLimit:
+            case A::IgnoreArmor:
+            case A::ExtraShaAfterJink:
+            case A::DiscardTwoForceDamage:
+            case A::DiscardHorseOnDamage:
+            case A::DamageAsDiscard:
+            case A::JudgementJink:
+            case A::BlackShaImmune:
+                return {true};
+            }
+            return {};
+        }
+
+        /** @brief 装备能力引擎尚未实现（牌堆审计用）。 */
+        inline constexpr bool is_unimplemented_ability(card::Ability a)
+        {
+            return !ability_traits(a).implemented;
         }
 
         /** @brief 可主动打出且引擎能结算（resolve_play 接受）。 */

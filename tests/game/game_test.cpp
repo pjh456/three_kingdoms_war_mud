@@ -1180,7 +1180,9 @@ TEST_CASE("game: same seed yields identical deal, different seed differs")
 TEST_CASE("game: unsupported deck cards are reported")
 {
     TestGame g("deck");
-    CHECK(unsupported_cards(g.catalog).empty());
+    // 标准牌堆中能力未实现的武器卡（deck 序）
+    CHECK(unsupported_cards(g.catalog) ==
+          (std::vector<std::string>{"cixiong", "zhangba", "fangtian"}));
 }
 
 TEST_CASE("game: effect traits are the single source of truth")
@@ -1206,6 +1208,22 @@ TEST_CASE("game: effect traits are the single source of truth")
     CHECK(!is_sha(*juedou));
     CHECK(is_response_def(*sha, ResponseKind::Sha));
     CHECK(is_response_def(*shan, ResponseKind::Jink));
+}
+
+TEST_CASE("game: ability traits are the single source of truth")
+{
+    using A = tkw::card::Ability;
+    CHECK(!is_unimplemented_ability(A::NoShaLimit));
+    CHECK(!is_unimplemented_ability(A::IgnoreArmor));
+    CHECK(!is_unimplemented_ability(A::ExtraShaAfterJink));
+    CHECK(!is_unimplemented_ability(A::DiscardTwoForceDamage));
+    CHECK(!is_unimplemented_ability(A::DiscardHorseOnDamage));
+    CHECK(!is_unimplemented_ability(A::DamageAsDiscard));
+    CHECK(!is_unimplemented_ability(A::JudgementJink));
+    CHECK(!is_unimplemented_ability(A::BlackShaImmune));
+    CHECK(is_unimplemented_ability(A::Cixiong));
+    CHECK(is_unimplemented_ability(A::TwoCardsAsSha));
+    CHECK(is_unimplemented_ability(A::MultiTargetSha));
 }
 
 TEST_CASE("game: draw emits CardDrawn per card")
