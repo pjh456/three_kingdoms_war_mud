@@ -84,6 +84,7 @@ namespace
         std::unique_ptr<tkw::game::Game> game;
         tkw::game::GameSession state;
         std::vector<std::string> humans; /**< 本会话的真人座位 id */
+        bool verbose = false;            /**< 本会话是否打印事件日志 */
         Options base;                    /**< REPL 启动选项（供行内命令继承） */
         bool active = false;
     };
@@ -114,6 +115,36 @@ namespace
             }
         }
         return game;
+    }
+
+    /**
+     * @brief 订阅本局事件日志：verbose 为真时打印摸牌/打牌/弃牌/阵亡。
+     * @return 订阅句柄；verbose 为假时为空，句柄析构即退订。
+     * @note 句柄只应活在需要日志的命令作用域内，不得存入 Session：会话被覆盖
+     *       时会先析构旧 Game（含总线），遗留句柄将对已释放总线退订。
+     */
+    std::vector<tkw::EventBus::Handle> subscribe_event_log(
+        tkw::game::Game &game, bool verbose)
+    {
+        std::vector<tkw::EventBus::Handle> handles;
+        if (!verbose)
+            return handles;
+        handles.push_back(game.bus.subscribe(tkw::Handler<tkw::CardPlayedEvent>(
+            [](tkw::HandlerContext<tkw::CardPlayedEvent> &c)
+            { std::cout << "[打出] " << c.event.user << " " << c.event.def_id << "\n"; })));
+        handles.push_back(
+            game.bus.subscribe(tkw::Handler<tkw::CardDiscardedEvent>(
+                [](tkw::HandlerContext<tkw::CardDiscardedEvent> &c) {
+                    std::cout << "[弃置] " << c.event.entity << " " << c.event.def_id
+                              << "\n";
+                })));
+        handles.push_back(game.bus.subscribe(tkw::Handler<tkw::CardDrawnEvent>(
+            [](tkw::HandlerContext<tkw::CardDrawnEvent> &c)
+            { std::cout << "[摸牌] " << c.event.entity << " " << c.event.def_id << "\n"; })));
+        handles.push_back(game.bus.subscribe(tkw::Handler<tkw::EntityDiedEvent>(
+            [](tkw::HandlerContext<tkw::EntityDiedEvent> &c)
+            { std::cout << "[阵亡] " << c.event.entity_id << "\n"; })));
+        return handles;
     }
 
     /** 校验真人座位：必须是对局中存在的实体且互不重复；空串表示通过。 */
@@ -162,6 +193,7 @@ namespace
         const std::string verr = validate_humans(*game, opt.humans);
         if (!verr.empty())
             return CliFailure{CliError(verr)};
+        auto log = subscribe_event_log(*game, opt.verbose);
         auto ctx = game->context();
         tkw::game::GameSession state;
         if (tkw::game::start_session(ctx, state, "P0", opt.hand).is_err())
@@ -169,6 +201,7 @@ namespace
         s.game = std::move(game);
         s.state = std::move(state);
         s.humans = opt.humans;
+        s.verbose = opt.verbose;
         s.active = true;
         std::cout << "新对局已开始\n";
         print_status(s);
@@ -179,6 +212,7 @@ namespace
     {
         if (!s.active || !s.game)
             return CliFailure{CliError("没有进行中的对局")};
+        auto log = subscribe_event_log(*s.game, s.verbose);
         auto ai = make_decision_source(s.humans);
         auto ctx = s.game->context();
         if (tkw::game::session_over(ctx))
@@ -206,6 +240,7 @@ namespace
     {
         if (!s.active || !s.game)
             return CliFailure{CliError("没有进行中的对局")};
+        auto log = subscribe_event_log(*s.game, s.verbose);
         auto ai = make_decision_source(s.humans);
         auto ctx = s.game->context();
         while (!tkw::game::session_over(ctx))
@@ -262,6 +297,7 @@ namespace
         s.game = std::move(game);
         s.state = std::move(state);
         s.humans = opt.humans;
+        s.verbose = opt.verbose;
         s.active = true;
         std::cout << "已加载: " << file.string() << "\n";
         print_status(s);
@@ -308,27 +344,7 @@ namespace
             return CliFailure{CliError(verr)};
 
         auto ctx = game.context();
-
-        // --verbose：直接订阅本局总线，打印卡牌/死亡事件
-        std::vector<tkw::EventBus::Handle> log_handles;
-        if (opt.verbose)
-        {
-            log_handles.push_back(game.bus.subscribe(tkw::Handler<tkw::CardPlayedEvent>(
-                [](tkw::HandlerContext<tkw::CardPlayedEvent> &c)
-                { std::cout << "[打出] " << c.event.user << " " << c.event.def_id << "\n"; })));
-            log_handles.push_back(
-                game.bus.subscribe(tkw::Handler<tkw::CardDiscardedEvent>(
-                    [](tkw::HandlerContext<tkw::CardDiscardedEvent> &c) {
-                        std::cout << "[弃置] " << c.event.entity << " " << c.event.def_id
-                                  << "\n";
-                    })));
-            log_handles.push_back(game.bus.subscribe(tkw::Handler<tkw::CardDrawnEvent>(
-                [](tkw::HandlerContext<tkw::CardDrawnEvent> &c)
-                { std::cout << "[摸牌] " << c.event.entity << " " << c.event.def_id << "\n"; })));
-            log_handles.push_back(game.bus.subscribe(tkw::Handler<tkw::EntityDiedEvent>(
-                [](tkw::HandlerContext<tkw::EntityDiedEvent> &c)
-                { std::cout << "[阵亡] " << c.event.entity_id << "\n"; })));
-        }
+        auto log = subscribe_event_log(game, opt.verbose);
 
         auto ai = make_decision_source(opt.humans);
         auto outcome = tkw::game::play_game(ctx, *ai, "P0", opt.hand);
