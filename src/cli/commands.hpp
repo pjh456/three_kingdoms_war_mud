@@ -197,12 +197,14 @@ namespace tkw
                 return game;
             }
 
-            /** 卡牌 id → 目录中文名；目录未收录该 id 时回落 id 本身。 */
+            /** 卡牌 id → 目录中文名；目录未收录该 id 或名称为空时回落 id 本身。 */
             inline const std::string &card_name(
                 const tkw::card::CardDefCatalog &catalog, const std::string &def_id)
             {
-                auto def = catalog.find(def_id);
-                return def.is_some() ? def.unwrap()->name : def_id;
+                const auto def = catalog.find(def_id);
+                if (def.is_some() && !def.unwrap()->name.empty())
+                    return def.unwrap()->name;
+                return def_id;
             }
 
             /**
@@ -239,7 +241,11 @@ namespace tkw
                 handles.push_back(
                     game.bus.subscribe(tkw::Handler<tkw::EntityDamagedEvent>(
                         [](tkw::HandlerContext<tkw::EntityDamagedEvent> &c) {
-                            std::cout << "[伤害] " << c.event.source << " -> "
+                            // 无来源 = 闪电等非玩家来源，渲染为 (无来源) 避免空段。
+                            std::string_view src = c.event.source;
+                            if (src.empty())
+                                src = "(无来源)";
+                            std::cout << "[伤害] " << src << " -> "
                                       << c.event.target << " " << c.event.amount
                                       << "\n";
                         })));
