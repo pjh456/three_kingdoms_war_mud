@@ -322,7 +322,9 @@ namespace tkw
                 {
                 case card::CardEffectKind::Damage:
                     for (const auto &t : targets)
-                        resolve_sha(ctx, ai, player, played, t, eff.amount);
+                        resolve_sha(
+                            ctx, ai, player, played, t, eff.amount,
+                            static_cast<int>(targets.size()));
                     return GameResult<void>::Ok();
 
                 case card::CardEffectKind::AoeDamage:

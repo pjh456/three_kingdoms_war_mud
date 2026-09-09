@@ -1,9 +1,11 @@
 /**
  * @file weapon.hpp
- * @brief 「杀」结算管线：防具 → 响应 → 被闪后 → 命中前 → 伤害 → 命中后。
- * @note 6 件装备的效果不再写成 if 链，而是注册到 sha_hook_table()：
+ * @brief 「杀」结算管线：指定目标后 → 防具 → 响应 → 被闪后 → 命中前 → 伤害 → 命中后。
+ * @note 7 件装备的效果不再写成 if 链，而是注册到 sha_hook_table()：
  *       每项声明「能力 / 插桩点 / 挂在哪一方 / 回调」，新增武器只加一行。
  * @note 规则约定（简单版）：
+ *       - 雌雄双股剑：杀指定唯一目标且目标为异性时，令目标弃置一张
+ *         手牌，目标弃不起时使用者摸一张牌；
  *       - 仁王盾：黑杀无效（青釭剑无视防具可穿透）；
  *       - 八卦阵：需出闪时可判定，判定描述来自装备数据（当前为红色=闪）；
  *       - 青龙偃月刀：被闪后可再对同一目标使用一张杀；
@@ -12,7 +14,6 @@
  *       - 麒麟弓：造成伤害后可弃置目标一匹坐骑；
  *       - 方天画戟：杀为最后一张手牌时可额外指定至多两名目标
  *         （作用于目标集合，经目标数校验放宽实现，不走本表钩子）。
- * @note 雌雄双股剑依赖性别，未在此结算。
  */
 
 #ifndef INCLUDE_TKW_GAME_WEAPON_HPP
@@ -51,11 +52,13 @@ namespace tkw
             bool responded = false;    /**< 目标已打出/视为闪 */
             bool blocked = false;      /**< 防具直接无效（仁王盾） */
             bool prevented = false;    /**< 伤害被替代（寒冰剑） */
+            int target_count = 1;      /**< 该杀指定的目标数（雌雄仅唯一目标） */
         };
 
         inline void resolve_sha(
             GameContext &ctx, DecisionSource &ai, const std::string &attacker,
-            const card::Card &sha, const std::string &target, int amount);
+            const card::Card &sha, const std::string &target, int amount,
+            int target_count = 1);
 
         // ── 装备效果（钩子实现）────────────────────────────────────────
 
@@ -121,6 +124,49 @@ namespace tkw
                 }
             }
             return false;
+        }
+
+        /**
+         * @brief 雌雄双股剑：杀指定唯一目标后，目标为异性时令其弃置一张
+         *        手牌；目标弃不起（无手牌）时使用者摸一张牌。
+         * @note 强制触发（卡面无「可以」）：无决策接缝，引擎自动结算；
+         *       目标弃哪张牌走既有 choose_discards 路径，选不中不产生
+         *       效果（与贯石斧/寒冰剑对非法选择的处理一致）。
+         */
+        inline void hook_cixiong(ShaContext &sc)
+        {
+            // 仅唯一目标触发（方天多目标杀不触发）
+            if (sc.target_count != 1)
+                return;
+            const auto attacker = sc.ctx.entities->find(sc.attacker);
+            const auto target = sc.ctx.entities->find(sc.target);
+            if (attacker.is_none() || target.is_none())
+                return;
+            // 同性不触发
+            if (attacker.unwrap()->get_gender() == target.unwrap()->get_gender())
+                return;
+
+            // 目标有手牌：令其弃置一张
+            if (sc.ctx.cards->hand_size(sc.target) > 0)
+            {
+                const auto discards = sc.ai.choose_discards(
+                    sc.ctx, sc.target, 1, DiscardReason::AbilityCost);
+                for (const auto &id : discards)
+                {
+                    auto removed = sc.ctx.cards->remove_from_hand(sc.target, id);
+                    if (removed.is_some())
+                    {
+                        card::Card card = std::move(removed).unwrap();
+                        sc.ctx.cards->discard(card);
+                        emit_card_discarded(sc.ctx, sc.target, card);
+                    }
+                    break;
+                }
+                return;
+            }
+
+            // 弃不起：使用者摸一张牌
+            apply_draw(sc.ctx, sc.attacker, 1);
         }
 
         /** @brief 仁王盾：黑色的杀对你无效（青釭剑可穿透）。 */
@@ -250,6 +296,7 @@ namespace tkw
         /** @brief 插桩点（顺序即规则顺序）。 */
         enum class ShaPhase : std::uint8_t
         {
+            OnTarget,  /**< 指定目标之后（防具之前） */
             Armor,     /**< 防具拦截 */
             Respond,   /**< 响应窗口（判定/出闪） */
             PostJink,  /**< 被闪之后 */
@@ -270,6 +317,7 @@ namespace tkw
         inline const std::vector<ShaHook> &sha_hook_table()
         {
             static const std::vector<ShaHook> table = {
+                {card::Ability::Cixiong, ShaPhase::OnTarget, true, hook_cixiong},
                 {card::Ability::BlackShaImmune, ShaPhase::Armor, false, hook_renwang},
                 {card::Ability::JudgementJink, ShaPhase::Respond, false, hook_bagua},
                 {card::Ability::ExtraShaAfterJink, ShaPhase::PostJink, true,
@@ -299,13 +347,19 @@ namespace tkw
          * @brief 「杀」结算主流程：attacker 对 target 使用杀。
          * @param sha 该杀的卡牌对象（花色用于仁王盾黑杀判定）。
          * @param amount 伤害量（config 驱动，当前数据均为 1）。
+         * @param target_count 该杀指定的目标总数（缺省 1；多目标杀逐目标
+         *        结算时由调用方传入，供仅唯一目标触发的能力判定）。
          */
         inline void resolve_sha(
             GameContext &ctx, DecisionSource &ai, const std::string &attacker,
-            const card::Card &sha, const std::string &target, int amount)
+            const card::Card &sha, const std::string &target, int amount,
+            int target_count)
         {
             ShaContext sc{ctx, ai, sha, attacker, target, amount};
             sc.ignore_armor = has_ability(ctx, attacker, card::Ability::IgnoreArmor);
+            sc.target_count = target_count;
+
+            run_sha_phase(sc, ShaPhase::OnTarget);
 
             run_sha_phase(sc, ShaPhase::Armor);
             if (sc.blocked)

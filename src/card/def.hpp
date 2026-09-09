@@ -73,7 +73,7 @@ namespace tkw
         {
             NoShaLimit,            /**< 诸葛连弩：杀无次数限制 */
             IgnoreArmor,           /**< 青釭剑：无视防具 */
-            Cixiong,               /**< 雌雄双股剑（未实现） */
+            Cixiong,               /**< 雌雄双股剑：杀指定唯一目标且目标异性时，令其弃一张手牌或使用者摸一张 */
             ExtraShaAfterJink,     /**< 青龙偃月刀：被闪可再出杀 */
             TwoCardsAsSha,         /**< 丈八蛇矛（未实现） */
             DiscardTwoForceDamage, /**< 贯石斧：弃两牌令杀仍造成伤害 */

@@ -64,6 +64,7 @@ namespace tkw
             {
             case A::NoShaLimit:
             case A::IgnoreArmor:
+            case A::Cixiong:
             case A::ExtraShaAfterJink:
             case A::DiscardTwoForceDamage:
             case A::MultiTargetSha:

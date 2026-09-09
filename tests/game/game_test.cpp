@@ -41,6 +41,7 @@ namespace
     using tkw::card::ResponseKind;
     using tkw::card::Suit;
     using tkw::entity::Entity;
+    using tkw::entity::Gender;
     using tkw::entity::Hp;
 
     using tkw::test::TestDecider;
@@ -1285,8 +1286,7 @@ TEST_CASE("game: unsupported deck cards are reported")
 {
     TestGame g("deck");
     // 标准牌堆中能力未实现的武器卡（deck 序）
-    CHECK(unsupported_cards(g.catalog) ==
-          (std::vector<std::string>{"cixiong", "zhangba"}));
+    CHECK(unsupported_cards(g.catalog) == (std::vector<std::string>{"zhangba"}));
 }
 
 TEST_CASE("game: effect traits are the single source of truth")
@@ -1344,7 +1344,7 @@ TEST_CASE("game: ability traits are the single source of truth")
     CHECK(!is_unimplemented_ability(A::JudgementJink));
     CHECK(!is_unimplemented_ability(A::BlackShaImmune));
     CHECK(!is_unimplemented_ability(A::MultiTargetSha));
-    CHECK(is_unimplemented_ability(A::Cixiong));
+    CHECK(!is_unimplemented_ability(A::Cixiong));
     CHECK(is_unimplemented_ability(A::TwoCardsAsSha));
 }
 
@@ -1894,4 +1894,58 @@ TEST_CASE("game: fangtian rejects more targets than the extra allowance")
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == EffectError::InvalidTarget);
     CHECK(g.cards.hand_size("a") == 1);  // 校验失败，杀未消耗
+}
+
+TEST_CASE("game: cixiong makes the opposite gender target discard")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4, Gender::Female);
+    g.equip("a", "cixiong", "e#0");
+    g.give("a", "sha", "s#1");
+    g.give("b", "wuzhong", "b#1");  // 目标一张手牌（非闪）
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);             // 杀命中
+    CHECK(g.cards.hand_size("b") == 0);  // 目标弃置一张
+    CHECK(g.cards.hand_size("a") == 0);  // 使用者未摸牌
+}
+
+TEST_CASE("game: cixiong draws when the target cannot discard")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4, Gender::Female);
+    g.equip("a", "cixiong", "e#0");
+    g.give("a", "sha", "s#1");
+    g.cards.build_deck(g.catalog);  // 摸牌堆有牌可摸
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);
+    CHECK(g.cards.hand_size("a") == 1);  // 使用者摸一张
+    CHECK(g.cards.hand_size("b") == 0);
+}
+
+TEST_CASE("game: cixiong does not trigger against the same gender")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);  // 与 a 同性（默认男）
+    g.equip("a", "cixiong", "e#0");
+    g.give("a", "sha", "s#1");
+    g.give("b", "wuzhong", "b#1");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);
+    CHECK(g.cards.hand_size("b") == 1);  // 不弃牌
+    CHECK(g.cards.hand_size("a") == 0);  // 不摸牌
 }
