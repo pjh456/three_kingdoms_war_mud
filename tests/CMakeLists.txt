@@ -267,3 +267,25 @@ add_test(NAME cli_unknown_command_message
                  "out=$($<TARGET_FILE:tkw> nosuchcmd 2>&1); rc=$?; printf '%s' \"$out\" | grep -q 'unknown command' && [ $rc -eq 2 ]")
 set_tests_properties(cli_unknown_command_message PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 对局统计块：批量跑局结束追加 回合数/胜者/每人体力/击杀/伤害/治疗（追加段，
+# 与既有 胜者|平局 关键词断言不冲突）。seed 1 2p 闪电击杀，双方击杀均为 0。
+add_test(NAME cli_stats_block_deal
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> deal 2 1 2>&1); printf '%s' \"$out\" | grep -q '对局统计' && printf '%s' \"$out\" | grep -q '回合数' && printf '%s' \"$out\" | grep -q '胜者' && printf '%s' \"$out\" | grep -q '体力' && printf '%s' \"$out\" | grep -q '击杀' && printf '%s' \"$out\" | grep -q '伤害' && printf '%s' \"$out\" | grep -q '治疗'")
+set_tests_properties(cli_stats_block_deal PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 对局统计块在 REPL 会话流同样输出（new → run），阵亡者显示「阵亡」。
+add_test(NAME cli_stats_block_repl_run
+         COMMAND sh -c
+                 "out=$(printf 'new --players 2 --seed 1\\nrun\\nquit\\n' | $<TARGET_FILE:tkw> repl 2>&1); printf '%s' \"$out\" | grep -q '对局统计' && printf '%s' \"$out\" | grep -q '阵亡'")
+set_tests_properties(cli_stats_block_repl_run PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 击杀计数：seed 3 2p 对局由玩家击杀（非闪电），胜者击杀 ≥ 1（确定性）。
+add_test(NAME cli_stats_kill_count
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> deal 2 3 2>&1); printf '%s' \"$out\" | grep -qE '击杀 [1-9]'")
+set_tests_properties(cli_stats_kill_count PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

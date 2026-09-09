@@ -12,7 +12,9 @@
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
+#include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -66,6 +68,16 @@ namespace tkw
             std::vector<std::string> humans; /**< 真人座位 id（可重复选项累积） */
         };
 
+        /** 对局统计聚合：按已发布事件累计伤害/治疗与击杀归属，供对局结束复盘打印。 */
+        struct BattleStats
+        {
+            std::map<std::string, int> damage_dealt;             /**< 来源 → 造成伤害总量 */
+            std::map<std::string, int> healing;                  /**< 目标 → 恢复总量 */
+            std::map<std::string, int> kills;                    /**< 击杀者 → 击杀数 */
+            std::map<std::string, std::string> last_hit_source;  /**< 受害者 → 最近一次伤害来源 */
+            std::set<std::string> died;                          /**< 本局阵亡实体 id */
+        };
+
         /** 跨命令持有的对局会话（new/step/run/save/load 共享）。 */
         struct Session
         {
@@ -75,6 +87,7 @@ namespace tkw
             bool verbose = false;            /**< 本会话是否打印事件日志 */
             Options base;                    /**< REPL 启动选项（供行内命令继承） */
             bool active = false;
+            BattleStats stats; /**< 本会话累计的对局统计（new/load 时重置；对局结束时打印） */
         };
 
         namespace detail
@@ -278,6 +291,85 @@ namespace tkw
                 return handles;
             }
 
+            /**
+             * @brief 订阅对局统计事件：把伤害/治疗/死亡累计入 stats（击杀按最近伤害来源归因）。
+             * @param game  本局运行时；死亡事件处理中按存活实体判定击杀归属。
+             * @param stats 聚合目标；句柄析构即退订，stats 须比句柄存活更久。
+             * @return 订阅句柄集合。
+             * @note 死亡事件不带击杀者字段，归因取「受害者最近一次伤害来源」；来源为空
+             *       （闪电等）或已阵亡（同归于尽时先死者）不计击杀，与引擎击杀奖励口径一致。
+             */
+            inline std::vector<tkw::EventBus::Handle> subscribe_stats(
+                tkw::game::Game &game, BattleStats &stats)
+            {
+                std::vector<tkw::EventBus::Handle> handles;
+                handles.push_back(
+                    game.bus.subscribe(tkw::Handler<tkw::EntityDamagedEvent>(
+                        [&stats](tkw::HandlerContext<tkw::EntityDamagedEvent> &c)
+                        {
+                            stats.last_hit_source[c.event.target] = c.event.source;
+                            if (c.event.source.empty())
+                                return;
+                            stats.damage_dealt[c.event.source] += c.event.amount;
+                        })));
+                handles.push_back(game.bus.subscribe(tkw::Handler<tkw::EntityHealedEvent>(
+                    [&stats](tkw::HandlerContext<tkw::EntityHealedEvent> &c)
+                    { stats.healing[c.event.target] += c.event.amount; })));
+                handles.push_back(
+                    game.bus.subscribe(tkw::Handler<tkw::EntityDiedEvent>(
+                        [&game, &stats](tkw::HandlerContext<tkw::EntityDiedEvent> &c)
+                        {
+                            stats.died.insert(c.event.entity_id);
+                            const auto hit = stats.last_hit_source.find(c.event.entity_id);
+                            if (hit == stats.last_hit_source.end())
+                                return;
+                            if (game.entities.find(hit->second).is_some())
+                                ++stats.kills[hit->second];
+                        })));
+                return handles;
+            }
+
+            /**
+             * @brief 打印对局统计块（对局结束时调用，追加在胜者/平局行之后）。
+             * @param stats  本局累计的统计聚合。
+             * @param game   本局运行时；存活实体体力在此读取（阵亡者显示「阵亡」）。
+             * @param winner 胜者 id；空串显示「无」（平局/同归于尽）。
+             * @param turns  已执行回合数。
+             * @note 玩家清单 = 存活实体 ∪ 阵亡记录，按 id 排序输出；统计以已发布事件
+             *       为准，存档恢复的会话只含读档后的事件，此前部分不计入。
+             */
+            inline void print_battle_stats(
+                const BattleStats &stats, const tkw::game::Game &game,
+                const std::string &winner, int turns)
+            {
+                const auto val = [](const std::map<std::string, int> &m,
+                                    const std::string &k)
+                {
+                    const auto it = m.find(k);
+                    return it == m.end() ? 0 : it->second;
+                };
+                std::cout << "对局统计:\n";
+                std::cout << "  回合数: " << turns << "\n";
+                std::cout << "  胜者: " << (winner.empty() ? "无" : winner) << "\n";
+                std::set<std::string> ids = stats.died;
+                for (const auto &e : game.entities)
+                    ids.insert(e->get_id());
+                for (const auto &id : ids)
+                {
+                    const auto alive = game.entities.find(id);
+                    std::string hp;
+                    if (alive.is_some())
+                        hp = "体力 " + std::to_string(alive.unwrap()->get_hp()) +
+                             "/" + std::to_string(alive.unwrap()->get_hp_bar().get_max());
+                    else
+                        hp = "阵亡";
+                    std::cout << "  " << id << ": " << hp << "，击杀 "
+                              << val(stats.kills, id) << "，伤害 "
+                              << val(stats.damage_dealt, id) << "，治疗 "
+                              << val(stats.healing, id) << "\n";
+                }
+            }
+
             /** 校验真人座位：必须是对局中存在的实体且互不重复；空串表示通过。 */
             inline std::string validate_humans(
                 tkw::game::Game &game, const std::vector<std::string> &humans)
@@ -348,6 +440,7 @@ namespace tkw
                 s.humans = opt.humans;
                 s.verbose = opt.verbose;
                 s.active = true;
+                s.stats = BattleStats{};
                 std::cout << "新对局已开始\n";
                 print_status(s);
                 return CliResult<void>::Ok();
@@ -358,6 +451,7 @@ namespace tkw
                 if (!s.active || !s.game)
                     return CliFailure{CliError("没有进行中的对局")};
                 auto log = subscribe_event_log(*s.game, verbose);
+                auto stats_handles = subscribe_stats(*s.game, s.stats);
                 auto ai = make_decision_source(s.humans);
                 auto ctx = s.game->context();
                 if (tkw::game::session_over(ctx))
@@ -372,14 +466,19 @@ namespace tkw
                     if (r.unwrap_err() == tkw::game::LoopError::MaxRounds)
                     {
                         std::cout << "平局（达到最大回合数）\n";
+                        print_battle_stats(s.stats, *s.game, {}, s.state.turns);
                         return CliResult<void>::Ok();
                     }
                     return CliFailure{CliError("回合执行失败")};
                 }
                 print_status(s);
                 if (tkw::game::session_over(ctx))
+                {
                     std::cout << "对局结束，胜者: " << tkw::game::session_winner(ctx)
                               << "\n";
+                    print_battle_stats(
+                        s.stats, *s.game, tkw::game::session_winner(ctx), s.state.turns);
+                }
                 return CliResult<void>::Ok();
             }
 
@@ -388,8 +487,10 @@ namespace tkw
                 if (!s.active || !s.game)
                     return CliFailure{CliError("没有进行中的对局")};
                 auto log = subscribe_event_log(*s.game, verbose);
+                auto stats_handles = subscribe_stats(*s.game, s.stats);
                 auto ai = make_decision_source(s.humans);
                 auto ctx = s.game->context();
+                bool advanced = false;
                 while (!tkw::game::session_over(ctx))
                 {
                     auto r = tkw::game::step_session(ctx, *ai, s.state);
@@ -398,13 +499,19 @@ namespace tkw
                         if (r.unwrap_err() == tkw::game::LoopError::MaxRounds)
                         {
                             std::cout << "平局（达到最大回合数）\n";
+                            print_battle_stats(s.stats, *s.game, {}, s.state.turns);
                             return CliResult<void>::Ok();
                         }
                         return CliFailure{CliError("回合执行失败")};
                     }
+                    advanced = true;
                 }
                 std::cout << "胜者: " << tkw::game::session_winner(ctx)
                           << "，回合数: " << s.state.turns << "\n";
+                // 对局在本次命令内跑完才附统计块；已在更早 step 结束时不重复打印。
+                if (advanced)
+                    print_battle_stats(
+                        s.stats, *s.game, tkw::game::session_winner(ctx), s.state.turns);
                 return CliResult<void>::Ok();
             }
 
@@ -447,6 +554,7 @@ namespace tkw
                 s.humans = opt.humans;
                 s.verbose = opt.verbose;
                 s.active = true;
+                s.stats = BattleStats{};
                 std::cout << "已加载: " << file.string() << "\n";
                 print_status(s);
                 return CliResult<void>::Ok();
@@ -476,23 +584,34 @@ namespace tkw
 
                 auto ctx = game->context();
                 auto log = subscribe_event_log(*game, opt.verbose);
+                BattleStats stats;
+                auto stats_handles = subscribe_stats(*game, stats);
 
                 auto ai = make_decision_source(opt.humans);
-                auto outcome = tkw::game::play_game(ctx, *ai, "P0", opt.hand);
-                if (outcome.is_err())
+                tkw::game::GameSession session;
+                if (tkw::game::start_session(ctx, session, "P0", opt.hand).is_err())
+                    return CliFailure{CliError("开局失败")};
+                while (!tkw::game::session_over(ctx))
                 {
-                    if (outcome.unwrap_err() == tkw::game::LoopError::MaxRounds)
+                    auto r = tkw::game::step_session(ctx, *ai, session);
+                    if (r.is_err())
                     {
-                        std::cout << "平局（达到最大回合数）\n";
-                        return CliResult<void>::Ok();
+                        const auto code = r.unwrap_err();
+                        if (code == tkw::game::LoopError::MaxRounds)
+                        {
+                            std::cout << "平局（达到最大回合数）\n";
+                            print_battle_stats(stats, *game, {}, session.turns);
+                            return CliResult<void>::Ok();
+                        }
+                        return CliFailure{CliError(
+                            "对局失败 (LoopError=" +
+                            std::to_string(static_cast<int>(code)) + ")")};
                     }
-                    return CliFailure{CliError(
-                        "对局失败 (LoopError=" +
-                        std::to_string(static_cast<int>(outcome.unwrap_err())) + ")")};
                 }
-
-                const auto &out = outcome.unwrap();
-                std::cout << "胜者: " << out.winner << "，回合数: " << out.turns << "\n";
+                const std::string winner = tkw::game::session_winner(ctx);
+                std::cout << "胜者: " << winner
+                          << "，回合数: " << session.turns << "\n";
+                print_battle_stats(stats, *game, winner, session.turns);
                 return CliResult<void>::Ok();
             }
 
