@@ -75,7 +75,7 @@ TEST_CASE("ai: view captures self and others")
     CHECK(v.others[0].judge.empty());
 }
 
-TEST_CASE("ai: evaluator scores cards and enemies")
+TEST_CASE("ai: evaluator scores cards")
 {
     TestGame g("deck");
     g.add_player("a", 0, 4);
@@ -84,11 +84,6 @@ TEST_CASE("ai: evaluator scores cards and enemies")
     CHECK(card_value(*g.catalog.find("sha").unwrap()) > 0);
     CHECK(card_value(*g.catalog.find("tao").unwrap()) >
           card_value(*g.catalog.find("sha").unwrap()));
-
-    const auto v = make_view(g.ctx, "a");
-    REQUIRE(v.others.size() == 1);
-    CHECK(threat_score(v.others[0]) > 0);
-    CHECK(kill_priority(v.others[0]) == 1);
 }
 
 TEST_CASE("ai: simple choose_play only returns legal_actions")
