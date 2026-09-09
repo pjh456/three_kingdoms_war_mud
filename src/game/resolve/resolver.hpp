@@ -120,6 +120,8 @@ namespace tkw
          *         - InvalidTarget：目标数量不符 scope 或不在合法集合内。
          * @note 前置：def.effect.is_some()（结算入口与出牌动作校验两处均满足）。
          *       借刀杀人特例（targets = {持武器者, 其攻击范围内角色}）在此统一校验。
+         *       方天画戟放宽：杀的目标为唯一目标且该杀是最后一张手牌时，
+         *       OneOther 数量上限放宽为 3（额外至多 2 名，卡面）。
          */
         inline GameResult<void> validate_effect_targets(
             const GameContext &ctx, const std::string &player,
@@ -172,8 +174,15 @@ namespace tkw
                 {
                 case card::Scope::Self:
                 case card::Scope::OneOther:
-                    target_ok = targets.size() == 1 && in_legal(targets.front());
+                {
+                    // 方天画戟：杀是最后一张手牌时共可指定至多 3 个目标
+                    // （唯一目标 + 额外至多 2 名，卡面）；成员合法性由下方统一检查
+                    const bool multi_sha =
+                        eff.kind == card::CardEffectKind::Damage &&
+                        sha_multi_target(ctx, player);
+                    target_ok = targets.size() <= (multi_sha ? 3 : 1);
                     break;
+                }
                 case card::Scope::All:
                 case card::Scope::AllOthers:
                     target_ok = targets.size() == legal.size();

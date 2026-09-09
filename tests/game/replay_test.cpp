@@ -105,6 +105,8 @@ TEST_CASE("replay: step_session drives the same log as play_game")
 
 TEST_CASE("replay: golden fingerprints pin the rule semantics")
 {
+    // 方天画戟多目标仅在杀为最后一张手牌时可触发，两个固定种子对局均未进入
+    // 该状态，日志逐字节不变（逐行 diff 核对过）。
     const auto two = run_game(1, 2);
     CHECK(two.size() == 75);
     CHECK(fingerprint(two) == 12649380097606896911ULL);

@@ -77,7 +77,7 @@ namespace tkw
             ExtraShaAfterJink,     /**< 青龙偃月刀：被闪可再出杀 */
             TwoCardsAsSha,         /**< 丈八蛇矛（未实现） */
             DiscardTwoForceDamage, /**< 贯石斧：弃两牌令杀仍造成伤害 */
-            MultiTargetSha,        /**< 方天画戟（未实现） */
+            MultiTargetSha,        /**< 方天画戟：杀为最后一张手牌时可额外指定至多两名目标 */
             DiscardHorseOnDamage,  /**< 麒麟弓：伤害后弃目标坐骑 */
             DamageAsDiscard,       /**< 寒冰剑：防止伤害改弃两张牌 */
             JudgementJink,         /**< 八卦阵：判定成功视为闪 */

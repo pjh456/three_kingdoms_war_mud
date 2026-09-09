@@ -124,8 +124,29 @@ namespace tkw
                         const auto ok = validate_play_action(
                             ctx, player, def, c, std::vector<std::string>{t}, turn)
                             .is_ok();
-                        if (ok)
-                            out.push_back(LegalAction{c, {t}});
+                        if (!ok)
+                            continue;
+                        out.push_back(LegalAction{c, {t}});
+
+                        // 方天画戟：杀是最后一张手牌时，对同一原目标再产出一个
+                        // 多目标动作（原目标 + 至多 2 名其他在范围内角色，
+                        // 按实体序确定性截断，避免组合爆炸）
+                        if (kind == card::CardEffectKind::Damage &&
+                            sha_multi_target(ctx, player))
+                        {
+                            std::vector<std::string> combo{t};
+                            for (const auto &u : targets)
+                            {
+                                if (u != t)
+                                    combo.push_back(u);
+                                if (combo.size() >= 3)
+                                    break;
+                            }
+                            if (combo.size() > 1 &&
+                                validate_play_action(
+                                    ctx, player, def, c, combo, turn).is_ok())
+                                out.push_back(LegalAction{c, std::move(combo)});
+                        }
                     }
                 }
                 else

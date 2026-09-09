@@ -1286,7 +1286,7 @@ TEST_CASE("game: unsupported deck cards are reported")
     TestGame g("deck");
     // 标准牌堆中能力未实现的武器卡（deck 序）
     CHECK(unsupported_cards(g.catalog) ==
-          (std::vector<std::string>{"cixiong", "zhangba", "fangtian"}));
+          (std::vector<std::string>{"cixiong", "zhangba"}));
 }
 
 TEST_CASE("game: effect traits are the single source of truth")
@@ -1343,9 +1343,9 @@ TEST_CASE("game: ability traits are the single source of truth")
     CHECK(!is_unimplemented_ability(A::DamageAsDiscard));
     CHECK(!is_unimplemented_ability(A::JudgementJink));
     CHECK(!is_unimplemented_ability(A::BlackShaImmune));
+    CHECK(!is_unimplemented_ability(A::MultiTargetSha));
     CHECK(is_unimplemented_ability(A::Cixiong));
     CHECK(is_unimplemented_ability(A::TwoCardsAsSha));
-    CHECK(is_unimplemented_ability(A::MultiTargetSha));
 }
 
 TEST_CASE("game: draw emits CardDrawn per card")
@@ -1544,6 +1544,35 @@ TEST_CASE("game: legal_actions are all accepted by the engine")
         INFO("card=" << act.card.def_id);
         CHECK(r.is_ok());
     }
+
+    // 方天画戟多目标场景：杀为最后一张手牌（未建牌堆、无摸牌，
+    // 出牌阶段手牌数不变，多目标动作回放时仍合法）
+    auto build_fangtian = [](TestGame &g)
+    {
+        g.add_player("a", 0, 4);
+        g.add_player("b", 1, 4);
+        g.add_player("c", 2, 4);
+        g.equip("a", "fangtian", "e#0");
+        g.give("a", "sha", "s#1");
+    };
+
+    TestGame f("deck");
+    build_fangtian(f);
+    const auto f_acts = legal_actions(f.ctx, "a", TurnContext{"a", 0, 1});
+    bool saw_multi = false;
+    for (const auto &act : f_acts)
+    {
+        TestGame fresh("deck");
+        build_fangtian(fresh);
+        TestDecider d;
+        d.plays = {PlayAction{act.card.instance_id, act.targets}};
+        auto r = execute_turn(fresh.ctx, d, "a");
+        INFO("card=" << act.card.def_id << " targets=" << act.targets.size());
+        CHECK(r.is_ok());
+        if (act.targets.size() > 1)
+            saw_multi = true;
+    }
+    CHECK(saw_multi);
 }
 
 TEST_CASE("game: legal_actions excludes sha when turn limit reached")
@@ -1779,4 +1808,90 @@ TEST_CASE("game: qinglong follows up with another sha after jink")
     CHECK(b->get_hp() == 3);            // 续杀命中
     CHECK(g.cards.hand_size("a") == 0); // 两张杀都打出去了
     CHECK(g.cards.hand_size("b") == 0); // 闪已消耗
+}
+
+TEST_CASE("game: fangtian adds extra sha targets when it is the last hand card")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    auto *d = g.add_player("d", 3, 4);
+    g.equip("a", "fangtian", "e#0");
+    g.give("a", "sha", "s#1");  // 唯一手牌，杀是最后一张
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c", "d"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);
+    CHECK(c->get_hp() == 3);
+    CHECK(d->get_hp() == 3);
+    CHECK(g.cards.hand_size("a") == 0);
+}
+
+TEST_CASE("game: fangtian does not add targets when the sha is not the last hand card")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    g.equip("a", "fangtian", "e#0");
+    g.give("a", "sha", "s#1");
+    g.give("a", "shan", "s#2");  // 杀不是最后一张手牌
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+    CHECK(b->get_hp() == 4);
+    CHECK(c->get_hp() == 4);
+    CHECK(g.cards.hand_size("a") == 2);  // 校验失败，杀未消耗
+
+    // 单目标仍合法
+    auto r2 = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r2.is_ok());
+    CHECK(b->get_hp() == 3);
+    CHECK(c->get_hp() == 4);
+}
+
+TEST_CASE("game: simple ai uses fangtian multi-target sha in its turn")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    auto *d = g.add_player("d", 3, 4);
+    g.equip("a", "fangtian", "e#0");
+    g.give("a", "guohe", "g#1");
+    g.give("a", "sha", "s#1");
+    g.give("d", "shan", "ds#1");  // 让过拆先打出，杀成为最后一张手牌
+
+    SimpleAI ai;
+    auto r = execute_turn(g.ctx, ai, "a");
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);
+    CHECK(c->get_hp() == 3);
+    CHECK(d->get_hp() == 3);  // 三目标各中一刀
+    CHECK(g.cards.hand_size("a") == 0);
+}
+
+TEST_CASE("game: fangtian rejects more targets than the extra allowance")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.add_player("d", 3, 4);
+    g.add_player("e", 4, 4);
+    g.equip("a", "fangtian", "e#0");
+    g.give("a", "sha", "s#1");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c", "d", "e"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+    CHECK(g.cards.hand_size("a") == 1);  // 校验失败，杀未消耗
 }

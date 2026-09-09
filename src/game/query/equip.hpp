@@ -61,6 +61,17 @@ namespace tkw
             return rules_of(ctx).sha_limit;
         }
 
+        /**
+         * @brief 方天画戟：杀可在唯一目标外额外指定目标（至多 2 名）的条件。
+         * @note 须在打出的杀移出手牌前判定：hand_size == 1 即该杀是最后一张
+         *       手牌（卡面触发条件）。目标数放宽由 validate_effect_targets 消费。
+         */
+        inline bool sha_multi_target(const GameContext &ctx, const std::string &player)
+        {
+            return has_ability(ctx, player, card::Ability::MultiTargetSha) &&
+                   ctx.cards->hand_size(player) == 1;
+        }
+
         /** @brief 实体装备区是否存在指定槽位的装备（如借刀杀人的武器）。 */
         inline bool has_equip_slot(
             const GameContext &ctx, const std::string &entity_id,

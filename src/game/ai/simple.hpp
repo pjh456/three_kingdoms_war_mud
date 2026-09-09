@@ -103,7 +103,8 @@ namespace tkw
                 /**
                  * @brief 出牌：取第一张可出的牌，再按贪心偏好选目标。
                  * @note legal_actions 已按手牌序产出；按牌分组以复现「首张可出」
-                 *       语义。OneOther 集火最低体力，借刀取「B = A 自身」。
+                 *       语义。OneOther 集火最低体力（方天画戟取目标最多者），
+                 *       借刀取「B = A 自身」。
                  */
                 static DecisionChoice decide_play(const DecisionRequest &req)
                 {
@@ -164,7 +165,17 @@ namespace tkw
 
                         if (eff.scope.unwrap_or(card::Scope::Self) ==
                             card::Scope::OneOther)
+                        {
+                            // 方天画戟：存在多目标动作时优先选目标最多者
+                            //（否则贪心会把它丢成单目标）
+                            const LegalAction *most = &opts.front();
+                            for (const auto &a : opts)
+                                if (a.targets.size() > most->targets.size())
+                                    most = &a;
+                            if (most->targets.size() > 1)
+                                return pick_all(out, c.instance_id, most->targets);
                             return pick_single(req.view, out, c.instance_id, opts);
+                        }
 
                         return pick_all(out, c.instance_id, opts.front().targets);
                     }

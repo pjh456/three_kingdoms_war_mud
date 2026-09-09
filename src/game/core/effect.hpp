@@ -66,6 +66,7 @@ namespace tkw
             case A::IgnoreArmor:
             case A::ExtraShaAfterJink:
             case A::DiscardTwoForceDamage:
+            case A::MultiTargetSha:
             case A::DiscardHorseOnDamage:
             case A::DamageAsDiscard:
             case A::JudgementJink:
