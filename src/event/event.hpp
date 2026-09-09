@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <string_view>
 
-#include "util/marco.hpp"
+#include "util/macro.hpp"
 
 namespace tkw
 {

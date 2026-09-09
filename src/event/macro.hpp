@@ -1,5 +1,5 @@
-#ifndef INCLUDE_TKW_EVENT_MARCO_HPP
-#define INCLUDE_TKW_EVENT_MARCO_HPP
+#ifndef INCLUDE_TKW_EVENT_MACRO_HPP
+#define INCLUDE_TKW_EVENT_MACRO_HPP
 
 #define DEFINE_EVENT_START(name, parent) \
     class name##Event : public parent    \
@@ -11,4 +11,4 @@ public:                                                                         
     }                                                                            \
     ;
 
-#endif  // INCLUDE_TKW_EVENT_MARCO_HPP
+#endif  // INCLUDE_TKW_EVENT_MACRO_HPP

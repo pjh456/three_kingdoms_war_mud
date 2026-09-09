@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <functional>
 
-#include "util/marco.hpp"
+#include "util/macro.hpp"
 
 namespace tkw
 {

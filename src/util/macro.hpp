@@ -1,5 +1,5 @@
-#ifndef INCLUDE_TKW_UTIL_MARCO_HPP
-#define INCLUDE_TKW_UTIL_MARCO_HPP
+#ifndef INCLUDE_TKW_UTIL_MACRO_HPP
+#define INCLUDE_TKW_UTIL_MACRO_HPP
 
 #define DEFAULT_CONSTRUCTOR(name)            \
     name() = default;                        \
@@ -25,4 +25,4 @@ public:                                                 \
     type &get_##name() noexcept { return name; }        \
     const type &get_##name() const noexcept { return name; }
 
-#endif  // INCLUDE_TKW_UTIL_MARCO_HPP
+#endif  // INCLUDE_TKW_UTIL_MACRO_HPP

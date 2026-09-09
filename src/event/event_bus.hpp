@@ -12,7 +12,7 @@
 
 #include "event/event.hpp"
 #include "event/handler.hpp"
-#include "util/marco.hpp"
+#include "util/macro.hpp"
 
 namespace tkw
 {

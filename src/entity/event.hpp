@@ -4,7 +4,7 @@
 #include <string>
 
 #include "event/event.hpp"
-#include "event/marco.hpp"
+#include "event/macro.hpp"
 
 namespace tkw
 {
