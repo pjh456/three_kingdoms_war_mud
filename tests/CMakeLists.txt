@@ -140,3 +140,15 @@ set_tests_properties(cli_audit_bad_deck PROPERTIES
 add_test(NAME cli_fuzzy_typo_resolves COMMAND tkw audti)
 set_tests_properties(cli_fuzzy_typo_resolves PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 根帮助应中文化段标题并附用法示例；子命令帮助同样用中文用法前缀。
+add_test(NAME cli_help_root_zh
+         COMMAND sh -c
+                 "$<TARGET_FILE:tkw> --help | grep -q '用法:' && $<TARGET_FILE:tkw> --help | grep -q '示例:'")
+set_tests_properties(cli_help_root_zh PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_test(NAME cli_help_subcommand_zh
+         COMMAND sh -c "$<TARGET_FILE:tkw> new --help | grep -q '用法:'")
+set_tests_properties(cli_help_subcommand_zh PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

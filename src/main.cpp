@@ -449,12 +449,65 @@ namespace
         constexpr std::string_view prefix = "Parse Error: ";
         return what.starts_with(prefix) ? what.substr(prefix.size()) : what;
     }
+
+    /**
+     * @brief 把命令树的框架帮助数据渲染为中文帮助。
+     * @param cmd 请求帮助的命令（根或任一子命令）。
+     * @return 中文段标题（用法/选项/参数/子命令）的完整帮助；根命令额外附用法示例。
+     * @note 只替换框架渲染结果的段标题与 usage 前缀，选项/参数/子命令的排布与
+     *       对齐仍由框架负责，避免自造排版。选项标注（如 (repeatable)）保持框架
+     *       原文。program_name 用完整命令路径，子命令帮助也带 tkw 前缀。
+     */
+    std::string render_help_zh(const pjh::cli::BaseCommand &cmd)
+    {
+        std::vector<std::string_view> parts;
+        for (const pjh::cli::BaseCommand *c = &cmd; c != nullptr; c = c->parent())
+            if (!c->name().empty())
+                parts.push_back(c->name());
+        std::string path;
+        for (auto it = parts.rbegin(); it != parts.rend(); ++it)
+        {
+            if (!path.empty())
+                path += ' ';
+            path += *it;
+        }
+
+        pjh::cli::HelpInfo info = pjh::cli::HelpFormatter::collect_help(cmd, path);
+        pjh::cli::HelpDocument doc = pjh::cli::HelpFormatter::build_document(info);
+        for (auto &section : doc.sections)
+        {
+            if (section.heading == "Options")
+                section.heading = "选项";
+            else if (section.heading == "Arguments")
+                section.heading = "参数";
+            else if (section.heading == "Subcommands")
+                section.heading = "子命令";
+        }
+
+        std::string text = pjh::cli::HelpFormatter::format_help(doc);
+        constexpr std::string_view usage_prefix = "Usage: ";
+        if (text.starts_with(usage_prefix))
+            text.replace(0, usage_prefix.size(), "用法: ");
+
+        if (cmd.parent() == nullptr)
+            text += "示例:\n"
+                    "  跑一局 AI 对局:          tkw\n"
+                    "  进入交互模式:            tkw repl\n"
+                    "  真人参与 P0 座位:        tkw --human P0 repl\n"
+                    "  开新局后逐步推进:        tkw new --players 2 --seed 1 -> step -> status\n"
+                    "  按位置参数跑一局:        tkw deal 2 1\n"
+                    "  保存并读回:              tkw save s.json / tkw load s.json\n"
+                    "  审计牌堆:                tkw audit\n";
+        return text;
+    }
 }
 
 int main(int argc, char **argv)
 {
     App app("tkw", "0.1.0", "三国杀式卡牌对局引擎");
     app.set_extra_args(ExtraArgsPolicy::Error);  // 未知命令/多余参数即报错
+    app.set_help_formatter(
+        [](const pjh::cli::BaseCommand &cmd) { return render_help_zh(cmd); });
 
     const tkw::game::RulesConfig rules{};
     Session session;  // 跨命令持有的对局会话
