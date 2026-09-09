@@ -1,10 +1,12 @@
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <sstream>
 #include <string>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 #include <pjh_cli.hpp>
 
@@ -291,6 +293,30 @@ TEST_CASE("cli: invalid human seats are rejected")
     auto duplicate = repl.run("new --human P0 --human P0 --players 2 --seed 1");
     CHECK_FALSE(duplicate.ok);
     CHECK(duplicate.error.find("真人座位重复") != std::string::npos);
+}
+
+TEST_CASE("cli: --human completion offers seat ids")
+{
+    Repl repl;
+
+    // 空前缀：候选为规则允许的全部座位号；带 P 前缀仍全量命中；越界前缀为空。
+    auto all = pjh::cli::complete_line_result(repl.app, "--human ", 8);
+    REQUIRE(all.candidates.size() == 8);
+    std::vector<std::string> got;
+    for (const auto &c : all.candidates)
+        got.push_back(c.display);
+    CHECK(std::find(got.begin(), got.end(), "P0") != got.end());
+    CHECK(std::find(got.begin(), got.end(), "P7") != got.end());
+
+    auto prefixed = pjh::cli::complete_line_result(repl.app, "--human P", 9);
+    CHECK(prefixed.candidates.size() == 8);
+
+    // leaf 位置经祖先链同样命中（--human 仅根声明，new 继承查找）。
+    auto leaf = pjh::cli::complete_line_result(repl.app, "new --human P", 13);
+    CHECK(leaf.candidates.size() == 8);
+
+    auto none = pjh::cli::complete_line_result(repl.app, "--human Q", 9);
+    CHECK(none.candidates.empty());
 }
 
 TEST_CASE("cli: audit entry name renders chinese name with id")

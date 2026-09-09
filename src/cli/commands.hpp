@@ -149,6 +149,7 @@ namespace tkw
              * @note repeatable 选项的值按「最近声明」写入单一上下文，若根与 leaf 各
              *       声明一份，`--human P0 new --human P1` 会分落两处，而读取只取最近
              *       节点，导致 P0 静默丢弃；故仅根声明。leaf 处仍可解析（祖先链查找）。
+             *       值补全候选取自规则允许的座位上限，防止越界座位号到运行期才报错。
              */
             inline void declare_human_option(pjh::cli::BaseCommand &cmd)
             {
@@ -156,7 +157,14 @@ namespace tkw
                        "--human",
                        "真人座位（可重复：--human P0 --human P2；存档不保存，读档后需重新指定）")
                     .str()
-                    .repeatable();
+                    .repeatable()
+                    .completer([] {
+                        std::vector<std::string> seats;
+                        const int max_players = tkw::game::RulesConfig{}.max_players;
+                        for (int i = 0; i < max_players; ++i)
+                            seats.push_back("P" + std::to_string(i));
+                        return seats;
+                    });
             }
 
             /** 性别占位：无玩家数据源，按座位奇偶交替（P0 男 / P1 女 / …）。 */
