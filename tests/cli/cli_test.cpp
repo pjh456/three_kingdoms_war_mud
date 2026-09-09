@@ -105,6 +105,26 @@ TEST_CASE("cli: new/step/status/run advance the session")
     CHECK(repl.session.state.turns >= 2);
 }
 
+TEST_CASE("cli: inline --verbose enables event log for that command")
+{
+    Repl repl;
+
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+
+    auto loud = repl.run("step --verbose");
+    CHECK(loud.ok);
+    CHECK(loud.out.find("[摸牌]") != std::string::npos);
+
+    // 行内 verbose 只作用于该次命令，不改变会话默认。
+    auto quiet = repl.run("step");
+    CHECK(quiet.ok);
+    CHECK(quiet.out.find("[摸牌]") == std::string::npos);
+
+    auto ran = repl.run("run --verbose");
+    CHECK(ran.ok);
+    CHECK(ran.out.find("[摸牌]") != std::string::npos);
+}
+
 TEST_CASE("cli: repeated --human accumulates across positions")
 {
     Repl repl;

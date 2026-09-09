@@ -112,10 +112,11 @@ namespace tkw
              * @brief 在命令上声明标量公共选项（牌堆/人数/手牌/种子/日志/自动存档）。
              * @param cmd   目标命令：根命令或会读取这些选项的 leaf。
              * @param rules 玩家数上下限来源。
-             * @note pjh_cli 的选项声明只查当前命令、值才沿父链查找，故根命令与各 leaf
-             *       需各声明一份，子命令名之后的选项才可解析；未显式给的项仍由
-             *       options_from 沿父链或会话启动选项回落，声明处一律不设默认值。
-             *       标量「最近声明胜出」即期望语义，故 per-leaf 重声明无副作用。
+             * @note pjh_cli 的选项查找沿父链（名与值都取最近声明处），故 leaf 不重
+             *       声明也能解析祖先的选项；此处 per-leaf 重声明只为让 leaf 的帮助/
+             *       用法行列出这些选项。未显式给的项仍由 options_from 沿父链或会话
+             *       启动选项回落，声明处一律不设默认值；标量「最近声明胜出」即期望
+             *       语义，故 per-leaf 重声明无副作用。
              */
             inline void declare_common_options(
                 pjh::cli::BaseCommand &cmd, const tkw::game::RulesConfig &rules)
@@ -331,11 +332,11 @@ namespace tkw
                 return CliResult<void>::Ok();
             }
 
-            inline CliResult<void> cmd_step(Session &s)
+            inline CliResult<void> cmd_step(Session &s, bool verbose)
             {
                 if (!s.active || !s.game)
                     return CliFailure{CliError("没有进行中的对局")};
-                auto log = subscribe_event_log(*s.game, s.verbose);
+                auto log = subscribe_event_log(*s.game, verbose);
                 auto ai = make_decision_source(s.humans);
                 auto ctx = s.game->context();
                 if (tkw::game::session_over(ctx))
@@ -361,11 +362,11 @@ namespace tkw
                 return CliResult<void>::Ok();
             }
 
-            inline CliResult<void> cmd_run(Session &s)
+            inline CliResult<void> cmd_run(Session &s, bool verbose)
             {
                 if (!s.active || !s.game)
                     return CliFailure{CliError("没有进行中的对局")};
-                auto log = subscribe_event_log(*s.game, s.verbose);
+                auto log = subscribe_event_log(*s.game, verbose);
                 auto ai = make_decision_source(s.humans);
                 auto ctx = s.game->context();
                 while (!tkw::game::session_over(ctx))
@@ -740,14 +741,24 @@ namespace tkw
             // step：执行一个回合
             auto &step_cmd = app.add_leaf("step", "执行当前会话的一个回合");
             step_cmd.action(
-                [&session](ParseContext &) -> CliResult<void>
-                { return detail::cmd_step(session); });
+                [&session](ParseContext &ctx) -> CliResult<void>
+                {
+                    return detail::cmd_step(
+                        session,
+                        session.verbose ||
+                            ctx.get_or<bool, fixed_string("verbose")>(false));
+                });
 
             // run：跑到对局结束
             auto &run_cmd = app.add_leaf("run", "跑到当前会话结束");
             run_cmd.action(
-                [&session](ParseContext &) -> CliResult<void>
-                { return detail::cmd_run(session); });
+                [&session](ParseContext &ctx) -> CliResult<void>
+                {
+                    return detail::cmd_run(
+                        session,
+                        session.verbose ||
+                            ctx.get_or<bool, fixed_string("verbose")>(false));
+                });
 
             // status：查看会话状态
             auto &status_cmd = app.add_leaf("status", "查看当前会话状态");
