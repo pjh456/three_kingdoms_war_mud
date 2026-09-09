@@ -421,7 +421,7 @@ TEST_CASE("ai: human decider treats eof as decline")
     CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha).is_none());
     CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Jink).is_none());
     CHECK(src.play_peach(g.ctx, "a", "b").is_none());
-    CHECK(src.play_counter(g.ctx, "a").is_none());
+    CHECK(src.play_counter(g.ctx, "a", "", {}).is_none());
     CHECK_FALSE(src.trigger_effect(g.ctx, "a", tkw::card::Ability::NoShaLimit));
     CHECK(src.pick_card_from_target(g.ctx, "a", "b").is_none());
     const auto revealed = g.ctx.cards->hand("a");

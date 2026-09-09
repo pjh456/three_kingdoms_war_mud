@@ -111,11 +111,17 @@ namespace tkw
 
             /**
              * @brief 无懈窗口：player 打出哪张无懈可击。
+             * @param trick_user 被结算锦囊的使用者；空串 = 延时锦囊判定窗口
+             *        （使用者不随牌记录，窗口主体为被判定玩家）。
+             * @param trick_targets 锦囊目标集合（判定窗口 = 被判定玩家一人）。
              * @return 要打出的手牌 instance_id；None = 不出。结算器先检查手牌
              *         确有牌再询问，并负责消费。
+             * @note 接缝只传事实（谁的锦囊、冲谁），不传「该不该出」的结论。
              */
             virtual Option<std::string> play_counter(
-                const GameContext &ctx, const std::string &player) = 0;
+                const GameContext &ctx, const std::string &player,
+                const std::string &trick_user,
+                const std::vector<std::string> &trick_targets) = 0;
 
             /**
              * @brief 装备效果触发：player 是否发动 ability 指定的可选装备能力

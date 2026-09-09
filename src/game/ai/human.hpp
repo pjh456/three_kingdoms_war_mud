@@ -510,9 +510,12 @@ namespace tkw
                 }
 
                 Option<std::string> play_counter(
-                    const GameContext &ctx, const std::string &player) override
+                    const GameContext &ctx, const std::string &player,
+                    const std::string &trick_user,
+                    const std::vector<std::string> &trick_targets) override
                 {
-                    return route(player).play_counter(ctx, player);
+                    return route(player).play_counter(
+                        ctx, player, trick_user, trick_targets);
                 }
 
                 bool trigger_effect(

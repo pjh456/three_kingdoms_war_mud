@@ -92,7 +92,8 @@ namespace tkw
                 removed.is_some() ? std::move(removed).unwrap() : delayed;
 
             // 无懈窗口：判定结算前可被抵消，抵消则直接弃置
-            if (resolve_nullification(ctx, ai, def, player))
+            // （判定窗口使用者不可考 → 空串哨兵，目标 = 被判定玩家）
+            if (resolve_nullification(ctx, ai, def, "", {player}))
             {
                 ctx.cards->discard(delayed_card);
                 emit_card_discarded(ctx, player, delayed_card);
@@ -228,7 +229,7 @@ namespace tkw
                 return TurnResult<void>::Err(TurnError::CardNotInHand);
             emit_card_played(ctx, player, card);
 
-            if (resolve_nullification(ctx, ai, def, player))
+            if (resolve_nullification(ctx, ai, def, player, {target}))
             {
                 ctx.cards->discard(std::move(removed).unwrap());
                 emit_card_discarded(ctx, player, card);

@@ -149,7 +149,8 @@ namespace tkw
             }
 
             Option<std::string> play_counter(
-                const GameContext &ctx, const std::string &player) override
+                const GameContext &ctx, const std::string &player,
+                const std::string &, const std::vector<std::string> &) override
             {
                 if (!counter)
                     return Option<std::string>::None();

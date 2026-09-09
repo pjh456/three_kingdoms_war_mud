@@ -68,6 +68,10 @@ namespace tkw
                 // Peach
                 std::string dying;
 
+                // Counter
+                std::string counter_user;              /**< 锦囊使用者（延时判定窗口 = 空串哨兵） */
+                std::vector<std::string> counter_targets; /**< 锦囊目标集合（判定窗口 = 被判定玩家一人） */
+
                 // PickCard
                 std::string target;
 
@@ -144,10 +148,14 @@ namespace tkw
                 }
 
                 Option<std::string> play_counter(
-                    const GameContext &ctx, const std::string &player) override
+                    const GameContext &ctx, const std::string &player,
+                    const std::string &trick_user,
+                    const std::vector<std::string> &trick_targets) override
                 {
                     DecisionRequest req = base_request(ctx, player);
                     req.kind = DecisionKind::Counter;
+                    req.counter_user = trick_user;
+                    req.counter_targets = trick_targets;
                     for (const auto &c : ctx.cards->hand(player))
                         if (is_counter_card(ctx, c))
                             req.options.push_back(c);

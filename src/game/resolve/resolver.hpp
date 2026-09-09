@@ -378,7 +378,8 @@ namespace tkw
             const bool is_trick = def.type == card::CardType::Trick;
             const auto nullified = [&]()
             {
-                return is_trick && resolve_nullification(ctx, ai, def, player);
+                return is_trick &&
+                       resolve_nullification(ctx, ai, def, player, targets);
             };
 
             const auto apply = [&]() -> GameResult<void>
