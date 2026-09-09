@@ -296,6 +296,24 @@ TEST_CASE("game: aoe rejects partial target list")
     CHECK(g.cards.hand_size("a") == 1);
 }
 
+TEST_CASE("game: aoe rejects duplicate targets")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.add_player("d", 3, 4);
+    g.give("a", "nanman", "n#0");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    // 南蛮须覆盖其他角色一次且仅一次：{b,b,d} 数量对上（3==legal 3）但 b 重复
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "b", "d"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+    CHECK(g.cards.hand_size("a") == 1);  // 牌未消耗
+}
+
 TEST_CASE("game: card not in hand is rejected without effect")
 {
     TestGame g("deck");

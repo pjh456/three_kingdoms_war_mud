@@ -207,7 +207,14 @@ namespace tkw
                 }
                 case card::Scope::All:
                 case card::Scope::AllOthers:
-                    target_ok = targets.size() == legal.size();
+                    // 去重后比对：All/AllOthers 须覆盖合法集合一次且仅一次，
+                    // 重复目标（如 {a,a,b}）数量能对上但会重复结算/漏结算
+                    {
+                        std::vector<std::string> uniq = targets;
+                        std::sort(uniq.begin(), uniq.end());
+                        uniq.erase(std::unique(uniq.begin(), uniq.end()), uniq.end());
+                        target_ok = uniq.size() == legal.size();
+                    }
                     break;
                 }
                 if (target_ok)
