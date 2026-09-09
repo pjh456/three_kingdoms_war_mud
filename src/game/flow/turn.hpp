@@ -27,6 +27,7 @@
 #include "game/core/context.hpp"
 #include "game/resolve/counter.hpp"
 #include "game/core/decision.hpp"
+#include "game/core/effect.hpp"
 #include "game/query/distance.hpp"
 #include "game/query/equip.hpp"
 #include "game/resolve/resolver.hpp"
@@ -323,7 +324,9 @@ namespace tkw
                     return TurnResult<void>::Err(TurnError::UnknownCard);
                 const card::CardDef &def = *def_opt.unwrap();
 
-                if (def.type == card::CardType::Equipment)
+                switch (classify_action(def))
+                {
+                case PlayClass::Equipment:
                 {
                     auto er = equip_card(ctx, player, card.unwrap());
                     if (er.is_err())
@@ -331,13 +334,18 @@ namespace tkw
                     continue;
                 }
 
-                if (is_delayed_trick(def))
+                case PlayClass::DelayedTrick:
                 {
                     auto dr = place_delayed(
                         ctx, ai, player, card.unwrap(), action.unwrap().targets);
                     if (dr.is_err())
                         return TurnResult<void>::Err(dr.unwrap_err());
                     continue;
+                }
+
+                case PlayClass::Active:
+                case PlayClass::None:
+                    break;  // 主动效果与无效果牌都经 resolve_play 最终闸门
                 }
 
                 if (is_sha(def))

@@ -8,6 +8,8 @@
 #ifndef INCLUDE_TKW_GAME_EFFECT_HPP
 #define INCLUDE_TKW_GAME_EFFECT_HPP
 
+#include <cstdint>
+
 #include "card/def.hpp"
 
 namespace tkw
@@ -104,6 +106,32 @@ namespace tkw
         {
             return def.type == card::CardType::Trick && def.effect.is_none() &&
                    def.judge.is_some();
+        }
+
+        /** @brief 出牌阶段的打出路径分类（回合流程/动作枚举共用同一分派）。 */
+        enum class PlayClass : std::uint8_t
+        {
+            Equipment,    /**< 装备牌（走 equip_card，忽略目标） */
+            DelayedTrick, /**< 延时锦囊（置入判定区） */
+            Active,       /**< 主动效果（走 resolve_play） */
+            None,        /**< 无主动效果（出牌阶段不可打出） */
+        };
+
+        /**
+         * @brief 按卡牌定义分类出牌阶段的打出路径。
+         * @note 纯静态分类（只看定义）：先装备、再延时锦囊、后有无主动效果；
+         *       「杀」是状态规则（依赖回合上下文），保持正交谓词 is_sha_kind，
+         *       不作第 5 个分类值。
+         */
+        inline PlayClass classify_action(const card::CardDef &def)
+        {
+            if (def.type == card::CardType::Equipment)
+                return PlayClass::Equipment;
+            if (is_delayed_trick(def))
+                return PlayClass::DelayedTrick;
+            if (def.effect.is_some())
+                return PlayClass::Active;
+            return PlayClass::None;
         }
     }
 }

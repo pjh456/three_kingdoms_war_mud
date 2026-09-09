@@ -1210,6 +1210,24 @@ TEST_CASE("game: effect traits are the single source of truth")
     CHECK(is_response_def(*shan, ResponseKind::Jink));
 }
 
+TEST_CASE("game: classify_action pins the play phase paths")
+{
+    TestGame g("deck");
+    auto classify = [&](const char *id)
+    {
+        return classify_action(*g.catalog.find(id).unwrap());
+    };
+    CHECK(classify("sha") == PlayClass::Active);
+    CHECK(classify("tao") == PlayClass::Active);
+    CHECK(classify("wuzhong") == PlayClass::Active);
+    CHECK(classify("shan") == PlayClass::Active);  // 有效果但不可主动结算
+    CHECK(classify("liangnu") == PlayClass::Equipment);
+    CHECK(classify("qinglong") == PlayClass::Equipment);
+    CHECK(classify("lesi") == PlayClass::DelayedTrick);
+    CHECK(classify("shandian") == PlayClass::DelayedTrick);
+    CHECK(classify("wuxie") == PlayClass::None);
+}
+
 TEST_CASE("game: ability traits are the single source of truth")
 {
     using A = tkw::card::Ability;

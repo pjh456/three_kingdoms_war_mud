@@ -70,13 +70,13 @@ namespace tkw
                     continue;
                 const card::CardDef &def = *def_opt.unwrap();
 
-                if (def.type == card::CardType::Equipment)
+                switch (classify_action(def))
                 {
+                case PlayClass::Equipment:
                     out.push_back(LegalAction{c, {}});
                     continue;
-                }
 
-                if (is_delayed_trick(def))
+                case PlayClass::DelayedTrick:
                 {
                     const auto scope =
                         def.judge.unwrap().scope.unwrap_or(card::Scope::Self);
@@ -97,6 +97,11 @@ namespace tkw
                         }
                     }
                     continue;
+                }
+
+                case PlayClass::Active:
+                case PlayClass::None:
+                    break;
                 }
 
                 if (def.effect.is_none())
