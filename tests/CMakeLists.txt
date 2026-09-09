@@ -135,3 +135,8 @@ add_test(NAME cli_audit_bad_deck COMMAND tkw audit --deck /nonexistent-deck-dir)
 set_tests_properties(cli_audit_bad_deck PROPERTIES
     WILL_FAIL TRUE
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 批量入口模糊匹配：唯一近距手误自动纠错到 audit；只钉退出码，不钉审计输出内容。
+add_test(NAME cli_fuzzy_typo_resolves COMMAND tkw audti)
+set_tests_properties(cli_fuzzy_typo_resolves PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

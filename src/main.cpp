@@ -556,7 +556,8 @@ int main(int argc, char **argv)
             return CliResult<void>::Ok();
         });
 
-    auto parsed = app.parse(argc, argv);
+    // 批量入口也启用模糊匹配：唯一近距匹配自动纠错，多候选报歧义。
+    auto parsed = app.parse_fuzzy(argc, argv);
     if (parsed.is_err())
     {
         std::cerr << parsed.unwrap_err().what() << "\n";
