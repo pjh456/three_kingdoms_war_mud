@@ -14,6 +14,8 @@
 #include <vector>
 
 #include <pjh_cli.hpp>
+#include <pjh_cli/console/help_navigator.hpp>
+#include <pjh_cli/console/query_result.hpp>
 
 #include "card/catalog.hpp"
 #include "config/error.hpp"
@@ -450,6 +452,15 @@ namespace
         return what.starts_with(prefix) ? what.substr(prefix.size()) : what;
     }
 
+    /** 把 "Usage: " 前缀换成中文，其余原样（帮助与 REPL 无匹配提示共用）。 */
+    std::string zh_usage_prefix(std::string text)
+    {
+        constexpr std::string_view prefix = "Usage: ";
+        if (text.starts_with(prefix))
+            text.replace(0, prefix.size(), "用法: ");
+        return text;
+    }
+
     /**
      * @brief 把命令树的框架帮助数据渲染为中文帮助。
      * @param cmd 请求帮助的命令（根或任一子命令）。
@@ -484,10 +495,7 @@ namespace
                 section.heading = "子命令";
         }
 
-        std::string text = pjh::cli::HelpFormatter::format_help(doc);
-        constexpr std::string_view usage_prefix = "Usage: ";
-        if (text.starts_with(usage_prefix))
-            text.replace(0, usage_prefix.size(), "用法: ");
+        std::string text = zh_usage_prefix(pjh::cli::HelpFormatter::format_help(doc));
 
         if (cmd.parent() == nullptr)
             text += "示例:\n"
@@ -499,6 +507,93 @@ namespace
                     "  保存并读回:              tkw save s.json / tkw load s.json\n"
                     "  审计牌堆:                tkw audit\n";
         return text;
+    }
+
+    /** 按命令名列表渲染「命令名 + 描述」两列（描述取命令树，缺失留空）。 */
+    std::string command_lines_zh(
+        const pjh::cli::BranchCommand &root,
+        const std::vector<std::string> &names)
+    {
+        std::size_t width = 0;
+        for (const auto &n : names)
+            if (n.size() > width)
+                width = n.size();
+
+        std::string out;
+        for (const auto &n : names)
+        {
+            out += "  " + n;
+            out.append(width - n.size(), ' ');
+            out += "  ";
+            const pjh::cli::BaseCommand *sub = root.find_subcommand(n);
+            if (sub != nullptr)
+                out += std::string(sub->description());
+            out += "\n";
+        }
+        return out;
+    }
+
+    /**
+     * @brief REPL `?` 查询结果的中文渲染。
+     * @param root   根命令，用于按名查子命令描述。
+     * @param result 框架查询结果（列表/匹配/模糊/无匹配）。
+     * @return 中文提示 + 命令名与描述两列；无匹配时附中文用法行。
+     * @note 只消费框架结构，不重复实现匹配逻辑；描述直接取命令树，保证与
+     *       --help 子命令表同源。
+     */
+    std::string render_query_zh(
+        const pjh::cli::BranchCommand &root, const pjh::cli::QueryResult &result)
+    {
+        using pjh::cli::QueryKind;
+        switch (result.kind)
+        {
+        case QueryKind::Listing:
+            return "命令（? <关键词> 过滤，help <命令> 看用法）:\n" +
+                   command_lines_zh(root, result.names);
+        case QueryKind::Matched:
+            return "匹配命令:\n" + command_lines_zh(root, result.names);
+        case QueryKind::Fuzzy:
+        {
+            std::string out = "您是否要找:";
+            for (const auto &m : result.suggestions.matches)
+                out += " " + m.name;
+            return out + "\n";
+        }
+        case QueryKind::NoMatch:
+            return "没有匹配的命令。试试 " + zh_usage_prefix(result.usage_line) + "\n";
+        }
+        return {};
+    }
+
+    /**
+     * @brief REPL `help [命令]` 的中文渲染。
+     * @param result 框架导航结果。
+     * @return 根/子命令帮助走同一中文渲染；叶命令与未知命令用中文提示。
+     * @note 帮助正文复用 render_help_zh，保证 REPL `help` 与批量 `--help` 同格式。
+     */
+    std::string render_help_nav_zh(const pjh::cli::HelpNavigationResult &result)
+    {
+        using pjh::cli::HelpNavigationKind;
+        switch (result.kind)
+        {
+        case HelpNavigationKind::RootHelp:
+        case HelpNavigationKind::SubcommandHelp:
+            return render_help_zh(*result.resolved);
+        case HelpNavigationKind::NonBranch:
+            return "'" + result.failed_command_name + "' 没有子命令。\n";
+        case HelpNavigationKind::UnknownCommand:
+        {
+            std::string out = "未知命令 '" + result.failed_token + "'。";
+            if (!result.suggestions.matches.empty())
+            {
+                out += " 您是否要找:";
+                for (const auto &m : result.suggestions.matches)
+                    out += " " + m.name;
+            }
+            return out + "\n";
+        }
+        }
+        return {};
     }
 }
 
@@ -596,7 +691,12 @@ int main(int argc, char **argv)
         [&app, &session](ParseContext &ctx) -> CliResult<void>
         {
             session.base = options_from(ctx);
-            InteractiveConsole console(app, "tkw> ");
+            InteractiveConsole console(
+                app, "tkw> ", std::cin, std::cout, std::cerr,
+                [&app](const pjh::cli::QueryResult &r)
+                { return render_query_zh(app, r); },
+                [](const pjh::cli::HelpNavigationResult &r)
+                { return render_help_nav_zh(r); });
             console.run();
             const Options &opt = session.base;
             if (session.active && session.game && !opt.autosave.empty())

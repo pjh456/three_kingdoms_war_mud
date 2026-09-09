@@ -152,3 +152,10 @@ add_test(NAME cli_help_subcommand_zh
          COMMAND sh -c "$<TARGET_FILE:tkw> new --help | grep -q '用法:'")
 set_tests_properties(cli_help_subcommand_zh PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# REPL ? 应列命令并带中文描述；help <命令> 应走同一中文用法渲染。
+add_test(NAME cli_repl_query_and_help_zh
+         COMMAND sh -c
+                 "out=$(printf '?\\nhelp new\\nquit\\n' | $<TARGET_FILE:tkw> repl); echo \"$out\" | grep -q '审计牌堆' && echo \"$out\" | grep -q '用法:'")
+set_tests_properties(cli_repl_query_and_help_zh PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
