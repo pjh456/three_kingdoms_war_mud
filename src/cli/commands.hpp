@@ -207,6 +207,13 @@ namespace tkw
                 return def_id;
             }
 
+            /** 未实现卡展示名：目录中文名 + (id) 后缀；目录未收录时回落 id。 */
+            inline std::string audit_entry_name(
+                const tkw::card::CardDefCatalog &catalog, const std::string &def_id)
+            {
+                return card_name(catalog, def_id) + "(" + def_id + ")";
+            }
+
             /**
              * @brief 订阅本局事件日志：verbose 为真时打印摸牌/打牌/弃牌/伤害/体力/阵亡。
              * @return 订阅句柄；verbose 为假时为空，句柄析构即退订。
@@ -451,7 +458,7 @@ namespace tkw
                     std::cerr << "警告: 牌堆含 " << unsupported.size()
                               << " 张引擎未实现的卡:";
                     for (const auto &id : unsupported)
-                        std::cerr << ' ' << id;
+                        std::cerr << ' ' << audit_entry_name(game->catalog, id);
                     std::cerr << "\n";
                 }
 
@@ -497,7 +504,8 @@ namespace tkw
                 }
                 std::cout << "未实现卡（" << unsupported.size() << " 张）:\n";
                 for (const auto &id : unsupported)
-                    std::cout << "  " << id << "\n";
+                    std::cout << "  " << audit_entry_name(game->catalog, id)
+                              << "\n";
                 return CliResult<void>::Ok();
             }
 

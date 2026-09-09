@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 #include <system_error>
+#include <utility>
 
 #include <pjh_cli.hpp>
 
@@ -254,4 +255,15 @@ TEST_CASE("cli: invalid human seats are rejected")
     auto duplicate = repl.run("new --human P0 --human P0 --players 2 --seed 1");
     CHECK_FALSE(duplicate.ok);
     CHECK(duplicate.error.find("真人座位重复") != std::string::npos);
+}
+
+TEST_CASE("cli: audit entry name renders chinese name with id")
+{
+    tkw::config::ResourceStore store(TKW_TEST_RESOURCE_DIR);
+    auto r = tkw::card::CardDefCatalog::load(store, "deck");
+    REQUIRE(r.is_ok());
+    auto cat = std::move(r).unwrap();
+    CHECK(tkw::cli::detail::audit_entry_name(cat, "cixiong") ==
+          "雌雄双股剑(cixiong)");
+    CHECK(tkw::cli::detail::audit_entry_name(cat, "nope") == "nope(nope)");
 }
