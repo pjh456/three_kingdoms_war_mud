@@ -613,6 +613,51 @@ TEST_CASE("game: validate_effect_targets pins the borrowed sword special case")
     CHECK(r.unwrap_err() == EffectError::InvalidTarget);
 }
 
+TEST_CASE("game: validate_play_action pins sha limit and corner order")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.add_player("d", 3, 4);
+    g.give("a", "sha", "s#1");
+    g.give("a", "lesi", "L#0");
+    g.cards.add_to_judge("b", Card{"L#9", "lesi", Suit::Spade, 6});
+
+    const CardDef &sha = *g.catalog.find("sha").unwrap();
+    const CardDef &lesi = *g.catalog.find("lesi").unwrap();
+    const Card sha_card = g.cards.hand("a")[0];
+    const Card lesi_card = g.cards.hand("a")[1];
+
+    const TurnContext used_up{"a", 1, 1};  // 本回合杀次数已用尽
+    const TurnContext fresh{"a", 0, 1};
+
+    // 杀超次数：直接拒绝
+    auto r = validate_play_action(g.ctx, "a", sha, sha_card, {"b"}, used_up);
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::ShaLimitExceeded);
+
+    // 角顺序：杀超次数与目标出范围同现，仍先报次数
+    r = validate_play_action(g.ctx, "a", sha, sha_card, {"c"}, used_up);
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::ShaLimitExceeded);
+
+    // 未超限：目标出范围报目标错误
+    r = validate_play_action(g.ctx, "a", sha, sha_card, {"c"}, fresh);
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::OutOfRange);
+
+    // 延时：出 scope 的目标
+    r = validate_play_action(g.ctx, "a", lesi, lesi_card, {"a"}, fresh);
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+
+    // 延时：同名去重
+    r = validate_play_action(g.ctx, "a", lesi, lesi_card, {"b"}, fresh);
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::DelayedDuplicate);
+}
+
 // ── 回合流程 ──────────────────────────────────────────────────────────
 
 TEST_CASE("game: turn draws two and trims to hand limit")

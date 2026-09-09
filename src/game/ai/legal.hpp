@@ -51,7 +51,6 @@ namespace tkw
             const GameContext &ctx, const std::string &player, const TurnContext &turn)
         {
             std::vector<LegalAction> out;
-            const bool sha_blocked = turn.sha_played >= turn.sha_limit;
 
             for (const auto &c : ctx.cards->hand(player))
             {
@@ -82,8 +81,6 @@ namespace tkw
                     continue;
                 const auto kind = def.effect.unwrap().kind;
                 if (!is_settleable_kind(kind))
-                    continue;
-                if (is_sha_kind(kind) && sha_blocked)
                     continue;
 
                 if (kind == card::CardEffectKind::BorrowedSword)
@@ -121,13 +118,22 @@ namespace tkw
                 const auto scope = def.effect.unwrap().scope.unwrap_or(card::Scope::Self);
                 if (scope == card::Scope::OneOther)
                 {
-                    // 单目标：每个候选目标各产出一个动作
+                    // 单目标：每个通过校验的候选目标各产出一个动作
                     for (const auto &t : targets)
-                        out.push_back(LegalAction{c, {t}});
+                    {
+                        const auto ok = validate_play_action(
+                            ctx, player, def, c, std::vector<std::string>{t}, turn)
+                            .is_ok();
+                        if (ok)
+                            out.push_back(LegalAction{c, {t}});
+                    }
                 }
                 else
                 {
-                    out.push_back(LegalAction{c, std::move(targets)});
+                    const auto ok =
+                        validate_play_action(ctx, player, def, c, targets, turn).is_ok();
+                    if (ok)
+                        out.push_back(LegalAction{c, std::move(targets)});
                 }
             }
             return out;

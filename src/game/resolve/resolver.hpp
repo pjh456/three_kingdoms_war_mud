@@ -27,6 +27,7 @@
 #include "game/resolve/counter.hpp"
 #include "game/core/decision.hpp"
 #include "game/query/distance.hpp"
+#include "game/query/judge.hpp"
 #include "game/core/effect.hpp"
 #include "game/query/equip.hpp"
 #include "game/resolve/response.hpp"
@@ -48,6 +49,8 @@ namespace tkw
             InvalidTarget,   /**< 目标数量不符 scope / 不在合法目标集合内 */
             CardNotOwned,    /**< 打出的牌不在该玩家手牌中 */
             InvalidChoice,   /**< 决策源选中的牌不存在于目标区域 */
+            ShaLimitExceeded,/**< 本回合杀次数已达上限 */
+            DelayedDuplicate,/**< 判定区已有同名的延时锦囊 */
         };
 
         template <typename T>
@@ -188,6 +191,69 @@ namespace tkw
                 if (!target_ok)
                     return GameResult<void>::Err(EffectError::InvalidTarget);
             }
+            return GameResult<void>::Ok();
+        }
+
+        /**
+         * @brief 校验「player 打出 card（定义 def），指定 targets」是否合法（只读预检）。
+         * @return Ok 合法；错误值：
+         *         - CardNotOwned：牌不在 player 手牌中；
+         *         - InvalidTarget：延时锦囊目标数不为 1 或出 scope；
+         *         - DelayedDuplicate：延时锦囊目标判定区已有同名延时锦囊；
+         *         - ShaLimitExceeded：杀且本回合杀次数已达上限（turn）；
+         *         - NoTarget/OutOfRange/InvalidTarget：主动效果目标校验失败；
+         *         - UnsupportedKind：无主动效果，或效果未实现。
+         * @note 检查顺序固定：手牌存在 → 按分类分派（装备直接合法、忽略目标；
+         *       延时先 scope 后去重；主动先杀次数后目标再可实现性）→ 主动效果目标
+         *       校验 → 可实现性。无副作用：不消费牌、不发事件；实际消费归
+         *       equip_card / place_delayed / resolve_play。
+         */
+        inline GameResult<void> validate_play_action(
+            const GameContext &ctx, const std::string &player,
+            const card::CardDef &def, const card::Card &card,
+            const std::vector<std::string> &targets, const TurnContext &turn)
+        {
+            // 打出的牌必须在手牌中
+            bool in_hand = false;
+            for (const auto &c : ctx.cards->hand(player))
+                if (c.instance_id == card.instance_id)
+                {
+                    in_hand = true;
+                    break;
+                }
+            if (!in_hand)
+                return GameResult<void>::Err(EffectError::CardNotOwned);
+
+            switch (classify_action(def))
+            {
+            case PlayClass::Equipment:
+                return GameResult<void>::Ok();  // 装备走 equip_card，忽略目标
+
+            case PlayClass::DelayedTrick:
+                if (targets.size() != 1)
+                    return GameResult<void>::Err(EffectError::InvalidTarget);
+                if (!is_delayed_scope_target(player, def, targets.front()))
+                    return GameResult<void>::Err(EffectError::InvalidTarget);
+                if (has_same_delayed(ctx, targets.front(), def.id))
+                    return GameResult<void>::Err(EffectError::DelayedDuplicate);
+                return GameResult<void>::Ok();
+
+            case PlayClass::Active:
+                if (is_sha_kind(def.effect.unwrap().kind) &&
+                    turn.sha_played >= turn.sha_limit)
+                    return GameResult<void>::Err(EffectError::ShaLimitExceeded);
+                break;
+
+            case PlayClass::None:
+                return GameResult<void>::Err(EffectError::UnsupportedKind);
+            }
+
+            // 主动效果：目标校验后判可实现性
+            auto tr = validate_effect_targets(ctx, player, def, targets);
+            if (tr.is_err())
+                return tr;
+            if (!is_settleable_kind(def.effect.unwrap().kind))
+                return GameResult<void>::Err(EffectError::UnsupportedKind);
             return GameResult<void>::Ok();
         }
 

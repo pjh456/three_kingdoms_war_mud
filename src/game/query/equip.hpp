@@ -8,6 +8,7 @@
 #define INCLUDE_TKW_GAME_EQUIP_HPP
 
 #include <algorithm>
+#include <limits>
 #include <string>
 
 #include "card/def.hpp"
@@ -46,6 +47,18 @@ namespace tkw
             card::Ability ability)
         {
             return find_equipment(ctx, entity_id, ability) != nullptr;
+        }
+
+        /**
+         * @brief 本回合杀次数上限（诸葛连弩 = 不限）。
+         * @note 回合流程与出牌动作校验的单一采样点；调用方每轮重采样，
+         *       回合中途装备连弩当轮即生效。
+         */
+        inline int sha_limit(const GameContext &ctx, const std::string &player)
+        {
+            if (has_ability(ctx, player, card::Ability::NoShaLimit))
+                return std::numeric_limits<int>::max();
+            return rules_of(ctx).sha_limit;
         }
 
         /** @brief 实体装备区是否存在指定槽位的装备（如借刀杀人的武器）。 */

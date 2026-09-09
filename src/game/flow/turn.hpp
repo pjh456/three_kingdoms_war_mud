@@ -13,7 +13,6 @@
 #define INCLUDE_TKW_GAME_TURN_HPP
 
 #include <cstdint>
-#include <limits>
 #include <random>
 #include <string>
 #include <utility>
@@ -154,14 +153,6 @@ namespace tkw
             return def.effect.is_some() && is_sha_kind(def.effect.unwrap().kind);
         }
 
-        /** @brief 本回合杀次数上限（诸葛连弩 = 不限）。 */
-        inline int sha_limit(const GameContext &ctx, const std::string &player)
-        {
-            if (has_ability(ctx, player, card::Ability::NoShaLimit))
-                return std::numeric_limits<int>::max();
-            return rules_of(ctx).sha_limit;
-        }
-
         /** @brief 从手牌找一张牌（返回副本，便于随后按 instance_id 消费）。 */
         inline Option<card::Card> find_in_hand(
             const GameContext &ctx,
@@ -251,6 +242,25 @@ namespace tkw
 
         // ── 回合入口 ────────────────────────────────────────────────────
 
+        /** @brief 结算错误 → 回合错误（单一映射点；未列明的值落 PlayRejected）。 */
+        inline TurnError to_turn_error(EffectError e)
+        {
+            switch (e)
+            {
+            case EffectError::OutOfRange:
+            case EffectError::InvalidTarget:
+                return TurnError::InvalidTarget;
+            case EffectError::CardNotOwned:
+                return TurnError::CardNotInHand;
+            case EffectError::ShaLimitExceeded:
+                return TurnError::ShaLimitExceeded;
+            case EffectError::DelayedDuplicate:
+                return TurnError::DelayedDuplicate;
+            default:
+                return TurnError::PlayRejected;
+            }
+        }
+
         /** @brief 角色是否仍在场（回合中可能因闪电/决斗等死亡被移除）。 */
         inline bool is_alive(const GameContext &ctx, const std::string &player)
         {
@@ -315,6 +325,12 @@ namespace tkw
                     return TurnResult<void>::Err(TurnError::UnknownCard);
                 const card::CardDef &def = *def_opt.unwrap();
 
+                // 统一预检（手牌/分派/杀次数/目标/可实现性），失败即回合错误
+                auto vr = validate_play_action(
+                    ctx, player, def, card.unwrap(), action.unwrap().targets, turn);
+                if (vr.is_err())
+                    return TurnResult<void>::Err(to_turn_error(vr.unwrap_err()));
+
                 switch (classify_action(def))
                 {
                 case PlayClass::Equipment:
@@ -339,27 +355,10 @@ namespace tkw
                     break;  // 主动效果与无效果牌都经 resolve_play 最终闸门
                 }
 
-                if (is_sha(def))
-                {
-                    if (sha_played >= sha_limit(ctx, player))
-                        return TurnResult<void>::Err(TurnError::ShaLimitExceeded);
-                }
-
                 auto rr = resolve_play(
                     ctx, ai, player, card.unwrap(), action.unwrap().targets);
                 if (rr.is_err())
-                {
-                    switch (rr.unwrap_err())
-                    {
-                    case EffectError::OutOfRange:
-                    case EffectError::InvalidTarget:
-                        return TurnResult<void>::Err(TurnError::InvalidTarget);
-                    case EffectError::CardNotOwned:
-                        return TurnResult<void>::Err(TurnError::CardNotInHand);
-                    default:
-                        return TurnResult<void>::Err(TurnError::PlayRejected);
-                    }
-                }
+                    return TurnResult<void>::Err(to_turn_error(rr.unwrap_err()));
                 if (is_sha(def))
                     ++sha_played;
                 if (!is_alive(ctx, player))
