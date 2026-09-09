@@ -55,7 +55,9 @@ namespace tkw
 
                 // Play
                 TurnContext turn;
-                std::vector<LegalAction> legal;
+
+                // Play / Response
+                std::vector<LegalAction> legal; /**< Play 合法出牌动作；Response 两张当杀 pair 候选（丈八） */
 
                 // Response / Peach / Counter / PickCard / PickRevealed / Discard
                 std::vector<card::Card> options;
@@ -85,7 +87,7 @@ namespace tkw
                 Option<card::Card> card = Option<card::Card>::None();
                 std::vector<std::string> targets;  /**< Play：目标 */
                 std::vector<std::string> discards; /**< Discard：要弃的牌 */
-                std::string second_instance_id;   /**< Play：第二张手牌（丈八蛇矛两张当杀；空 = 普通打出） */
+                std::string second_instance_id;   /**< Play/Response：第二张手牌（丈八蛇矛两张当杀；空 = 普通） */
             };
 
             /** @brief 状态机接口：实现单个 decide 即可接入引擎。 */
@@ -106,7 +108,7 @@ namespace tkw
             public:
                 explicit RequestDecisionSource(Decider &decider) : decider_(&decider) {}
 
-                Option<std::string> play_response(
+                Option<PlayAction> play_response(
                     const GameContext &ctx, const std::string &entity,
                     card::ResponseKind kind) override
                 {
@@ -116,7 +118,16 @@ namespace tkw
                     for (const auto &c : ctx.cards->hand(entity))
                         if (is_response_card(ctx, c, kind))
                             req.options.push_back(c);
-                    return decider_->decide(req).instance_id;
+                    // 杀响应窗口：携带两张当杀 pair 候选（与主动侧同一枚举口径）
+                    if (kind == card::ResponseKind::Sha)
+                        for (const auto &[first, second] :
+                             two_cards_as_sha_pairs(ctx, entity))
+                            req.legal.push_back(LegalAction{first, {}, second.instance_id});
+                    const auto choice = decider_->decide(req);
+                    if (choice.instance_id.is_none())
+                        return Option<PlayAction>::None();
+                    return Option<PlayAction>::Some(PlayAction{
+                        choice.instance_id.unwrap(), {}, choice.second_instance_id});
                 }
 
                 Option<std::string> play_peach(

@@ -56,6 +56,8 @@ namespace tkw
                     case DecisionKind::Play:
                         return decide_play(request);
                     case DecisionKind::Response:
+                        if (!request.legal.empty())
+                            return decide_response_pair(request);
                         return decide_choose_id(request, "响应");
                     case DecisionKind::Peach:
                         return decide_choose_id(
@@ -269,6 +271,52 @@ namespace tkw
                     }
                 }
 
+                /**
+                 * @brief 杀响应窗口、两张手牌当杀（丈八蛇矛）：手牌编号渲染，
+                 *        读 `play <序号> + <序号>`；本模式下无真响应牌候选。
+                 * @note 读取失败（EOF）按放弃处理并立即返回，绝不重提示。
+                 */
+                DecisionChoice decide_response_pair(const DecisionRequest &req)
+                {
+                    DecisionChoice out;
+                    const auto &hand = req.view.hand;
+                    if (hand.size() < 2)
+                        return out;
+
+                    for (;;)
+                    {
+                        out_ << "[" << req.actor << "] 响应（杀）：打出两张手牌当杀：\n";
+                        for (std::size_t i = 0; i < hand.size(); ++i)
+                            out_ << "  " << (i + 1) << ") "
+                                 << card_name(req, hand[i].def_id) << " "
+                                 << hand[i].instance_id << "\n";
+                        out_ << "输入 play <序号> + <序号> 或 pass：" << std::flush;
+
+                        std::string line;
+                        if (!read_line(line))
+                            return out;
+
+                        const auto tokens = tokenize(line);
+                        if (tokens.size() == 1 && tokens[0] == "pass")
+                            return out;
+
+                        int first = 0, second = 0;
+                        if (tokens.size() == 4 && tokens[0] == "play" &&
+                            tokens[2] == "+" &&
+                            parse_index(tokens[1], hand.size(), first) &&
+                            parse_index(tokens[3], hand.size(), second) &&
+                            first != second)
+                        {
+                            out.instance_id = Option<std::string>::Some(
+                                hand[static_cast<std::size_t>(first - 1)].instance_id);
+                            out.second_instance_id =
+                                hand[static_cast<std::size_t>(second - 1)].instance_id;
+                            return out;
+                        }
+                        out_ << "输入无效，请重试。\n";
+                    }
+                }
+
                 /** @brief 从牌池选一张（拆/顺/五谷）：pick <n> 或 pass。 */
                 DecisionChoice decide_pick(
                     const DecisionRequest &req, const char *title)
@@ -420,7 +468,7 @@ namespace tkw
                         humans_.emplace(id, std::make_unique<HumanAI>(in, out));
                 }
 
-                Option<std::string> play_response(
+                Option<PlayAction> play_response(
                     const GameContext &ctx, const std::string &entity,
                     card::ResponseKind kind) override
                 {

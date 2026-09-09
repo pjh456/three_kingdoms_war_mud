@@ -44,6 +44,34 @@ namespace tkw
         }
 
         /**
+         * @brief 两张手牌当杀（丈八蛇矛）：枚举手牌 pair 候选（手牌序 i<j，确定性）。
+         * @note 仅在装备两张当杀能力、手牌无真杀、手牌 ≥2 且牌堆有杀定义（虚拟杀
+         *       效果参数的单一事实源）时产出（主动/响应两侧同一口径）；杀次数与
+         *       目标合法性归校验层（主动侧 validate_virtual_sha / 响应侧预校验）。
+         */
+        inline std::vector<std::pair<card::Card, card::Card>> two_cards_as_sha_pairs(
+            const GameContext &ctx, const std::string &player)
+        {
+            std::vector<std::pair<card::Card, card::Card>> out;
+            if (!has_ability(ctx, player, card::Ability::TwoCardsAsSha))
+                return out;
+            const auto &hand = ctx.cards->hand(player);
+            if (hand.size() < 2 || find_sha_def(ctx).is_none())
+                return out;
+            for (const auto &c : hand)
+            {
+                const auto d = ctx.catalog->find(c.def_id);
+                if (d.is_some() && d.unwrap()->effect.is_some() &&
+                    is_sha_kind(d.unwrap()->effect.unwrap().kind))
+                    return out;  // 手牌有真杀：不产出虚拟杀
+            }
+            for (std::size_t i = 0; i + 1 < hand.size(); ++i)
+                for (std::size_t j = i + 1; j < hand.size(); ++j)
+                    out.emplace_back(hand[i], hand[j]);
+            return out;
+        }
+
+        /**
          * @brief 枚举 player 出牌阶段所有合法主动动作。
          * @param turn 提供本回合杀次数上限（已达上限则不再产出杀）。
          * @note 覆盖装备、延时锦囊、主动效果牌，以及借刀杀人的双目标特例。
@@ -161,58 +189,43 @@ namespace tkw
 
             // 丈八蛇矛：手牌无真杀时，两张手牌当一张杀（pair × 目标枚举，
             // 确定性手牌序；杀次数/目标合法性经 validate_virtual_sha 过滤）
-            if (has_ability(ctx, player, card::Ability::TwoCardsAsSha))
+            const auto pairs = two_cards_as_sha_pairs(ctx, player);
+            if (!pairs.empty())
             {
-                const auto &hand = ctx.cards->hand(player);
-                bool has_sha = false;
-                for (const auto &c : hand)
-                {
-                    const auto d = ctx.catalog->find(c.def_id);
-                    if (d.is_some() && d.unwrap()->effect.is_some() &&
-                        is_sha_kind(d.unwrap()->effect.unwrap().kind))
-                        has_sha = true;
-                }
                 const auto sha_def = find_sha_def(ctx);
-                if (!has_sha && hand.size() >= 2 && sha_def.is_some())
-                {
-                    const auto targets = valid_targets(ctx, player, *sha_def.unwrap());
-                    const bool multi = sha_multi_target(ctx, player, 2);
-                    for (std::size_t i = 0; i + 1 < hand.size(); ++i)
-                        for (std::size_t j = i + 1; j < hand.size(); ++j)
-                            for (const auto &t : targets)
-                            {
-                                if (!validate_virtual_sha(
-                                        ctx, player, hand[i].instance_id,
-                                        hand[j].instance_id,
-                                        std::vector<std::string>{t}, turn)
-                                        .is_ok())
-                                    continue;
-                                out.push_back(LegalAction{
-                                    hand[i], {t}, hand[j].instance_id});
+                const auto targets = valid_targets(ctx, player, *sha_def.unwrap());
+                const bool multi = sha_multi_target(ctx, player, 2);
+                for (const auto &[first, second] : pairs)
+                    for (const auto &t : targets)
+                    {
+                        if (!validate_virtual_sha(
+                                ctx, player, first.instance_id, second.instance_id,
+                                std::vector<std::string>{t}, turn)
+                                .is_ok())
+                            continue;
+                        out.push_back(LegalAction{first, {t}, second.instance_id});
 
-                                // 方天画戟：pair 为最后两张手牌时再产出多目标
-                                // 动作（原目标 + 至多 2 名其他在范围内角色）
-                                if (multi)
-                                {
-                                    std::vector<std::string> combo{t};
-                                    for (const auto &u : targets)
-                                    {
-                                        if (u != t)
-                                            combo.push_back(u);
-                                        if (combo.size() >= 3)
-                                            break;
-                                    }
-                                    if (combo.size() > 1 &&
-                                        validate_virtual_sha(
-                                            ctx, player, hand[i].instance_id,
-                                            hand[j].instance_id, combo, turn)
-                                            .is_ok())
-                                        out.push_back(LegalAction{
-                                            hand[i], std::move(combo),
-                                            hand[j].instance_id});
-                                }
+                        // 方天画戟：pair 为最后两张手牌时再产出多目标
+                        // 动作（原目标 + 至多 2 名其他在范围内角色）
+                        if (multi)
+                        {
+                            std::vector<std::string> combo{t};
+                            for (const auto &u : targets)
+                            {
+                                if (u != t)
+                                    combo.push_back(u);
+                                if (combo.size() >= 3)
+                                    break;
                             }
-                }
+                            if (combo.size() > 1 &&
+                                validate_virtual_sha(
+                                    ctx, player, first.instance_id,
+                                    second.instance_id, combo, turn)
+                                    .is_ok())
+                                out.push_back(LegalAction{
+                                    first, std::move(combo), second.instance_id});
+                        }
+                    }
             }
             return out;
         }

@@ -18,11 +18,11 @@ namespace tkw
 {
     namespace game
     {
-        /** @brief 出牌阶段的动作：打出某张手牌并指定目标。 */
+        /** @brief 手牌打出表达：打出一张手牌（可选第二张）并指定目标。 */
         struct PlayAction
         {
             std::string instance_id;          /**< 要打出的手牌 */
-            std::vector<std::string> targets; /**< 目标实体 id（装备牌为空） */
+            std::vector<std::string> targets; /**< 目标实体 id（响应侧为空） */
             std::string second_instance_id;  /**< 第二张手牌（丈八蛇矛两张当杀；空 = 普通打出） */
         };
 
@@ -57,10 +57,10 @@ namespace tkw
 
             /**
              * @brief 响应窗口：entity_id 选择打出的响应牌（杀/闪）。
-             * @return 要打出的手牌 instance_id；None = 不响应。结算器会先检查
-             *         手牌里确有该响应牌，并负责消费。
+             * @return 要打出的手牌（可带第二张，两张手牌当杀）；None = 不响应。
+             *         结算器会先检查手牌里确有响应牌，并负责消费。
              */
-            virtual Option<std::string> play_response(
+            virtual Option<PlayAction> play_response(
                 const GameContext &ctx,
                 const std::string &entity_id,
                 card::ResponseKind kind) = 0;

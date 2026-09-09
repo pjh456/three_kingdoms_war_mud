@@ -207,6 +207,94 @@ TEST_CASE("ai: human decider plays the zhangba two-card action")
     CHECK(out.str().find("x#2") != std::string::npos);  // 渲染了第二张牌
 }
 
+TEST_CASE("ai: simple ai answers a sha window with the zhangba pair")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.equip("a", "zhangba", "e#0");
+    g.give("a", "wuzhong", "x#1");
+    g.give("a", "tao", "x#2");  // 无真杀：两张当杀
+
+    SimpleAI ai;
+    const auto chosen =
+        ai.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().instance_id == "x#1");
+    CHECK(chosen.unwrap().second_instance_id == "x#2");
+
+    // 手牌有真杀：真杀优先，不出两张当杀
+    g.give("a", "sha", "s#1");
+    const auto again =
+        ai.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha);
+    REQUIRE(again.is_some());
+    CHECK(again.unwrap().instance_id == "s#1");
+    CHECK(again.unwrap().second_instance_id.empty());
+}
+
+TEST_CASE("ai: human decider answers a sha with a card pair")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.equip("a", "zhangba", "e#0");
+    g.give("a", "wuzhong", "x#1");
+    g.give("a", "tao", "x#2");
+
+    std::istringstream in("play 1 + 2\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    const auto chosen =
+        src.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().instance_id == "x#1");
+    CHECK(chosen.unwrap().second_instance_id == "x#2");
+    CHECK(out.str().find("x#2") != std::string::npos);  // 渲染了手牌列表
+}
+
+TEST_CASE("ai: human decider reprompts on a single index in the pair response")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.equip("a", "zhangba", "e#0");
+    g.give("a", "wuzhong", "x#1");
+    g.give("a", "tao", "x#2");
+
+    std::istringstream in("play 1\nplay 1 + 2\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    const auto chosen =
+        src.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().instance_id == "x#1");
+    CHECK(chosen.unwrap().second_instance_id == "x#2");
+    CHECK(out.str().find("输入无效") != std::string::npos);
+}
+
+TEST_CASE("ai: human decider declines the zhangba pair response")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.equip("a", "zhangba", "e#0");
+    g.give("a", "wuzhong", "x#1");
+    g.give("a", "tao", "x#2");
+
+    std::istringstream in("pass\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    CHECK(src.play_response(
+                g.ctx, "a", tkw::card::ResponseKind::Sha)
+              .is_none());
+}
+
 TEST_CASE("ai: human decider declines response")
 {
     TestGame g("deck");
@@ -385,11 +473,11 @@ TEST_CASE("ai: routed ai falls back for non-human response window")
     const auto a_card =
         routed.play_response(g.ctx, "a", tkw::card::ResponseKind::Jink);
     REQUIRE(a_card.is_some());
-    CHECK(a_card.unwrap() == "j#1");
+    CHECK(a_card.unwrap().instance_id == "j#1");
 
     // b 非真人：SimpleAI 取首张闪，不消费输入流（输入已被 a 读空）。
     const auto b_card =
         routed.play_response(g.ctx, "b", tkw::card::ResponseKind::Jink);
     REQUIRE(b_card.is_some());
-    CHECK(b_card.unwrap() == "j#2");
+    CHECK(b_card.unwrap().instance_id == "j#2");
 }

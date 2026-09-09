@@ -4,7 +4,8 @@
  * @note 逻辑集中在 SimpleDecider::decide（只读 DecisionRequest）；SimpleAI 把
  *       它经 RequestDecisionSource 适配成引擎可用的 DecisionSource。只做「合法
  *       且能推进」的动作：出杀（按回合上下文给的次数上限）、可结算锦囊、装备。
- *       不出无懈（避免自抵消）；武器效果按代价可付性决定是否发动。
+ *       不出无懈（避免自抵消）；武器效果按代价可付性决定是否发动。响应窗口取
+ *       第一张真响应牌，杀响应无真杀时用两张手牌当杀（丈八蛇矛）。
  */
 
 #ifndef INCLUDE_TKW_GAME_AI_SIMPLE_HPP
@@ -39,6 +40,7 @@ namespace tkw
                     case DecisionKind::Play:
                         return decide_play(req);
                     case DecisionKind::Response:
+                        return decide_response(req);
                     case DecisionKind::Peach:
                     case DecisionKind::Counter:
                         return decide_first_id(req);
@@ -54,7 +56,27 @@ namespace tkw
                 }
 
             private:
-                /** 响应/救桃取第一张候选；无懈一律不出（避免自抵消）。 */
+                /**
+                 * @brief 响应窗口：真响应牌（闪/杀）取第一张候选；杀响应无真杀时
+                 *        取首个两张当杀 pair（丈八蛇矛，真杀优先与主动侧一致）。
+                 */
+                static DecisionChoice decide_response(const DecisionRequest &req)
+                {
+                    DecisionChoice out;
+                    if (!req.options.empty())
+                        out.instance_id = Option<std::string>::Some(
+                            req.options.front().instance_id);
+                    else if (!req.legal.empty())
+                    {
+                        const auto &pair = req.legal.front();
+                        out.instance_id =
+                            Option<std::string>::Some(pair.card.instance_id);
+                        out.second_instance_id = pair.second_instance_id;
+                    }
+                    return out;
+                }
+
+                /** 救桃取第一张候选；无懈一律不出（避免自抵消）。 */
                 static DecisionChoice decide_first_id(const DecisionRequest &req)
                 {
                     DecisionChoice out;

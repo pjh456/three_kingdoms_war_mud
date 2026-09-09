@@ -21,6 +21,7 @@
 #include "entity/hp.hpp"
 #include "game/core/decision.hpp"
 #include "game/flow/table.hpp"
+#include "game/query/equip.hpp"
 #include "util/rng.hpp"
 
 namespace tkw
@@ -82,9 +83,10 @@ namespace tkw
             }
         };
 
-        /** 确定性决策源：respond=是否总是打出响应牌；save=是否有桃就救；
-         *  counter=有无懈就出；triggers=会发动的装备效果；plays=出牌脚本
-         *  （依次执行，耗尽即结束出牌）；弃牌=手牌前 count 张。 */
+        /** 确定性决策源：respond=是否总是打出响应牌（杀响应无真杀且装备
+         *  丈八蛇矛时改为两张手牌当杀）；save=是否有桃就救；counter=有无懈就出；
+         *  triggers=会发动的装备效果；plays=出牌脚本（依次执行，耗尽即结束
+         *  出牌）；弃牌=手牌前 count 张。 */
         struct TestDecider : DecisionSource
         {
             bool respond = false;
@@ -92,18 +94,20 @@ namespace tkw
             bool counter = false;
             bool bogus_pick = false;  /**< 选牌返回一张不存在的牌（校验测试用） */
             std::string response_id;  /**< 非空时响应窗口固定打出该牌 */
+            std::string response_second_id; /**< 非空时与 response_id 成对（两张当杀） */
             std::vector<Ability> triggers;
             std::vector<PlayAction> plays;
             std::size_t play_cursor = 0;
 
-            Option<std::string> play_response(
+            Option<PlayAction> play_response(
                 const GameContext &ctx, const std::string &entity,
                 ResponseKind kind) override
             {
                 if (!response_id.empty())
-                    return Option<std::string>::Some(response_id);
+                    return Option<PlayAction>::Some(
+                        PlayAction{response_id, {}, response_second_id});
                 if (!respond)
-                    return Option<std::string>::None();
+                    return Option<PlayAction>::None();
                 for (const auto &c : ctx.cards->hand(entity))
                 {
                     const auto def = ctx.catalog->find(c.def_id);
@@ -114,9 +118,19 @@ namespace tkw
                          ek == tkw::card::CardEffectKind::Damage) ||
                         (kind == ResponseKind::Jink &&
                          ek == tkw::card::CardEffectKind::Jink))
-                        return Option<std::string>::Some(c.instance_id);
+                        return Option<PlayAction>::Some(PlayAction{c.instance_id, {}});
                 }
-                return Option<std::string>::None();
+                // 无真响应牌：丈八蛇矛两张手牌当杀（确定性首 pair，与主动侧一致）
+                if (kind == ResponseKind::Sha &&
+                    has_ability(ctx, entity, Ability::TwoCardsAsSha))
+                {
+                    const auto &hand = ctx.cards->hand(entity);
+                    if (hand.size() >= 2)
+                        return Option<PlayAction>::Some(
+                            PlayAction{hand.front().instance_id, {},
+                                      hand[1].instance_id});
+                }
+                return Option<PlayAction>::None();
             }
 
             Option<std::string> play_peach(

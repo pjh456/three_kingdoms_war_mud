@@ -2158,3 +2158,169 @@ TEST_CASE("game: simple ai uses zhangba before other tricks when holding no sha"
     CHECK(b->get_hp() == 3);  // 两张牌当杀打出，而非先打无中生有
     CHECK(g.cards.hand_size("a") == 0);
 }
+
+// ── 杀响应窗口：丈八蛇矛两张手牌当杀（响应侧）──────────────────────────
+
+TEST_CASE("game: zhangba answers a duel sha with two hand cards")
+{
+    TestGame g("deck");
+    g.rules.duel_rounds = 3;  // 截断后续空轮
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.give("a", "juedou", "j#0");
+    g.give("a", "sha", "s#1");
+    g.equip("b", "zhangba", "e#0");
+    g.give("b", "wuzhong", "x#1");
+    g.give("b", "tao", "x#2");  // b 无真杀：两张手牌当杀
+
+    TestDecider decider;
+    decider.respond = true;
+    const auto played = g.cards.hand("a")[0];  // 决斗
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);           // b 首张当杀免伤，次轮才受击
+    CHECK(g.cards.hand_size("b") == 0); // 两张牌已消耗
+    CHECK(g.cards.hand_size("a") == 0); // 决斗牌 + 真杀
+}
+
+TEST_CASE("game: zhangba answers a borrowed sword with a virtual sha")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    g.equip("b", "zhangba", "e#0");  // b 的武器即丈八蛇矛
+    g.give("a", "jiedao", "j#0");
+    g.give("b", "wuzhong", "x#1");
+    g.give("b", "tao", "x#2");  // b 无真杀：两张手牌当杀对 c
+
+    TestDecider decider;
+    decider.respond = true;
+    const auto played = g.cards.hand("a")[0];  // 借刀杀人 {b, c}
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c"});
+    REQUIRE(r.is_ok());
+    CHECK(c->get_hp() == 3);            // b 的虚拟杀命中 c
+    CHECK(g.cards.hand_size("b") == 0);  // 两张牌已消耗
+    CHECK(g.cards.equip_size("b") == 1); // 武器仍在
+    CHECK(g.cards.hand_size("a") == 0);  // 未夺回武器
+}
+
+TEST_CASE("game: zhangba response sha can still be jinked")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    g.equip("b", "zhangba", "e#0");
+    g.give("a", "jiedao", "j#0");
+    g.give("b", "wuzhong", "x#1");
+    g.give("b", "tao", "x#2");
+    g.give("c", "shan", "c#1");  // c 可闪
+
+    TestDecider decider;
+    decider.respond = true;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c"});
+    REQUIRE(r.is_ok());
+    CHECK(c->get_hp() == 4);           // 虚拟杀被闪
+    CHECK(g.cards.hand_size("c") == 0); // 闪已消耗
+    CHECK(g.cards.hand_size("b") == 0); // 响应两张牌照消耗（被闪不回退）
+}
+
+TEST_CASE("game: zhangba response requires the equipped weapon")
+{
+    TestGame g("deck");
+    g.rules.duel_rounds = 2;
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.give("a", "juedou", "j#0");
+    g.give("a", "sha", "s#1");
+    g.give("b", "wuzhong", "x#1");
+    g.give("b", "tao", "x#2");  // 未装备丈八蛇矛：两张牌不是响应
+
+    TestDecider decider;
+    decider.respond = true;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);          // 无响应，受击
+    CHECK(g.cards.hand_size("b") == 2);  // 两张牌未消耗
+}
+
+TEST_CASE("game: cixiong fires for the zhangba response virtual sha")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);  // 默认男
+    auto *c = g.add_player("c", 2, 4, Gender::Female);
+    // 夹具直接叠两件武器（单槽约束属装备流程，非本用例关注点）
+    g.equip("b", "cixiong", "e#0");
+    g.equip("b", "zhangba", "e#1");
+    g.give("a", "jiedao", "j#0");
+    g.give("b", "wuzhong", "x#1");
+    g.give("b", "tao", "x#2");
+    g.give("c", "wuzhong", "c#1");  // c 一张手牌（非闪）
+
+    TestDecider decider;
+    decider.respond = true;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c"});
+    REQUIRE(r.is_ok());
+    CHECK(c->get_hp() == 3);            // 虚拟杀命中
+    CHECK(g.cards.hand_size("c") == 0); // 雌雄令 c 弃一张（OnTarget 生效）
+    CHECK(g.cards.hand_size("b") == 0); // 两张牌已消耗
+}
+
+TEST_CASE("game: zhangba answers a nanman sha with two hand cards")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("b", "zhangba", "e#0");
+    g.give("a", "nanman", "n#0");
+    g.give("b", "wuzhong", "x#1");
+    g.give("b", "tao", "x#2");
+
+    TestDecider decider;
+    decider.respond = true;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 4);           // 两张当杀免伤
+    CHECK(g.cards.hand_size("b") == 0); // 两张牌已消耗
+}
+
+TEST_CASE("game: zhangba response pair candidates are all accepted by the engine")
+{
+    auto build = [](TestGame &g)
+    {
+        g.add_player("a", 0, 4);
+        g.add_player("b", 1, 4);
+        g.add_player("c", 2, 4);
+        g.equip("b", "zhangba", "e#0");
+        g.give("a", "jiedao", "j#0");
+        g.give("b", "wuzhong", "x#1");
+        g.give("b", "tao", "x#2");
+        g.give("b", "shan", "x#3");
+    };
+
+    TestGame g("deck");
+    build(g);
+    const auto pairs = two_cards_as_sha_pairs(g.ctx, "b");
+    REQUIRE(pairs.size() == 3);
+
+    for (const auto &[first, second] : pairs)
+    {
+        TestGame fresh("deck");
+        build(fresh);
+        TestDecider d;
+        d.response_id = first.instance_id;
+        d.response_second_id = second.instance_id;
+        const auto played = fresh.cards.hand("a")[0];
+        auto r = resolve_play(fresh.ctx, d, "a", played, {"b", "c"});
+        INFO("pair=" << first.instance_id << " + " << second.instance_id);
+        CHECK(r.is_ok());
+        CHECK(fresh.entities.find("c").unwrap()->get_hp() == 3);
+        CHECK(fresh.cards.hand_size("b") == 1);
+    }
+}

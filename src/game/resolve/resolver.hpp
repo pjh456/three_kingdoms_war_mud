@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -57,6 +58,11 @@ namespace tkw
         using GameResult = Result<T, EffectError>;
 
         // 效果类别属性（is_settleable_kind / is_unimplemented_active_kind）见 effect.hpp
+
+        // 杀响应窗口入口（决斗/南蛮/借刀共用；定义见结算区末尾）
+        inline bool respond_sha(
+            GameContext &ctx, DecisionSource &ai,
+            const std::string &entity, const std::string &victim);
 
         // ── 目标选择 ────────────────────────────────────────────────────
 
@@ -394,8 +400,12 @@ namespace tkw
                             continue;
                         bool responded = false;
                         if (eff.response.is_some())
-                            responded =
-                                request_response(ctx, ai, t, eff.response.unwrap());
+                        {
+                            const auto kind = eff.response.unwrap();
+                            responded = kind == card::ResponseKind::Sha
+                                ? respond_sha(ctx, ai, t, "")
+                                : request_response(ctx, ai, t, kind);
+                        }
                         if (!responded)
                             deal_damage(ctx, ai, player, t, eff.amount);
                     }
@@ -479,8 +489,7 @@ namespace tkw
                         std::string defender = targets.front();
                         for (int round = 0; round < rules_of(ctx).duel_rounds; ++round)
                         {
-                            if (!request_response(
-                                    ctx, ai, defender, card::ResponseKind::Sha))
+                            if (!respond_sha(ctx, ai, defender, ""))
                             {
                                 deal_damage(ctx, ai, attacker, defender, eff.amount);
                                 return GameResult<void>::Ok();
@@ -543,19 +552,8 @@ namespace tkw
                     const std::string &holder = targets[0];
                     const std::string &victim = targets[1];
 
-                    const auto chosen =
-                        consume_response(ctx, ai, holder, card::ResponseKind::Sha);
-                    if (chosen.is_some())
-                    {
-                        card::Card sha_card = chosen.unwrap();
-                        emit_card_played(ctx, holder, sha_card);
-                        int dmg = 1;
-                        const auto sd = ctx.catalog->find(sha_card.def_id);
-                        if (sd.is_some() && sd.unwrap()->effect.is_some())
-                            dmg = sd.unwrap()->effect.unwrap().amount;
-                        resolve_sha(ctx, ai, holder, sha_card, victim, dmg);
+                    if (respond_sha(ctx, ai, holder, victim))
                         return GameResult<void>::Ok();
-                    }
 
                     // 未出杀：使用者获得 holder 的武器
                     for (const auto &c : ctx.cards->equip(holder))
@@ -655,6 +653,101 @@ namespace tkw
                 resolve_sha(ctx, ai, player, virtual_sha, t, eff.amount,
                             static_cast<int>(targets.size()), true);
             return GameResult<void>::Ok();
+        }
+
+        /**
+         * @brief 开杀响应窗口并消费响应杀：响应者打出一张真杀，或（装备两张当杀
+         *        能力时）打出两张手牌当杀。消费在本函数内完成（弃置+事件）；
+         *        给出结算目标（借刀的 B）时再按杀对其结算（真杀带花色、虚拟杀
+         *        无花色），否则仅消费（决斗/南蛮无结算目标）。
+         * @return 是否发生了有效杀响应；非法选择（幽灵引用/非杀的牌）按不响应
+         *         处理，不消耗牌。
+         * @note 响应侧不受出牌阶段杀次数限制（次数是出牌阶段「本回合已用杀」的
+         *         簿记，响应窗口不在出牌阶段簿记内）。
+         */
+        inline bool respond_sha(
+            GameContext &ctx, DecisionSource &ai,
+            const std::string &entity, const std::string &victim)
+        {
+            if (!has_response_card(ctx, entity, card::ResponseKind::Sha))
+                return false;
+            const auto chosen = ai.play_response(ctx, entity, card::ResponseKind::Sha);
+            if (chosen.is_none())
+                return false;
+            const auto &act = chosen.unwrap();
+
+            if (!act.second_instance_id.empty())
+            {
+                // 两张当杀（丈八蛇矛）：先校验，非法选择按不响应、不消耗
+                bool in_first = false;
+                bool in_second = false;
+                if (act.instance_id != act.second_instance_id)
+                {
+                    for (const auto &c : ctx.cards->hand(entity))
+                    {
+                        if (c.instance_id == act.instance_id)
+                            in_first = true;
+                        else if (c.instance_id == act.second_instance_id)
+                            in_second = true;
+                    }
+                }
+                const TurnContext unlimited{entity, 0, std::numeric_limits<int>::max()};
+                if (!has_ability(ctx, entity, card::Ability::TwoCardsAsSha) ||
+                    find_sha_def(ctx).is_none() || !in_first || !in_second ||
+                    (!victim.empty() &&
+                     validate_virtual_sha(
+                         ctx, entity, act.instance_id, act.second_instance_id,
+                         std::vector<std::string>{victim}, unlimited)
+                         .is_err()))
+                    return false;
+
+                // 有结算目标：虚拟杀结算接管（消费+逐目标结算）
+                if (!victim.empty())
+                    return resolve_virtual_sha(
+                               ctx, ai, entity, act.instance_id,
+                               act.second_instance_id,
+                               std::vector<std::string>{victim})
+                        .is_ok();
+
+                // 无结算目标（决斗/南蛮）：仅消费两张
+                auto removed = ctx.cards->remove_from_hand(entity, act.instance_id);
+                if (removed.is_none())
+                    return false;
+                card::Card first = std::move(removed).unwrap();
+                ctx.cards->discard(first);
+                emit_card_played(ctx, entity, first);
+                removed = ctx.cards->remove_from_hand(entity, act.second_instance_id);
+                if (removed.is_none())
+                    return false;
+                card::Card second = std::move(removed).unwrap();
+                ctx.cards->discard(second);
+                emit_card_played(ctx, entity, second);
+                return true;
+            }
+
+            // 真杀：单牌消费（与既有响应窗口行为一致）
+            auto removed = ctx.cards->remove_from_hand(entity, act.instance_id);
+            if (removed.is_none())
+                return false;
+            card::Card card = std::move(removed).unwrap();
+            const auto def = ctx.catalog->find(card.def_id);
+            if (def.is_none() ||
+                !is_response_def(*def.unwrap(), card::ResponseKind::Sha))
+            {
+                ctx.cards->add_to_hand(entity, std::move(card));
+                return false;
+            }
+            ctx.cards->discard(card);
+            emit_card_discarded(ctx, entity, card);
+            if (!victim.empty())
+            {
+                int dmg = 1;
+                if (def.unwrap()->effect.is_some())
+                    dmg = def.unwrap()->effect.unwrap().amount;
+                emit_card_played(ctx, entity, card);
+                resolve_sha(ctx, ai, entity, card, victim, dmg);
+            }
+            return true;
         }
     }
 }
