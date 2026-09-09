@@ -78,6 +78,41 @@ namespace
     /** 从解析上下文读参数（无 base：一次性命令使用选项默认值）。 */
     Options options_from(ParseContext &ctx) { return options_from(ctx, Options{}); }
 
+    /**
+     * @brief 在命令上声明公共选项（牌堆/人数/手牌/种子/日志/自动存档/真人座位）。
+     * @param cmd   目标命令：根命令或会读取这些选项的 leaf。
+     * @param rules 玩家数上下限来源。
+     * @note pjh_cli 的选项声明只查当前命令、值才沿父链查找，故根命令与各 leaf
+     *       需各声明一份，子命令名之后的选项才可解析；未显式给的项仍由
+     *       options_from 沿父链或会话启动选项回落，声明处一律不设默认值。
+     */
+    void declare_common_options(
+        pjh::cli::BaseCommand &cmd, const tkw::game::RulesConfig &rules)
+    {
+        cmd.option<fixed_string("deck")>(
+               "--deck", 'd', "资源目录（含 deck.json 与 cards/）")
+            .path();
+        cmd.option<fixed_string("players")>("--players", 'p', "玩家数")
+            .integer()
+            .min(rules.min_players)
+            .max(rules.max_players);
+        cmd.option<fixed_string("hand")>("--hand", "初始手牌数")
+            .integer()
+            .min(0)
+            .max(20);
+        cmd.option<fixed_string("seed")>("--seed", 's', "随机种子").integer().min(0);
+        cmd.option<fixed_string("verbose")>("--verbose", 'v', "打印卡牌/死亡事件日志")
+            .boolean();
+        cmd.option<fixed_string("autosave")>(
+               "--autosave", "REPL 退出时自动存档路径（空串关闭）")
+            .path();
+        cmd.option<fixed_string("human")>(
+               "--human",
+               "真人座位（可重复：--human P0 --human P2；存档不保存，读档后需重新指定）")
+            .str()
+            .repeatable();
+    }
+
     /** 跨命令持有的对局会话（new/step/run/save/load 共享）。 */
     struct Session
     {
@@ -393,44 +428,22 @@ int main(int argc, char **argv)
     const tkw::game::RulesConfig rules{};
     Session session;  // 跨命令持有的对局会话
 
-    // 根命令选项（无子命令时直接跑一局，兼容旧用法）
-    // 默认值统一由 options_from 提供：REPL 每行独立解析，选项无默认值才能让
-    // 未显式指定的项回落会话启动选项（见 options_from 的 base 合并）。
-    app.option<fixed_string("deck")>(
-        "--deck", 'd', "资源目录（含 deck.json 与 cards/）")
-        .path();
-    app.option<fixed_string("players")>("--players", 'p', "玩家数")
-        .integer()
-        .min(rules.min_players)
-        .max(rules.max_players);
-    app.option<fixed_string("hand")>("--hand", "初始手牌数")
-        .integer()
-        .min(0)
-        .max(20);
-    app.option<fixed_string("seed")>("--seed", 's', "随机种子").integer().min(0);
-    app.option<fixed_string("verbose")>("--verbose", 'v', "打印卡牌/死亡事件日志")
-        .boolean();
-    app.option<fixed_string("autosave")>(
-        "--autosave", "REPL 退出时自动存档路径（空串关闭）")
-        .path();
-    app.option<fixed_string("human")>(
-        "--human",
-        "真人座位（可重复：--human P0 --human P2；存档不保存，读档后需重新指定）")
-        .str()
-        .repeatable();
+    // 根命令选项（无子命令时直接跑一局，兼容旧用法）；读取这些选项的 leaf 各自
+    // 声明一份，使子命令名之后的选项也可解析。
+    declare_common_options(app, rules);
 
     app.action([](ParseContext &ctx) -> CliResult<void>
                { return run_game(options_from(ctx)); });
 
     // audit：审计牌堆
     auto &audit = app.add_leaf("audit", "审计牌堆，列出引擎未实现的卡");
-    audit.option<fixed_string("deck")>(
-        "--deck", 'd', "资源目录", std::filesystem::path("resources"));
+    declare_common_options(audit, rules);
     audit.action([](ParseContext &ctx) -> CliResult<void>
                  { return audit_deck(options_from(ctx)); });
 
-    // deal：位置参数跑局（REPL/批量通用，避免父选项位置限制）
+    // deal：位置参数跑局（REPL/批量通用）
     auto &deal = app.add_leaf("deal", "跑一局：deal <玩家数> <种子>");
+    declare_common_options(deal, rules);
     deal.arg<int, 0>("players", "玩家数").required();
     deal.arg<int, 1>("seed", "随机种子").required();
     deal.action(
@@ -446,6 +459,7 @@ int main(int argc, char **argv)
 
     // new：开新对局（不立即跑），供 step/run/save 续用
     auto &new_cmd = app.add_leaf("new", "开新对局（用 --players/--seed/--hand）");
+    declare_common_options(new_cmd, rules);
     new_cmd.action(
         [&session](ParseContext &ctx) -> CliResult<void>
         { return cmd_new(options_from(ctx, session.base), session); });
@@ -478,6 +492,7 @@ int main(int argc, char **argv)
 
     // load：从存档继续
     auto &load_cmd = app.add_leaf("load", "加载存档：load <file>");
+    declare_common_options(load_cmd, rules);
     load_cmd.arg<std::string, 0>("file", "存档路径").required();
     load_cmd.action(
         [&session](ParseContext &ctx) -> CliResult<void>
@@ -489,6 +504,7 @@ int main(int argc, char **argv)
 
     // repl：交互模式（对局即 MUD 方向）
     auto &repl = app.add_leaf("repl", "进入交互模式（? 查看命令，quit 退出）");
+    declare_common_options(repl, rules);
     repl.set_visibility(Visibility::Cli);
     repl.action(
         [&app, &session](ParseContext &ctx) -> CliResult<void>

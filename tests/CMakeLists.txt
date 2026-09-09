@@ -79,3 +79,28 @@ target_compile_definitions(
     save_tests PRIVATE TKW_TEST_RESOURCE_DIR="${CMAKE_SOURCE_DIR}/resources")
 
 doctest_discover_tests(save_tests)
+
+# CLI 端到端：选项可置于子命令名之后，前置写法与未知选项行为不变。
+add_test(NAME cli_option_after_subcommand
+         COMMAND tkw new --human P0 --players 2 --seed 1)
+set_tests_properties(cli_option_after_subcommand PROPERTIES
+    PASS_REGULAR_EXPRESSION "新对局已开始"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_test(NAME cli_option_before_subcommand
+         COMMAND tkw --human P0 --players 2 --seed 1 new)
+set_tests_properties(cli_option_before_subcommand PROPERTIES
+    PASS_REGULAR_EXPRESSION "新对局已开始"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_test(NAME cli_deal_option_after_positional
+         COMMAND tkw deal 2 1 --verbose)
+set_tests_properties(cli_deal_option_after_positional PROPERTIES
+    PASS_REGULAR_EXPRESSION "胜者|平局"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_test(NAME cli_unknown_option_still_errors
+         COMMAND tkw new --bogus)
+set_tests_properties(cli_unknown_option_still_errors PROPERTIES
+    WILL_FAIL TRUE
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
