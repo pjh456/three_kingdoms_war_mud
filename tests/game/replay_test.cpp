@@ -162,3 +162,48 @@ TEST_CASE("replay: golden fingerprints pin the rule semantics")
     CHECK(four.size() == 311);
     CHECK(fingerprint(four) == 14868230118118502795ULL);
 }
+
+TEST_CASE("replay: two-player games stay consistent across seeds")
+{
+    // 黄金指纹只钉两个固定种子；这里多种子扫描补轻量不变量，不重钉任何指纹。
+    // 种子区间覆盖自然分胜负与到达回合上限的两种结束形态。
+    for (std::uint32_t seed = 1; seed <= 40; ++seed)
+    {
+        TestGame g("deck", seed);
+        g.add_player("P0", 0, 4);
+        g.add_player("P1", 1, 4);
+
+        EventLog log(g.bus);
+        tkw::game::SimpleAI ai;
+        const auto r = tkw::game::play_game(g.ctx, ai, "P0");
+
+        // 事件流非空：每局至少含开局发牌
+        CHECK(!log.lines().empty());
+
+        // 存活实体体力为正：死亡实体已从容器移除，不留非法血条
+        for (const auto &e : *g.ctx.entities)
+            CHECK(e->get_hp() > 0);
+
+        if (r.is_ok())
+        {
+            CHECK(tkw::game::session_over(g.ctx));
+            const auto winner = tkw::game::session_winner(g.ctx);
+            const bool winner_alive =
+                winner.empty() || g.ctx.entities->find(winner).is_some();
+            CHECK(winner_alive);
+        }
+        else
+        {
+            CHECK(r.unwrap_err() == tkw::game::LoopError::MaxRounds);
+        }
+
+        // 同种子可重放：第二局逐行一致（扫描不放松确定性契约）
+        TestGame again("deck", seed);
+        again.add_player("P0", 0, 4);
+        again.add_player("P1", 1, 4);
+        EventLog log2(again.bus);
+        tkw::game::SimpleAI ai2;
+        (void)tkw::game::play_game(again.ctx, ai2, "P0");
+        CHECK(log.lines() == log2.lines());
+    }
+}

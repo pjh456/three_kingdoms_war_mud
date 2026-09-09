@@ -1949,6 +1949,32 @@ TEST_CASE("game: fangtian rejects more targets than the extra allowance")
     CHECK(g.cards.hand_size("a") == 1);  // 校验失败，杀未消耗
 }
 
+TEST_CASE("game: fangtian does not relax non-damage one-other target count")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    g.equip("a", "fangtian", "e#0");
+    g.give("a", "guohe", "g#1");  // 唯一手牌，非杀类 OneOther（discard_target）
+    g.give("b", "shan", "b#1");
+    g.give("c", "shan", "c#1");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+    CHECK(g.cards.hand_size("a") == 1);  // 校验失败，拆桥未消耗
+
+    // 单目标仍合法：放宽只作用于杀，普通 OneOther 维持一目标上限
+    auto r2 = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r2.is_ok());
+    CHECK(g.cards.hand_size("a") == 0);
+    CHECK(g.cards.hand_size("b") == 0);  // 目标被拆走一张
+    CHECK(c->get_hp() == 4);
+}
+
 TEST_CASE("game: cixiong makes the opposite gender target discard")
 {
     TestGame g("deck");

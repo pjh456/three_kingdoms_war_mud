@@ -173,6 +173,25 @@ set_tests_properties(cli_repl_query_and_help_zh PROPERTIES
 # verbose 日志可读性：卡牌事件用中文卡名，且补伤害/体力行（seed 固定，输出确定）。
 add_test(NAME cli_verbose_log_zh
          COMMAND sh -c
-                 "out=$($<TARGET_FILE:tkw> --verbose deal 2 1 2>&1); printf '%s' \"$out\" | grep -q '\\[打出\\] P0 杀' && printf '%s' \"$out\" | grep -q '\\[伤害\\] P0 -> P1' && printf '%s' \"$out\" | grep -q '\\[体力\\] P1'")
+                 "out=$($<TARGET_FILE:tkw> --verbose deal 2 1 2>&1); printf '%s' \"$out\" | grep -q '\\[打出\\] P0 杀' && printf '%s' \"$out\" | grep -q '\\[伤害\\] P0 -> P1 1' && printf '%s' \"$out\" | grep -q '\\[体力\\] P1 4->3/4'")
 set_tests_properties(cli_verbose_log_zh PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 裸 tkw 与 REPL 各打印一行引导文案。
+add_test(NAME cli_bare_root_banner
+         COMMAND sh -c "$<TARGET_FILE:tkw> 2>&1 | grep -q '无子命令'")
+set_tests_properties(cli_bare_root_banner PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_test(NAME cli_repl_banner
+         COMMAND sh -c
+                 "printf 'quit\\n' | $<TARGET_FILE:tkw> repl 2>&1 | grep -q 'quit 退出'")
+set_tests_properties(cli_repl_banner PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 解析错误保留框架统一前缀并退出 2（执行错误走另一路径，退出 1）。
+add_test(NAME cli_parse_error_prefix_and_rc
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> new --bogus 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '^Parse Error: ' && [ $rc -eq 2 ]")
+set_tests_properties(cli_parse_error_prefix_and_rc PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

@@ -34,6 +34,23 @@ namespace
                 g->add_player("P" + std::to_string(i), i, entity::Hp::make(4)).is_ok());
         return g;
     }
+
+    /** 混合性别夹具：P1/P2 为女，其余为男（性别值不再与默认回退重合）。 */
+    std::unique_ptr<Game> make_game_mixed(std::uint32_t seed)
+    {
+        config::ResourceStore store(TKW_TEST_RESOURCE_DIR);
+        auto cat = card::CardDefCatalog::load(store, "deck");
+        REQUIRE(cat.is_ok());
+        auto g = std::make_unique<Game>(
+            std::move(cat).unwrap(), std::make_unique<SeededRng>(seed));
+        const entity::Gender genders[] = {
+            entity::Gender::Male, entity::Gender::Female,
+            entity::Gender::Female, entity::Gender::Male};
+        for (int i = 0; i < 4; ++i)
+            REQUIRE(g->add_player("P" + std::to_string(i), i,
+                                  entity::Hp::make(4), genders[i]).is_ok());
+        return g;
+    }
 }
 
 TEST_CASE("save: round-trips a mid-game state and continues identically")
@@ -97,6 +114,32 @@ TEST_CASE("save: legacy saves without gender load as all male")
         CHECK(b->entities.find("P" + std::to_string(i)).unwrap()->get_gender() ==
               entity::Gender::Male);
     // 规范化往返：旧档加载后再存 = 新格式原文
+    CHECK(save::write(*b, sb, "deck") == text);
+}
+
+TEST_CASE("save: female gender survives the round trip")
+{
+    auto a = make_game_mixed(42);
+    auto ctxa = a->context();
+    GameSession sa;
+    REQUIRE(start_session(ctxa, sa, "P0").is_ok());
+
+    const std::string text = save::write(*a, sa, "deck");
+    REQUIRE(text.find("\"gender\":\"female\"") != std::string::npos);
+    REQUIRE(text.find("\"gender\":\"male\"") != std::string::npos);
+
+    // 目标先建全男占位：读档后性别事实源必须是存档，而非缺字段时的 Male 回退
+    auto b = make_game(999);
+    GameSession sb;
+    REQUIRE(save::read(text, *b, sb).is_ok());
+    const entity::Gender expect[] = {
+        entity::Gender::Male, entity::Gender::Female,
+        entity::Gender::Female, entity::Gender::Male};
+    for (int i = 0; i < 4; ++i)
+        CHECK(b->entities.find("P" + std::to_string(i)).unwrap()->get_gender() ==
+              expect[i]);
+
+    // 规范化往返：读档后再存 = 原文
     CHECK(save::write(*b, sb, "deck") == text);
 }
 

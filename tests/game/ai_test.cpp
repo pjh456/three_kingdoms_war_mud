@@ -28,17 +28,22 @@ namespace
     {
         DecisionKind last = DecisionKind::Play;
         std::size_t legal_count = 0;
+        std::size_t pick_index = 0;     /**< 选中的 legal 动作下标（默认首个） */
+        std::string second_instance_id; /**< 最近一次透传的第二张手牌 */
 
         DecisionChoice decide(const DecisionRequest &req) override
         {
             last = req.kind;
             legal_count = req.legal.size();
             DecisionChoice out;
-            if (req.kind == DecisionKind::Play && !req.legal.empty())
+            if (req.kind == DecisionKind::Play && req.legal.size() > pick_index)
             {
+                const auto &act = req.legal[pick_index];
                 out.instance_id = tkw::Option<std::string>::Some(
-                    req.legal.front().card.instance_id);
-                out.targets = req.legal.front().targets;
+                    act.card.instance_id);
+                out.targets = act.targets;
+                out.second_instance_id = act.second_instance_id;
+                second_instance_id = act.second_instance_id;
             }
             return out;
         }
@@ -140,6 +145,36 @@ TEST_CASE("ai: decider receives play request with legal moves")
     CHECK(rec.legal_count > 0);
     REQUIRE(act.is_some());
     CHECK(act.unwrap().instance_id == "s#1");
+}
+
+TEST_CASE("ai: decider forwards the zhangba second card")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.equip("a", "zhangba", "e#0");
+    g.give("a", "wuzhong", "x#1");
+    g.give("a", "tao", "x#2");  // 无真杀：两张当杀 pair 进入候选
+
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    const auto legal = tkw::game::legal_actions(g.ctx, "a", turn);
+    std::size_t pair_index = legal.size();
+    for (std::size_t i = 0; i < legal.size(); ++i)
+        if (!legal[i].second_instance_id.empty())
+        {
+            pair_index = i;
+            break;
+        }
+    REQUIRE(pair_index < legal.size());
+
+    RecordingDecider rec;
+    rec.pick_index = pair_index;
+    RequestDecisionSource src(rec);
+    const auto act = src.choose_play(g.ctx, turn);
+    REQUIRE(act.is_some());
+    CHECK(act.unwrap().second_instance_id == legal[pair_index].second_instance_id);
+    CHECK(act.unwrap().second_instance_id == "x#2");
+    CHECK(rec.second_instance_id == "x#2");
 }
 
 TEST_CASE("ai: simple trigger respects the discard cost")
