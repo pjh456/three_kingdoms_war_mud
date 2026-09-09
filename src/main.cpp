@@ -4,6 +4,7 @@
  *        repl 进入交互模式。
  */
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
@@ -19,6 +20,7 @@
 #include "entity/event.hpp"
 #include "entity/hp.hpp"
 #include "event/handler.hpp"
+#include "game/ai/human.hpp"
 #include "game/ai/simple.hpp"
 #include "game/resolve/audit.hpp"
 #include "game/core/card_event.hpp"
@@ -49,30 +51,40 @@ namespace
         std::uint32_t seed = 42;
         bool verbose = false;
         std::filesystem::path autosave = "tkw-autosave.json";
+        std::vector<std::string> humans; /**< 真人座位 id（可重复选项累积） */
     };
 
-    /** 从解析上下文读参数（子命令经父链继承根命令的选项）。 */
-    Options options_from(ParseContext &ctx)
+    /**
+     * @brief 从解析上下文读参数；未出现的选项回落 base。
+     * @note REPL 每行命令独立解析，根选项不会自动继承启动命令行的取值，
+     *       故 REPL 内建局以启动选项为 base 合并，行内显式选项优先。
+     */
+    Options options_from(ParseContext &ctx, const Options &base)
     {
-        Options opt;
-        opt.deck = ctx.get_or<std::filesystem::path, fixed_string("deck")>(
-            std::filesystem::path("resources"));
-        opt.players = ctx.get_or<int, fixed_string("players")>(4);
-        opt.hand = ctx.get_or<int, fixed_string("hand")>(4);
-        opt.seed =
-            static_cast<std::uint32_t>(ctx.get_or<int, fixed_string("seed")>(42));
-        opt.verbose = ctx.get_or<bool, fixed_string("verbose")>(false);
-        opt.autosave =
-            ctx.get_or<std::filesystem::path, fixed_string("autosave")>(
-                std::filesystem::path("tkw-autosave.json"));
+        Options opt = base;
+        opt.deck = ctx.get_or<std::filesystem::path, fixed_string("deck")>(base.deck);
+        opt.players = ctx.get_or<int, fixed_string("players")>(base.players);
+        opt.hand = ctx.get_or<int, fixed_string("hand")>(base.hand);
+        opt.seed = static_cast<std::uint32_t>(
+            ctx.get_or<int, fixed_string("seed")>(static_cast<int>(base.seed)));
+        opt.verbose = ctx.get_or<bool, fixed_string("verbose")>(base.verbose);
+        opt.autosave = ctx.get_or<std::filesystem::path, fixed_string("autosave")>(
+            base.autosave);
+        if (ctx.has<fixed_string("human")>())
+            opt.humans = ctx.get_all<std::string, fixed_string("human")>();
         return opt;
     }
+
+    /** 从解析上下文读参数（无 base：一次性命令使用选项默认值）。 */
+    Options options_from(ParseContext &ctx) { return options_from(ctx, Options{}); }
 
     /** 跨命令持有的对局会话（new/step/run/save/load 共享）。 */
     struct Session
     {
         std::unique_ptr<tkw::game::Game> game;
         tkw::game::GameSession state;
+        std::vector<std::string> humans; /**< 本会话的真人座位 id */
+        Options base;                    /**< REPL 启动选项（供行内命令继承） */
         bool active = false;
     };
 
@@ -104,6 +116,32 @@ namespace
         return game;
     }
 
+    /** 校验真人座位：必须是对局中存在的实体且互不重复；空串表示通过。 */
+    std::string validate_humans(
+        tkw::game::Game &game, const std::vector<std::string> &humans)
+    {
+        auto ctx = game.context();
+        for (std::size_t i = 0; i < humans.size(); ++i)
+        {
+            if (ctx.entities->find(humans[i]).is_none())
+                return "真人座位不存在: " + humans[i];
+            for (std::size_t j = i + 1; j < humans.size(); ++j)
+                if (humans[i] == humans[j])
+                    return "真人座位重复: " + humans[i];
+        }
+        return {};
+    }
+
+    /** 构造决策源：无真人走 SimpleAI，否则按 actor 路由到交互输入。 */
+    std::unique_ptr<tkw::game::DecisionSource> make_decision_source(
+        const std::vector<std::string> &humans)
+    {
+        if (humans.empty())
+            return std::make_unique<tkw::game::SimpleAI>();
+        return std::make_unique<tkw::game::ai::RoutedAI>(
+            humans, std::cin, std::cout);
+    }
+
     void print_status(const Session &s)
     {
         std::cout << "会话: " << (s.active ? "进行中" : "无") << "\n";
@@ -121,12 +159,16 @@ namespace
         auto game = make_game(opt, err);
         if (!game)
             return CliFailure{CliError(err)};
+        const std::string verr = validate_humans(*game, opt.humans);
+        if (!verr.empty())
+            return CliFailure{CliError(verr)};
         auto ctx = game->context();
         tkw::game::GameSession state;
         if (tkw::game::start_session(ctx, state, "P0", opt.hand).is_err())
             return CliFailure{CliError("开局失败")};
         s.game = std::move(game);
         s.state = std::move(state);
+        s.humans = opt.humans;
         s.active = true;
         std::cout << "新对局已开始\n";
         print_status(s);
@@ -137,14 +179,14 @@ namespace
     {
         if (!s.active || !s.game)
             return CliFailure{CliError("没有进行中的对局")};
-        tkw::game::SimpleAI ai;
+        auto ai = make_decision_source(s.humans);
         auto ctx = s.game->context();
         if (tkw::game::session_over(ctx))
         {
             std::cout << "对局已结束，胜者: " << tkw::game::session_winner(ctx) << "\n";
             return CliResult<void>::Ok();
         }
-        auto r = tkw::game::step_session(ctx, ai, s.state);
+        auto r = tkw::game::step_session(ctx, *ai, s.state);
         if (r.is_err())
         {
             if (r.unwrap_err() == tkw::game::LoopError::MaxRounds)
@@ -164,11 +206,11 @@ namespace
     {
         if (!s.active || !s.game)
             return CliFailure{CliError("没有进行中的对局")};
-        tkw::game::SimpleAI ai;
+        auto ai = make_decision_source(s.humans);
         auto ctx = s.game->context();
         while (!tkw::game::session_over(ctx))
         {
-            auto r = tkw::game::step_session(ctx, ai, s.state);
+            auto r = tkw::game::step_session(ctx, *ai, s.state);
             if (r.is_err())
             {
                 if (r.unwrap_err() == tkw::game::LoopError::MaxRounds)
@@ -214,8 +256,12 @@ namespace
                 "存档加载失败 (kind=" + std::to_string(static_cast<int>(e.kind)) +
                 "): " + e.detail)};
         }
+        const std::string verr = validate_humans(*game, opt.humans);
+        if (!verr.empty())
+            return CliFailure{CliError(verr)};
         s.game = std::move(game);
         s.state = std::move(state);
+        s.humans = opt.humans;
         s.active = true;
         std::cout << "已加载: " << file.string() << "\n";
         print_status(s);
@@ -257,6 +303,10 @@ namespace
                 return CliFailure{CliError("创建玩家失败: P" + std::to_string(i))};
         }
 
+        const std::string verr = validate_humans(game, opt.humans);
+        if (!verr.empty())
+            return CliFailure{CliError(verr)};
+
         auto ctx = game.context();
 
         // --verbose：直接订阅本局总线，打印卡牌/死亡事件
@@ -280,8 +330,8 @@ namespace
                 { std::cout << "[阵亡] " << c.event.entity_id << "\n"; })));
         }
 
-        tkw::game::SimpleAI ai;
-        auto outcome = tkw::game::play_game(ctx, ai, "P0", opt.hand);
+        auto ai = make_decision_source(opt.humans);
+        auto outcome = tkw::game::play_game(ctx, *ai, "P0", opt.hand);
         if (outcome.is_err())
         {
             if (outcome.unwrap_err() == tkw::game::LoopError::MaxRounds)
@@ -328,28 +378,30 @@ int main(int argc, char **argv)
     Session session;  // 跨命令持有的对局会话
 
     // 根命令选项（无子命令时直接跑一局，兼容旧用法）
+    // 默认值统一由 options_from 提供：REPL 每行独立解析，选项无默认值才能让
+    // 未显式指定的项回落会话启动选项（见 options_from 的 base 合并）。
     app.option<fixed_string("deck")>(
-        "--deck", 'd', "资源目录（含 deck.json 与 cards/）",
-        std::filesystem::path("resources"));
+        "--deck", 'd', "资源目录（含 deck.json 与 cards/）")
+        .path();
     app.option<fixed_string("players")>("--players", 'p', "玩家数")
         .integer()
         .min(rules.min_players)
-        .max(rules.max_players)
-        .default_value(4);
+        .max(rules.max_players);
     app.option<fixed_string("hand")>("--hand", "初始手牌数")
         .integer()
         .min(0)
-        .max(20)
-        .default_value(rules.initial_hand);
-    app.option<fixed_string("seed")>("--seed", 's', "随机种子")
-        .integer()
-        .min(0)
-        .default_value(42);
+        .max(20);
+    app.option<fixed_string("seed")>("--seed", 's', "随机种子").integer().min(0);
     app.option<fixed_string("verbose")>("--verbose", 'v', "打印卡牌/死亡事件日志")
         .boolean();
     app.option<fixed_string("autosave")>(
-        "--autosave", "REPL 退出时自动存档路径（空串关闭）",
-        std::filesystem::path("tkw-autosave.json"));
+        "--autosave", "REPL 退出时自动存档路径（空串关闭）")
+        .path();
+    app.option<fixed_string("human")>(
+        "--human",
+        "真人座位（可重复：--human P0 --human P2；存档不保存，读档后需重新指定）")
+        .str()
+        .repeatable();
 
     app.action([](ParseContext &ctx) -> CliResult<void>
                { return run_game(options_from(ctx)); });
@@ -380,7 +432,7 @@ int main(int argc, char **argv)
     auto &new_cmd = app.add_leaf("new", "开新对局（用 --players/--seed/--hand）");
     new_cmd.action(
         [&session](ParseContext &ctx) -> CliResult<void>
-        { return cmd_new(options_from(ctx), session); });
+        { return cmd_new(options_from(ctx, session.base), session); });
 
     // step：执行一个回合
     auto &step_cmd = app.add_leaf("step", "执行当前会话的一个回合");
@@ -413,7 +465,11 @@ int main(int argc, char **argv)
     load_cmd.arg<std::string, 0>("file", "存档路径").required();
     load_cmd.action(
         [&session](ParseContext &ctx) -> CliResult<void>
-        { return cmd_load(options_from(ctx), ctx.get<std::string, 0>(), session); });
+        {
+            return cmd_load(
+                options_from(ctx, session.base), ctx.get<std::string, 0>(),
+                session);
+        });
 
     // repl：交互模式（对局即 MUD 方向）
     auto &repl = app.add_leaf("repl", "进入交互模式（? 查看命令，quit 退出）");
@@ -421,9 +477,10 @@ int main(int argc, char **argv)
     repl.action(
         [&app, &session](ParseContext &ctx) -> CliResult<void>
         {
+            session.base = options_from(ctx);
             InteractiveConsole console(app, "tkw> ");
             console.run();
-            const Options opt = options_from(ctx);
+            const Options &opt = session.base;
             if (session.active && session.game && !opt.autosave.empty())
             {
                 const std::string text =
