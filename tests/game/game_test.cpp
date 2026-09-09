@@ -1526,6 +1526,25 @@ TEST_CASE("game: guanshi discards two cards to force the sha")
     CHECK(g.cards.hand_size("a") == 0);  // 弃了两张手牌
 }
 
+TEST_CASE("game: guanshi does not fire when the attacker holds fewer than two cards")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "guanshi", "e#0");
+    g.give("a", "sha", "s#1");  // 仅一张杀，弃牌代价付不起
+    g.give("b", "shan", "s#4");
+
+    TestDecider decider;
+    decider.respond = true;   // 目标打出闪
+    decider.triggers = {Ability::DiscardTwoForceDamage};
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 4);          // 贯石斧不发动，闪生效
+    CHECK(g.cards.hand_size("a") == 0);  // 未弃任何牌
+}
+
 TEST_CASE("game: qilin discards target horse after damage")
 {
     TestGame g("deck");

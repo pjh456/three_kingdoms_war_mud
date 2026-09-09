@@ -4,7 +4,7 @@
  * @note 逻辑集中在 SimpleDecider::decide（只读 DecisionRequest）；SimpleAI 把
  *       它经 RequestDecisionSource 适配成引擎可用的 DecisionSource。只做「合法
  *       且能推进」的动作：出杀（按回合上下文给的次数上限）、可结算锦囊、装备。
- *       不出无懈（避免自抵消）、不主动发动需额外选择的武器效果。
+ *       不出无懈（避免自抵消）；武器效果按代价可付性决定是否发动。
  */
 
 #ifndef INCLUDE_TKW_GAME_AI_SIMPLE_HPP
@@ -43,11 +43,7 @@ namespace tkw
                     case DecisionKind::Counter:
                         return decide_first_id(req);
                     case DecisionKind::Trigger:
-                    {
-                        DecisionChoice out;
-                        out.accepted = true;
-                        return out;
-                    }
+                        return decide_trigger(req);
                     case DecisionKind::PickCard:
                     case DecisionKind::PickRevealed:
                         return decide_first_card(req);
@@ -87,6 +83,20 @@ namespace tkw
                             break;
                         out.discards.push_back(c.instance_id);
                     }
+                    return out;
+                }
+
+                /**
+                 * @brief 触发：按代价可付性决定是否发动装备能力。
+                 * @note 贯石斧需弃两张，手牌不足 2 张不发动；免费能力一律发动
+                 *       （目标侧代价在接缝内不可知，由引擎侧预检兜底）。
+                 */
+                static DecisionChoice decide_trigger(const DecisionRequest &req)
+                {
+                    DecisionChoice out;
+                    out.accepted = true;
+                    if (req.ability == card::Ability::DiscardTwoForceDamage)
+                        out.accepted = req.view.hand.size() >= 2;
                     return out;
                 }
 

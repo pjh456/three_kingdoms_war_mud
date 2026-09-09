@@ -164,25 +164,43 @@ namespace tkw
                 sc.ctx, sc.ai, sc.attacker, extra.unwrap(), sc.target, sc.amount);
         }
 
-        /** @brief 贯石斧：目标打出闪后可弃两张牌令杀依然命中。 */
+        /**
+         * @brief 贯石斧：目标打出闪后可弃两张牌令杀依然命中。
+         * @note 弃满两张才能发动：攻击方手牌不足 2 张不发动（不询问、不弃牌、
+         *       不强制命中）；实际弃不满 2 张（含幽灵引用）不强制命中。
+         */
         inline void hook_guanshi(ShaContext &sc)
         {
+            // 发动前置：手牌不足 2 张付不起代价，直接不发动
+            if (sc.ctx.cards->hand_size(sc.attacker) < 2)
+                return;
+
             if (!sc.ai.trigger_effect(
                     sc.ctx, sc.attacker, card::Ability::DiscardTwoForceDamage))
                 return;
+
             const auto discards = sc.ai.choose_discards(
                 sc.ctx, sc.attacker, 2, DiscardReason::AbilityCost);
+
+            // 只计数实际弃成功的牌，封顶 2 张
+            int discarded = 0;
             for (const auto &id : discards)
             {
+                if (discarded == 2)
+                    break;
                 auto removed = sc.ctx.cards->remove_from_hand(sc.attacker, id);
                 if (removed.is_some())
                 {
+                    ++discarded;
                     card::Card card = std::move(removed).unwrap();
                     sc.ctx.cards->discard(card);
                     emit_card_discarded(sc.ctx, sc.attacker, card);
                 }
             }
-            sc.responded = false;  // 强制命中
+
+            // 弃满两张才强制命中，否则杀仍视为被闪
+            if (discarded == 2)
+                sc.responded = false;
         }
 
         /** @brief 寒冰剑：防止伤害改为弃置目标两张牌。 */

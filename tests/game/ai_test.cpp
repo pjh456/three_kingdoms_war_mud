@@ -144,3 +144,20 @@ TEST_CASE("ai: decider receives play request with legal moves")
     REQUIRE(act.is_some());
     CHECK(act.unwrap().instance_id == "s#1");
 }
+
+TEST_CASE("ai: simple trigger respects the discard cost")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+
+    tkw::game::SimpleAI ai;
+    CHECK_FALSE(ai.trigger_effect(
+        g.ctx, "a", tkw::card::Ability::DiscardTwoForceDamage));
+    g.give("a", "sha", "s#9");
+    CHECK(ai.trigger_effect(
+        g.ctx, "a", tkw::card::Ability::DiscardTwoForceDamage));
+    CHECK(ai.trigger_effect(
+        g.ctx, "a", tkw::card::Ability::ExtraShaAfterJink));
+}
