@@ -190,6 +190,23 @@ add_test(NAME cli_repl_banner
 set_tests_properties(cli_repl_banner PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# raw 提示符层冒烟（依赖 util-linux script 提供 pty；configure 时缺失则整条不注册）：
+# statux\\x7fs 退格后应派发 status（会话: 无），证明手动回显与退格可用；
+# ne\\x03 在 raw 态被行编辑器接管（echo ^C、清缓冲、重绘提示符、REPL 存活），
+# cooked 下 0x03 是 SIGINT（进程死 rc=130、quit 不达），故 ^C 存在 + rc=0 兼作
+# raw 态证明。输入必须逐段 sleep 节流——整段一次灌入时 0x03 可能落在启动期或
+# action 的 cooked 窗口被内核 SIGINT（实测 flaky）。退出后宿主终端状态不归
+# pty 可测范围，须真机手验（清单 V5/V6）。
+find_program(TKW_SCRIPT_EXE script)
+if(TKW_SCRIPT_EXE)
+  add_test(NAME cli_repl_raw_mode_smoke
+           COMMAND sh -c
+                   "out=$({ sleep 0.3; printf 'statux\\177s\\n'; sleep 0.4; printf 'ne\\003\\n'; sleep 0.4; printf 'quit\\n'; sleep 0.3; } | script -qec '$<TARGET_FILE:tkw> repl' /dev/null 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '会话: 无' && printf '%s' \"$out\" | grep -q '\\^C' && [ $rc -eq 0 ]")
+  set_tests_properties(cli_repl_raw_mode_smoke PROPERTIES
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+      TIMEOUT 30)
+endif()
+
 # REPL 退出自动存档失败必须显式提示，不得静默丢档（父目录缺失 → NotExist，确定性失败）。
 add_test(NAME cli_autosave_failure_message
          COMMAND sh -c
