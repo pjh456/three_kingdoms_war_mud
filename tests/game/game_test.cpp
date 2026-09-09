@@ -501,6 +501,28 @@ TEST_CASE("game: juedou exchange of sha")
     CHECK(b->get_hp() == 3);  // b 的杀耗尽后受 1 点伤害
 }
 
+TEST_CASE("game: juedou round exhaustion settles as draw")
+{
+    TestGame g("deck");
+    g.rules.duel_rounds = 2;  // 注入小保险上限使耗尽可达
+    auto *a = g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.give("a", "juedou", "j#0");
+    g.give("a", "sha", "s#1");
+    g.give("b", "sha", "s#2");
+
+    TestDecider decider;
+    decider.respond = true;  // 双方每轮都出手牌中第一张杀 → 耗尽轮次
+    const auto played = g.cards.hand("a")[0];  // 决斗
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(a->get_hp() == 4);   // 无人「先不出」→ 平局，不再造成伤害
+    CHECK(b->get_hp() == 4);
+    CHECK(g.cards.hand_size("a") == 0);
+    CHECK(g.cards.hand_size("b") == 0);
+    CHECK(g.cards.discard_size() == 3);  // 决斗牌 + 双方杀全部正常消耗
+}
+
 TEST_CASE("game: jiedao forces holder to use sha")
 {
     TestGame g("deck");

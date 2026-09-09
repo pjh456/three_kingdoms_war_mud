@@ -313,7 +313,8 @@ namespace tkw
                     if (nullified())
                         return GameResult<void>::Ok();
                     {
-                        // 目标先开始，轮流打出杀；先不出的受对方 1 点伤害。
+                        // 目标先开始，轮流打出杀；先不出的受对方 1 点伤害；
+                        // 轮次耗尽（双方每轮都出了杀）平局结算。
                         std::string attacker = player;
                         std::string defender = targets.front();
                         for (int round = 0; round < rules_of(ctx).duel_rounds; ++round)
@@ -326,7 +327,8 @@ namespace tkw
                             }
                             std::swap(attacker, defender);
                         }
-                        return GameResult<void>::Err(EffectError::UnsupportedKind);
+                        // 轮次耗尽：双方每轮都出了杀、无人「先不出」→ 平局，不再造成伤害
+                        return GameResult<void>::Ok();
                     }
 
                 case card::CardEffectKind::RevealPick:
@@ -427,7 +429,8 @@ namespace tkw
             const auto rr = apply();
             if (rr.is_err())
             {
-                // 结算失败：把打出的牌从弃牌堆取回手牌（事务性）
+                // 结算失败回滚：仅取回打出的牌；结算中途已消耗的响应牌
+                // （如决斗中打出的杀）不回退
                 auto back = ctx.cards->remove_from_discard(played.instance_id);
                 if (back.is_some())
                     ctx.cards->add_to_hand(player, std::move(back).unwrap());
