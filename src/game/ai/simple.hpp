@@ -104,10 +104,19 @@ namespace tkw
                  * @brief 出牌：取第一张可出的牌，再按贪心偏好选目标。
                  * @note legal_actions 已按手牌序产出；按牌分组以复现「首张可出」
                  *       语义。OneOther 集火最低体力（方天画戟取目标最多者），
-                 *       借刀取「B = A 自身」。
+                 *       借刀取「B = A 自身」。丈八蛇矛两张当杀（legal 仅在无真杀
+                 *       时产出）按杀优先：先于锦囊打出，集火/多目标规则同杀。
                  */
                 static DecisionChoice decide_play(const DecisionRequest &req)
                 {
+                    // 丈八蛇矛：手牌无真杀时两张当杀（杀优先于锦囊）
+                    std::vector<LegalAction> zhangba;
+                    for (const auto &a : req.legal)
+                        if (!a.second_instance_id.empty())
+                            zhangba.push_back(a);
+                    if (!zhangba.empty())
+                        return decide_zhangba(req, zhangba);
+
                     DecisionChoice out;
                     std::vector<std::string> order;
                     std::vector<std::vector<LegalAction>> groups;
@@ -179,6 +188,27 @@ namespace tkw
 
                         return pick_all(out, c.instance_id, opts.front().targets);
                     }
+                    return out;
+                }
+
+                /**
+                 * @brief 丈八：多目标动作取目标最多者（方天画戟），否则集火
+                 *        最低体力；牌对取首个枚举 pair（确定性）。
+                 */
+                static DecisionChoice decide_zhangba(
+                    const DecisionRequest &req, const std::vector<LegalAction> &acts)
+                {
+                    DecisionChoice out;
+                    const LegalAction *most = &acts.front();
+                    for (const auto &a : acts)
+                        if (a.targets.size() > most->targets.size())
+                            most = &a;
+                    out.instance_id = Option<std::string>::Some(most->card.instance_id);
+                    out.second_instance_id = most->second_instance_id;
+                    if (most->targets.size() > 1)
+                        out.targets = most->targets;
+                    else
+                        out.targets = {lowest_hp_action(req.view, acts)};
                     return out;
                 }
 

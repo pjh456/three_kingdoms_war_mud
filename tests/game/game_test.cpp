@@ -1285,8 +1285,8 @@ TEST_CASE("game: same seed yields identical deal, different seed differs")
 TEST_CASE("game: unsupported deck cards are reported")
 {
     TestGame g("deck");
-    // 标准牌堆中能力未实现的武器卡（deck 序）
-    CHECK(unsupported_cards(g.catalog) == (std::vector<std::string>{"zhangba"}));
+    // 标准牌堆全部卡（含装备能力）引擎已实现
+    CHECK(unsupported_cards(g.catalog).empty());
 }
 
 TEST_CASE("game: effect traits are the single source of truth")
@@ -1345,7 +1345,7 @@ TEST_CASE("game: ability traits are the single source of truth")
     CHECK(!is_unimplemented_ability(A::BlackShaImmune));
     CHECK(!is_unimplemented_ability(A::MultiTargetSha));
     CHECK(!is_unimplemented_ability(A::Cixiong));
-    CHECK(is_unimplemented_ability(A::TwoCardsAsSha));
+    CHECK(!is_unimplemented_ability(A::TwoCardsAsSha));
 }
 
 TEST_CASE("game: draw emits CardDrawn per card")
@@ -1573,6 +1573,37 @@ TEST_CASE("game: legal_actions are all accepted by the engine")
             saw_multi = true;
     }
     CHECK(saw_multi);
+
+    // 丈八蛇矛两张当杀场景：手牌两张非杀（未建牌堆、无摸牌，
+    // 出牌阶段手牌数不变，虚拟杀回放时仍合法）
+    auto build_zhangba = [](TestGame &g)
+    {
+        g.add_player("a", 0, 4);
+        g.add_player("b", 1, 4);
+        g.add_player("c", 2, 4);
+        g.equip("a", "zhangba", "e#0");
+        g.give("a", "wuzhong", "x#1");
+        g.give("a", "tao", "x#2");
+    };
+
+    TestGame z("deck");
+    build_zhangba(z);
+    const auto z_acts = legal_actions(z.ctx, "a", TurnContext{"a", 0, 1});
+    bool saw_virtual = false;
+    for (const auto &act : z_acts)
+    {
+        TestGame fresh("deck");
+        build_zhangba(fresh);
+        TestDecider d;
+        d.plays = {
+            PlayAction{act.card.instance_id, act.targets, act.second_instance_id}};
+        auto r = execute_turn(fresh.ctx, d, "a");
+        INFO("card=" << act.card.def_id << " targets=" << act.targets.size());
+        CHECK(r.is_ok());
+        if (!act.second_instance_id.empty())
+            saw_virtual = true;
+    }
+    CHECK(saw_virtual);
 }
 
 TEST_CASE("game: legal_actions excludes sha when turn limit reached")
@@ -1948,4 +1979,182 @@ TEST_CASE("game: cixiong does not trigger against the same gender")
     CHECK(b->get_hp() == 3);
     CHECK(g.cards.hand_size("b") == 1);  // 不弃牌
     CHECK(g.cards.hand_size("a") == 0);  // 不摸牌
+}
+
+TEST_CASE("game: zhangba uses two hand cards as a sha")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "zhangba", "e#0");
+    g.give("a", "wuzhong", "x#1");
+    g.give("a", "tao", "x#2");
+
+    std::vector<std::string> played;
+    auto h = g.bus.subscribe(tkw::Handler<tkw::CardPlayedEvent>(
+        [&](tkw::HandlerContext<tkw::CardPlayedEvent> &c)
+        { played.push_back(c.event.def_id); }));
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"x#1", {"b"}, "x#2"}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);            // 虚拟杀命中
+    CHECK(g.cards.hand_size("a") == 0); // 两张牌都消耗
+    CHECK(g.cards.discard_size() == 2);
+    CHECK(played == std::vector<std::string>{"wuzhong", "tao"});
+}
+
+TEST_CASE("game: zhangba virtual sha is not black")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "zhangba", "e#0");
+    g.equip("b", "renwang", "e#1");
+    g.cards.add_to_hand("a", Card{"x#1", "wuzhong", Suit::Spade, 5});  // 两张黑色牌
+    g.cards.add_to_hand("a", Card{"x#2", "tao", Suit::Club, 6});
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"x#1", {"b"}, "x#2"}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);  // 虚拟杀无花色，仁王盾黑杀判定不适用
+}
+
+TEST_CASE("game: zhangba virtual sha requires the equipped weapon")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.give("a", "wuzhong", "x#1");
+    g.give("a", "tao", "x#2");  // 未装备丈八蛇矛
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"x#1", {"b"}, "x#2"}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == TurnError::PlayRejected);
+    CHECK(b->get_hp() == 4);
+    CHECK(g.cards.hand_size("a") == 2);  // 校验失败，不消耗
+}
+
+TEST_CASE("game: zhangba virtual sha counts toward the sha limit")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "zhangba", "e#0");
+    g.give("a", "wuzhong", "x#1");
+    g.give("a", "tao", "x#2");
+    g.give("a", "nanman", "x#3");
+    g.give("a", "shan", "x#4");
+
+    TestDecider decider;
+    decider.plays = {
+        PlayAction{"x#1", {"b"}, "x#2"},
+        PlayAction{"x#3", {"b"}, "x#4"},  // 本回合第二个「杀」：超限
+    };
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == TurnError::ShaLimitExceeded);
+    CHECK(b->get_hp() == 3);         // 第一个虚拟杀命中
+    CHECK(g.cards.hand_size("a") == 2);  // 第二个未消耗
+}
+
+TEST_CASE("game: zhangba plus fangtian allows multi-target when the pair is the whole hand")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    auto *d = g.add_player("d", 3, 4);
+    // 夹具直接叠两件武器（单槽约束属装备流程，非本用例关注点）
+    g.equip("a", "zhangba", "e#0");
+    g.equip("a", "fangtian", "e#1");
+    g.give("a", "wuzhong", "x#1");
+    g.give("a", "tao", "x#2");  // pair 即最后两张手牌
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"x#1", {"b", "c", "d"}, "x#2"}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);
+    CHECK(c->get_hp() == 3);
+    CHECK(d->get_hp() == 3);
+    CHECK(g.cards.hand_size("a") == 0);
+}
+
+TEST_CASE("game: zhangba plus fangtian does not add targets when the pair is not the whole hand")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    g.equip("a", "zhangba", "e#0");
+    g.equip("a", "fangtian", "e#1");
+    g.give("a", "wuzhong", "x#1");
+    g.give("a", "tao", "x#2");
+    g.give("a", "shan", "x#3");  // pair 不是最后两张手牌
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"x#1", {"b", "c"}, "x#2"}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == TurnError::InvalidTarget);
+    CHECK(b->get_hp() == 4);
+    CHECK(g.cards.hand_size("a") == 3);  // 校验失败，不消耗
+
+    // 单目标仍合法
+    TestDecider decider2;
+    decider2.plays = {PlayAction{"x#1", {"b"}, "x#2"}};
+    auto r2 = execute_turn(g.ctx, decider2, "a");
+    REQUIRE(r2.is_ok());
+    CHECK(b->get_hp() == 3);
+    CHECK(c->get_hp() == 4);
+    CHECK(g.cards.hand_size("a") == 1);
+}
+
+TEST_CASE("game: legal_actions enumerates zhangba pairs only without a real sha")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.equip("a", "zhangba", "e#0");
+    g.give("a", "wuzhong", "x#1");
+    g.give("a", "tao", "x#2");
+
+    const auto acts = legal_actions(g.ctx, "a", TurnContext{"a", 0, 1});
+    bool saw_zhangba = false;
+    for (const auto &a : acts)
+        if (!a.second_instance_id.empty())
+        {
+            saw_zhangba = true;
+            CHECK(a.card.instance_id == "x#1");
+            CHECK(a.second_instance_id == "x#2");
+            CHECK(a.targets.size() == 1);
+        }
+    CHECK(saw_zhangba);
+
+    // 手牌含真杀 → 不产出两张当杀动作
+    g.give("a", "sha", "s#1");
+    const auto acts2 = legal_actions(g.ctx, "a", TurnContext{"a", 0, 1});
+    for (const auto &a : acts2)
+        CHECK(a.second_instance_id.empty());
+}
+
+TEST_CASE("game: simple ai uses zhangba before other tricks when holding no sha")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "zhangba", "e#0");
+    g.give("a", "wuzhong", "x#1");  // 无中生有也可打，但杀优先
+    g.give("a", "tao", "x#2");
+
+    SimpleAI ai;
+    auto r = execute_turn(g.ctx, ai, "a");
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);  // 两张牌当杀打出，而非先打无中生有
+    CHECK(g.cards.hand_size("a") == 0);
 }

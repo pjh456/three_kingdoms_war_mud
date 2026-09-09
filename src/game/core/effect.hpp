@@ -68,6 +68,7 @@ namespace tkw
             case A::ExtraShaAfterJink:
             case A::DiscardTwoForceDamage:
             case A::MultiTargetSha:
+            case A::TwoCardsAsSha:
             case A::DiscardHorseOnDamage:
             case A::DamageAsDiscard:
             case A::JudgementJink:

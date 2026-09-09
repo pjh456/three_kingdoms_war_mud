@@ -13,7 +13,9 @@
  *       - 寒冰剑：命中前可防止伤害改为弃置目标两张牌；
  *       - 麒麟弓：造成伤害后可弃置目标一匹坐骑；
  *       - 方天画戟：杀为最后一张手牌时可额外指定至多两名目标
- *         （作用于目标集合，经目标数校验放宽实现，不走本表钩子）。
+ *         （作用于目标集合，经目标数校验放宽实现，不走本表钩子）；
+ *       - 丈八蛇矛：两张手牌当一张「杀」（虚拟杀无花色，仁王盾黑杀
+ *         判定不适用；消费与结算入口在 resolver 层，不走本表钩子）。
  */
 
 #ifndef INCLUDE_TKW_GAME_WEAPON_HPP
@@ -53,12 +55,13 @@ namespace tkw
             bool blocked = false;      /**< 防具直接无效（仁王盾） */
             bool prevented = false;    /**< 伤害被替代（寒冰剑） */
             int target_count = 1;      /**< 该杀指定的目标数（雌雄仅唯一目标） */
+            bool virtual_sha = false; /**< 虚拟杀（丈八两张当杀）：无花色，黑杀判定不适用 */
         };
 
         inline void resolve_sha(
             GameContext &ctx, DecisionSource &ai, const std::string &attacker,
             const card::Card &sha, const std::string &target, int amount,
-            int target_count = 1);
+            int target_count = 1, bool virtual_sha = false);
 
         // ── 装备效果（钩子实现）────────────────────────────────────────
 
@@ -169,10 +172,10 @@ namespace tkw
             apply_draw(sc.ctx, sc.attacker, 1);
         }
 
-        /** @brief 仁王盾：黑色的杀对你无效（青釭剑可穿透）。 */
+        /** @brief 仁王盾：黑色的杀对你无效（青釭剑可穿透，虚拟杀无花色不适用）。 */
         inline void hook_renwang(ShaContext &sc)
         {
-            if (!sc.ignore_armor && is_black_suit(sc.sha.suit))
+            if (!sc.ignore_armor && !sc.virtual_sha && is_black_suit(sc.sha.suit))
                 sc.blocked = true;
         }
 
@@ -349,15 +352,18 @@ namespace tkw
          * @param amount 伤害量（config 驱动，当前数据均为 1）。
          * @param target_count 该杀指定的目标总数（缺省 1；多目标杀逐目标
          *        结算时由调用方传入，供仅唯一目标触发的能力判定）。
+         * @param virtual_sha 是否虚拟杀（丈八两张当杀）：真无花色，仁王盾
+         *        黑杀判定短路；此时 sha 参数可为占位对象。
          */
         inline void resolve_sha(
             GameContext &ctx, DecisionSource &ai, const std::string &attacker,
             const card::Card &sha, const std::string &target, int amount,
-            int target_count)
+            int target_count, bool virtual_sha)
         {
             ShaContext sc{ctx, ai, sha, attacker, target, amount};
             sc.ignore_armor = has_ability(ctx, attacker, card::Ability::IgnoreArmor);
             sc.target_count = target_count;
+            sc.virtual_sha = virtual_sha;
 
             run_sha_phase(sc, ShaPhase::OnTarget);
 

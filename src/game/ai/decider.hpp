@@ -85,6 +85,7 @@ namespace tkw
                 Option<card::Card> card = Option<card::Card>::None();
                 std::vector<std::string> targets;  /**< Play：目标 */
                 std::vector<std::string> discards; /**< Discard：要弃的牌 */
+                std::string second_instance_id;   /**< Play：第二张手牌（丈八蛇矛两张当杀；空 = 普通打出） */
             };
 
             /** @brief 状态机接口：实现单个 decide 即可接入引擎。 */
@@ -185,8 +186,9 @@ namespace tkw
                     const auto choice = decider_->decide(req);
                     if (choice.instance_id.is_none())
                         return Option<PlayAction>::None();
-                    return Option<PlayAction>::Some(
-                        PlayAction{choice.instance_id.unwrap(), choice.targets});
+                    return Option<PlayAction>::Some(PlayAction{
+                        choice.instance_id.unwrap(), choice.targets,
+                        choice.second_instance_id});
                 }
 
                 std::vector<std::string> choose_discards(

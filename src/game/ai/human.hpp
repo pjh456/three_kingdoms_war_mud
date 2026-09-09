@@ -194,6 +194,8 @@ namespace tkw
                             out_ << "  " << (i + 1) << ") "
                                  << card_name(req, act.card.def_id) << " "
                                  << act.card.instance_id;
+                            if (!act.second_instance_id.empty())
+                                out_ << " + " << act.second_instance_id;
                             if (!act.targets.empty())
                             {
                                 out_ << " -> ";
@@ -225,6 +227,7 @@ namespace tkw
                             out.instance_id =
                                 Option<std::string>::Some(act.card.instance_id);
                             out.targets = act.targets;
+                            out.second_instance_id = act.second_instance_id;
                             return out;
                         }
                         out_ << "输入无效，请重试。\n";

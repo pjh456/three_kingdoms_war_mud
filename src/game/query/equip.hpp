@@ -63,13 +63,17 @@ namespace tkw
 
         /**
          * @brief 方天画戟：杀可在唯一目标外额外指定目标（至多 2 名）的条件。
-         * @note 须在打出的杀移出手牌前判定：hand_size == 1 即该杀是最后一张
-         *       手牌（卡面触发条件）。目标数放宽由 validate_effect_targets 消费。
+         * @param cards_consumed 该杀消耗的手牌张数（真杀 1，丈八虚拟杀 2）。
+         * @note 须在打出的杀移出手牌前判定：hand_size == cards_consumed 即该杀
+         *       消耗完手中全部牌（卡面触发条件；丈八虚拟杀 = 最后两张手牌）。
+         *       目标数放宽由 validate_effect_targets 消费。
          */
-        inline bool sha_multi_target(const GameContext &ctx, const std::string &player)
+        inline bool sha_multi_target(
+            const GameContext &ctx, const std::string &player,
+            std::size_t cards_consumed = 1)
         {
             return has_ability(ctx, player, card::Ability::MultiTargetSha) &&
-                   ctx.cards->hand_size(player) == 1;
+                   ctx.cards->hand_size(player) == cards_consumed;
         }
 
         /** @brief 实体装备区是否存在指定槽位的装备（如借刀杀人的武器）。 */

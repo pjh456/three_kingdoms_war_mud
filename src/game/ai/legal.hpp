@@ -32,6 +32,7 @@ namespace tkw
         {
             card::Card card;
             std::vector<std::string> targets; /**< 引擎认可的完整目标集合 */
+            std::string second_instance_id; /**< 第二张手牌（丈八蛇矛两张当杀；空 = 普通动作） */
         };
 
         /** @brief 实体任一区域是否有牌（拆/顺的目标需有牌可拿）。 */
@@ -155,6 +156,62 @@ namespace tkw
                         validate_play_action(ctx, player, def, c, targets, turn).is_ok();
                     if (ok)
                         out.push_back(LegalAction{c, std::move(targets)});
+                }
+            }
+
+            // 丈八蛇矛：手牌无真杀时，两张手牌当一张杀（pair × 目标枚举，
+            // 确定性手牌序；杀次数/目标合法性经 validate_virtual_sha 过滤）
+            if (has_ability(ctx, player, card::Ability::TwoCardsAsSha))
+            {
+                const auto &hand = ctx.cards->hand(player);
+                bool has_sha = false;
+                for (const auto &c : hand)
+                {
+                    const auto d = ctx.catalog->find(c.def_id);
+                    if (d.is_some() && d.unwrap()->effect.is_some() &&
+                        is_sha_kind(d.unwrap()->effect.unwrap().kind))
+                        has_sha = true;
+                }
+                const auto sha_def = find_sha_def(ctx);
+                if (!has_sha && hand.size() >= 2 && sha_def.is_some())
+                {
+                    const auto targets = valid_targets(ctx, player, *sha_def.unwrap());
+                    const bool multi = sha_multi_target(ctx, player, 2);
+                    for (std::size_t i = 0; i + 1 < hand.size(); ++i)
+                        for (std::size_t j = i + 1; j < hand.size(); ++j)
+                            for (const auto &t : targets)
+                            {
+                                if (!validate_virtual_sha(
+                                        ctx, player, hand[i].instance_id,
+                                        hand[j].instance_id,
+                                        std::vector<std::string>{t}, turn)
+                                        .is_ok())
+                                    continue;
+                                out.push_back(LegalAction{
+                                    hand[i], {t}, hand[j].instance_id});
+
+                                // 方天画戟：pair 为最后两张手牌时再产出多目标
+                                // 动作（原目标 + 至多 2 名其他在范围内角色）
+                                if (multi)
+                                {
+                                    std::vector<std::string> combo{t};
+                                    for (const auto &u : targets)
+                                    {
+                                        if (u != t)
+                                            combo.push_back(u);
+                                        if (combo.size() >= 3)
+                                            break;
+                                    }
+                                    if (combo.size() > 1 &&
+                                        validate_virtual_sha(
+                                            ctx, player, hand[i].instance_id,
+                                            hand[j].instance_id, combo, turn)
+                                            .is_ok())
+                                        out.push_back(LegalAction{
+                                            hand[i], std::move(combo),
+                                            hand[j].instance_id});
+                                }
+                            }
                 }
             }
             return out;

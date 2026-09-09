@@ -183,6 +183,30 @@ TEST_CASE("ai: human decider plays chosen legal action")
     CHECK(out.str().find("s#1") != std::string::npos);
 }
 
+TEST_CASE("ai: human decider plays the zhangba two-card action")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.equip("a", "zhangba", "e#0");
+    g.give("a", "wuzhong", "x#1");
+    g.give("a", "tao", "x#2");
+
+    // legal 顺序：1) 无中生有 2) 桃 3) 丈八两张当杀
+    std::istringstream in("play 3\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+    const tkw::game::TurnContext turn{"a", 0, 1};
+
+    const auto chosen = src.choose_play(g.ctx, turn);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().instance_id == "x#1");
+    CHECK(chosen.unwrap().second_instance_id == "x#2");
+    CHECK(chosen.unwrap().targets == std::vector<std::string>{"b"});
+    CHECK(out.str().find("x#2") != std::string::npos);  // 渲染了第二张牌
+}
+
 TEST_CASE("ai: human decider declines response")
 {
     TestGame g("deck");

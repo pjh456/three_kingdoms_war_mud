@@ -60,6 +60,20 @@ namespace tkw
 
         // ── 目标选择 ────────────────────────────────────────────────────
 
+        /**
+         * @brief 牌堆中的「杀」定义（Damage 类主动效果的卡，标准牌堆恰好一张）。
+         * @return 杀定义；None = 牌堆无杀（虚拟杀无从结算）。
+         * @note 虚拟杀（两张手牌当一张杀）借用其效果参数（伤害量/作用范围），
+         *       牌堆含多张 Damage 卡时取 deck 序第一张。
+         */
+        inline Option<const card::CardDef *> find_sha_def(const GameContext &ctx)
+        {
+            for (const auto &def : *ctx.catalog)
+                if (def.effect.is_some() && is_sha_kind(def.effect.unwrap().kind))
+                    return Option<const card::CardDef *>::Some(&def);
+            return Option<const card::CardDef *>::None();
+        }
+
         /** @brief 按 effect.scope 返回该牌在当前局面下的合法目标集合（含距离过滤）。 */
         inline std::vector<std::string> valid_targets(
             const GameContext &ctx, const std::string &player, const card::CardDef &def)
@@ -114,18 +128,21 @@ namespace tkw
 
         /**
          * @brief 主动效果的目标预校验（只读，不消费打出的牌）。
+         * @param cards_consumed 该效果消耗的手牌张数（真杀 1，丈八虚拟杀 2），
+         *        参与方天画戟「最后手牌」放宽判定。
          * @return Ok 通过；错误值：
          *         - NoTarget：无目标；
          *         - OutOfRange：目标超出攻击范围/距离；
          *         - InvalidTarget：目标数量不符 scope 或不在合法集合内。
          * @note 前置：def.effect.is_some()（结算入口与出牌动作校验两处均满足）。
          *       借刀杀人特例（targets = {持武器者, 其攻击范围内角色}）在此统一校验。
-         *       方天画戟放宽：杀的目标为唯一目标且该杀是最后一张手牌时，
+         *       方天画戟放宽：杀的目标为唯一目标且该杀消耗完手中全部牌时，
          *       OneOther 数量上限放宽为 3（额外至多 2 名，卡面）。
          */
         inline GameResult<void> validate_effect_targets(
             const GameContext &ctx, const std::string &player,
-            const card::CardDef &def, const std::vector<std::string> &targets)
+            const card::CardDef &def, const std::vector<std::string> &targets,
+            std::size_t cards_consumed = 1)
         {
             const card::CardEffect &eff = def.effect.unwrap();
 
@@ -175,11 +192,11 @@ namespace tkw
                 case card::Scope::Self:
                 case card::Scope::OneOther:
                 {
-                    // 方天画戟：杀是最后一张手牌时共可指定至多 3 个目标
+                    // 方天画戟：杀消耗完手中全部牌时共可指定至多 3 个目标
                     // （唯一目标 + 额外至多 2 名，卡面）；成员合法性由下方统一检查
                     const bool multi_sha =
                         eff.kind == card::CardEffectKind::Damage &&
-                        sha_multi_target(ctx, player);
+                        sha_multi_target(ctx, player, cards_consumed);
                     target_ok = targets.size() <= (multi_sha ? 3 : 1);
                     break;
                 }
@@ -264,6 +281,49 @@ namespace tkw
             if (!is_settleable_kind(def.effect.unwrap().kind))
                 return GameResult<void>::Err(EffectError::UnsupportedKind);
             return GameResult<void>::Ok();
+        }
+
+        /**
+         * @brief 校验「两张手牌当一张杀」（丈八蛇矛）是否合法（只读预检）。
+         * @return Ok 合法；错误值：
+         *         - CardNotOwned：两张为同一张或任一不在 player 手牌中；
+         *         - UnsupportedKind：未装备两张当杀能力，或牌堆无「杀」定义；
+         *         - ShaLimitExceeded：杀且本回合杀次数已达上限（turn）；
+         *         - NoTarget/OutOfRange/InvalidTarget：目标校验失败
+         *         （攻击范围内的一名其他角色；方天画戟放宽与杀一致）。
+         * @note 检查顺序：两牌在手 → 能力 → 杀次数 → 目标；无副作用：不消费
+         *       牌、不发事件；实际消费归 resolve_virtual_sha。
+         */
+        inline GameResult<void> validate_virtual_sha(
+            const GameContext &ctx, const std::string &player,
+            const std::string &first_id, const std::string &second_id,
+            const std::vector<std::string> &targets, const TurnContext &turn)
+        {
+            // 两张手牌须为不同牌且都在手牌中
+            if (first_id == second_id)
+                return GameResult<void>::Err(EffectError::CardNotOwned);
+            bool have_first = false;
+            bool have_second = false;
+            for (const auto &c : ctx.cards->hand(player))
+            {
+                if (c.instance_id == first_id)
+                    have_first = true;
+                else if (c.instance_id == second_id)
+                    have_second = true;
+            }
+            if (!have_first || !have_second)
+                return GameResult<void>::Err(EffectError::CardNotOwned);
+
+            const auto sha_def = find_sha_def(ctx);
+            if (sha_def.is_none() ||
+                !has_ability(ctx, player, card::Ability::TwoCardsAsSha))
+                return GameResult<void>::Err(EffectError::UnsupportedKind);
+
+            // 虚拟杀按一张杀计次数
+            if (turn.sha_played >= turn.sha_limit)
+                return GameResult<void>::Err(EffectError::ShaLimitExceeded);
+
+            return validate_effect_targets(ctx, player, *sha_def.unwrap(), targets, 2);
         }
 
         // ── 结算入口 ────────────────────────────────────────────────────
@@ -536,6 +596,65 @@ namespace tkw
                     ctx.cards->add_to_hand(player, std::move(back).unwrap());
             }
             return rr;
+        }
+
+        /**
+         * @brief 结算「两张手牌当一张杀」（丈八蛇矛）。
+         * @param first_id/second_id 两张手牌的 instance_id。
+         * @note 目标校验（最终闸门，含方天画戟放宽）与两牌在手检查先于消费，
+         *       失败不消耗牌；消费后两张各进弃牌堆并各发打出事件（防结算中
+         *       被再选），再逐目标按虚拟杀结算。虚拟杀无花色：仁王盾黑杀
+         *       判定不适用（经 resolve_sha 的 virtual 标记短路）。
+         */
+        inline GameResult<void> resolve_virtual_sha(
+            GameContext &ctx, DecisionSource &ai, const std::string &player,
+            const std::string &first_id, const std::string &second_id,
+            const std::vector<std::string> &targets)
+        {
+            const auto sha_def = find_sha_def(ctx);
+            if (sha_def.is_none())
+                return GameResult<void>::Err(EffectError::UnsupportedKind);
+            const card::CardDef &sha = *sha_def.unwrap();
+            const card::CardEffect &eff = sha.effect.unwrap();
+
+            // 目标预校验（最终闸门；方天放宽按消耗两张手牌判定）
+            auto tr = validate_effect_targets(ctx, player, sha, targets, 2);
+            if (tr.is_err())
+                return tr;
+
+            // 两张牌都在手牌中（校验先于消费，失败不消耗）
+            bool have_first = false;
+            bool have_second = false;
+            for (const auto &c : ctx.cards->hand(player))
+            {
+                if (c.instance_id == first_id)
+                    have_first = true;
+                else if (c.instance_id == second_id)
+                    have_second = true;
+            }
+            if (first_id == second_id || !have_first || !have_second)
+                return GameResult<void>::Err(EffectError::CardNotOwned);
+
+            // 两张牌先弃置（防止结算中被再次选中）
+            auto removed = ctx.cards->remove_from_hand(player, first_id);
+            if (removed.is_none())
+                return GameResult<void>::Err(EffectError::CardNotOwned);
+            card::Card first = std::move(removed).unwrap();
+            ctx.cards->discard(first);
+            emit_card_played(ctx, player, first);
+            removed = ctx.cards->remove_from_hand(player, second_id);
+            if (removed.is_none())
+                return GameResult<void>::Err(EffectError::CardNotOwned);
+            card::Card second = std::move(removed).unwrap();
+            ctx.cards->discard(second);
+            emit_card_played(ctx, player, second);
+
+            // 逐目标虚拟杀结算（无实体牌：花色仅仁王盾黑杀判定消费，已短路）
+            const card::Card virtual_sha;
+            for (const auto &t : targets)
+                resolve_sha(ctx, ai, player, virtual_sha, t, eff.amount,
+                            static_cast<int>(targets.size()), true);
+            return GameResult<void>::Ok();
         }
     }
 }

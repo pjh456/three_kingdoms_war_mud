@@ -315,6 +315,24 @@ namespace tkw
                 if (action.is_none())
                     break;
 
+                if (!action.unwrap().second_instance_id.empty())
+                {
+                    // 虚拟杀（丈八蛇矛）：两张手牌当一张杀，按一张杀计次数
+                    auto vr = validate_virtual_sha(
+                        ctx, player, action.unwrap().instance_id,
+                        action.unwrap().second_instance_id,
+                        action.unwrap().targets, turn);
+                    if (vr.is_err())
+                        return TurnResult<void>::Err(to_turn_error(vr.unwrap_err()));
+                    auto rr = resolve_virtual_sha(
+                        ctx, ai, player, action.unwrap().instance_id,
+                        action.unwrap().second_instance_id, action.unwrap().targets);
+                    if (rr.is_err())
+                        return TurnResult<void>::Err(to_turn_error(rr.unwrap_err()));
+                    ++sha_played;
+                    continue;
+                }
+
                 const auto card =
                     find_in_hand(ctx, player, action.unwrap().instance_id);
                 if (card.is_none())
