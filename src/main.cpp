@@ -613,8 +613,15 @@ int main(int argc, char **argv)
     declare_common_options(app, rules);
     declare_human_option(app);
 
-    app.action([](ParseContext &ctx) -> CliResult<void>
-               { return run_game(options_from(ctx)); });
+    // 根命令：无子命令直接跑一局（兼容旧用法），先打印一行引导，说明其余入口。
+    app.action(
+        [](ParseContext &ctx) -> CliResult<void>
+        {
+            std::cout
+                << "（无子命令：跑一局 AI 对局；--help 查看命令，repl 进入交互，"
+                   "--human P0 真人参与）\n";
+            return run_game(options_from(ctx));
+        });
 
     // audit：审计牌堆
     auto &audit = app.add_leaf("audit", "审计牌堆，列出引擎未实现的卡");
@@ -691,6 +698,8 @@ int main(int argc, char **argv)
         [&app, &session](ParseContext &ctx) -> CliResult<void>
         {
             session.base = options_from(ctx);
+            // 进入 REPL 前打印引导：命令列表与退出方式在提示符处不可见。
+            std::cout << "输入 ? 查看命令，help <命令> 看用法，quit 退出\n";
             InteractiveConsole console(
                 app, "tkw> ", std::cin, std::cout, std::cerr,
                 [&app](const pjh::cli::QueryResult &r)
