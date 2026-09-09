@@ -74,6 +74,7 @@ namespace tkw
 
                 // PickCard
                 std::string target;
+                std::vector<card::Zone> zone_labels; /**< PickCard：与 options 等长的来源分区标签；其余类别为空 */
 
                 // Trigger
                 card::Ability ability = card::Ability::NoShaLimit;
@@ -179,9 +180,15 @@ namespace tkw
                     DecisionRequest req = base_request(ctx, source);
                     req.kind = DecisionKind::PickCard;
                     req.target = target;
-                    append_zone(req.options, ctx.cards->hand(target));
-                    append_zone(req.options, ctx.cards->equip(target));
-                    append_zone(req.options, ctx.cards->judge(target));
+                    append_zone(
+                        req.options, req.zone_labels, ctx.cards->hand(target),
+                        card::Zone::Hand);
+                    append_zone(
+                        req.options, req.zone_labels, ctx.cards->equip(target),
+                        card::Zone::Equip);
+                    append_zone(
+                        req.options, req.zone_labels, ctx.cards->judge(target),
+                        card::Zone::Judge);
                     return decider_->decide(req).card;
                 }
 
@@ -256,10 +263,14 @@ namespace tkw
                     return def.is_some() && is_counter_def(*def.unwrap());
                 }
 
+                /** @brief 追加一个区域的候选牌，并为每张牌记录来源分区。 */
                 static void append_zone(
-                    std::vector<card::Card> &out, const std::vector<card::Card> &zone)
+                    std::vector<card::Card> &out,
+                    std::vector<card::Zone> &labels,
+                    const std::vector<card::Card> &zone, card::Zone label)
                 {
                     out.insert(out.end(), zone.begin(), zone.end());
+                    labels.insert(labels.end(), zone.size(), label);
                 }
             };
         }

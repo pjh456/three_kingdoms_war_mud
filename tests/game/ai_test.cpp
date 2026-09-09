@@ -392,6 +392,34 @@ TEST_CASE("ai: human decider declines response")
     CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Jink).is_none());
 }
 
+TEST_CASE("ai: human decider names the required response card")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+    g.give("a", "shan", "j#1");
+
+    {
+        std::istringstream in("pass\n");
+        std::ostringstream out;
+        HumanDecider dec(in, out);
+        RequestDecisionSource src(dec);
+        CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha)
+                  .is_none());
+        CHECK(out.str().find("需打出杀") != std::string::npos);
+    }
+    {
+        std::istringstream in("pass\n");
+        std::ostringstream out;
+        HumanDecider dec(in, out);
+        RequestDecisionSource src(dec);
+        CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Jink)
+                  .is_none());
+        CHECK(out.str().find("需打出闪") != std::string::npos);
+    }
+}
+
 TEST_CASE("ai: human decider picks discards by indices")
 {
     TestGame g("deck");
@@ -412,6 +440,9 @@ TEST_CASE("ai: human decider picks discards by indices")
     CHECK(chosen[0] == "s#1");
     CHECK(chosen[1] == "t#3");
     CHECK(out.str().find("输入无效") != std::string::npos);
+    // 弃牌提示与非法原因统一用「序号」，重复选择给出专门原因
+    CHECK(out.str().find("下标") == std::string::npos);
+    CHECK(out.str().find("序号不能重复") != std::string::npos);
 }
 
 TEST_CASE("ai: human decider reprompts on invalid input")
@@ -437,6 +468,29 @@ TEST_CASE("ai: human decider reprompts on invalid input")
          pos = text.find("输入无效", pos + 1))
         ++reprompts;
     CHECK(reprompts == 2);
+    // 非法输入给出具体原因：动词/数量不对走用法提示，序号越界走范围提示
+    CHECK(text.find("输入无效：请输入 play <序号> 或 pass。") !=
+          std::string::npos);
+    CHECK(text.find("输入无效：序号需为 1-") != std::string::npos);
+}
+
+TEST_CASE("ai: human decider silently reprompts on a blank line")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+
+    std::istringstream in("\n   \nplay 1\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+    const tkw::game::TurnContext turn{"a", 0, 1};
+
+    const auto chosen = src.choose_play(g.ctx, turn);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().instance_id == "s#1");
+    CHECK(out.str().find("输入无效") == std::string::npos);
 }
 
 TEST_CASE("ai: human decider trigger reads yes and no")
@@ -514,6 +568,32 @@ TEST_CASE("ai: human decider picks card from target")
     const auto picked = src.pick_card_from_target(g.ctx, "a", "b");
     REQUIRE(picked.is_some());
     CHECK(picked.unwrap().instance_id == "s#2");
+}
+
+TEST_CASE("ai: human decider labels the target card zone")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("b", "sha", "s#2");
+    g.equip("b", "qinglong", "e#1");
+    const auto lesi = g.catalog.find("lesi");
+    REQUIRE(lesi.is_some());
+    const auto &copy = lesi.unwrap()->copies[0];
+    g.cards.add_to_judge(
+        "b", tkw::card::Card{"d#1", "lesi", copy.suit, copy.number});
+
+    std::istringstream in("pick 1\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    const auto picked = src.pick_card_from_target(g.ctx, "a", "b");
+    REQUIRE(picked.is_some());
+    // 三区混排时按来源分区标注，避免拿错区域
+    CHECK(out.str().find("[手] 杀 s#2") != std::string::npos);
+    CHECK(out.str().find("[装] 青龙偃月刀 e#1") != std::string::npos);
+    CHECK(out.str().find("[判] 乐不思蜀 d#1") != std::string::npos);
 }
 
 TEST_CASE("ai: routed ai sends human actor to human and falls back")

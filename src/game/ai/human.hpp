@@ -58,7 +58,11 @@ namespace tkw
                     case DecisionKind::Response:
                         if (!request.legal.empty())
                             return decide_response_pair(request);
-                        return decide_choose_id(request, "响应");
+                        return decide_choose_id(
+                            request,
+                            request.response_kind == card::ResponseKind::Jink
+                                ? "响应（需打出闪）"
+                                : "响应（需打出杀）");
                     case DecisionKind::Peach:
                         return decide_choose_id(
                             request, "濒死救场（濒死者: " + request.dying + "）");
@@ -177,15 +181,52 @@ namespace tkw
                              << "\n";
                 }
 
-                /** @brief 打印 1 基编号的牌候选列表。 */
+                /** @brief 目标牌来源分区标签；非选牌决策返回空串。 */
+                static const char *zone_tag(card::Zone zone)
+                {
+                    switch (zone)
+                    {
+                    case card::Zone::Hand:
+                        return "[手]";
+                    case card::Zone::Equip:
+                        return "[装]";
+                    case card::Zone::Judge:
+                        return "[判]";
+                    default:
+                        return "";
+                    }
+                }
+
+                /**
+                 * @brief 打印 1 基编号的牌候选列表。
+                 * @note 候选带来源分区标签（选目标牌）时在牌名前标注
+                 *       `[手]/[装]/[判]`，其余决策无标签保持原样。
+                 */
                 void print_options(
                     const DecisionRequest &req,
                     const std::vector<card::Card> &options)
                 {
+                    const bool has_zones = req.zone_labels.size() == options.size();
                     for (std::size_t i = 0; i < options.size(); ++i)
-                        out_ << "  " << (i + 1) << ") "
-                             << card_name(req, options[i].def_id) << " "
+                    {
+                        out_ << "  " << (i + 1) << ") ";
+                        if (has_zones)
+                            out_ << zone_tag(req.zone_labels[i]) << " ";
+                        out_ << card_name(req, options[i].def_id) << " "
                              << options[i].instance_id << "\n";
+                    }
+                }
+
+                /** @brief 打印重提示分隔行与具体原因，保留「输入无效」标识。 */
+                void print_invalid(const std::string &reason)
+                {
+                    out_ << "\n输入无效：" << reason << "\n";
+                }
+
+                /** @brief 1 基序号的合法范围提示文本。 */
+                static std::string index_hint(std::size_t count)
+                {
+                    return "序号需为 1-" + std::to_string(count) + " 之间的整数。";
                 }
 
                 /**
@@ -278,22 +319,31 @@ namespace tkw
                             return out;
 
                         const auto tokens = tokenize(line);
+                        if (tokens.empty())
+                        {
+                            out_ << "\n";
+                            continue;
+                        }
                         if (tokens.size() == 1 && tokens[0] == "pass")
                             return out;
 
                         int index = 0;
-                        if (tokens.size() == 2 && tokens[0] == "play" &&
-                            parse_index(tokens[1], req.legal.size(), index))
+                        if (tokens.size() == 2 && tokens[0] == "play")
                         {
-                            const auto &act =
-                                req.legal[static_cast<std::size_t>(index - 1)];
-                            out.instance_id =
-                                Option<std::string>::Some(act.card.instance_id);
-                            out.targets = act.targets;
-                            out.second_instance_id = act.second_instance_id;
-                            return out;
+                            if (parse_index(tokens[1], req.legal.size(), index))
+                            {
+                                const auto &act =
+                                    req.legal[static_cast<std::size_t>(index - 1)];
+                                out.instance_id = Option<std::string>::Some(
+                                    act.card.instance_id);
+                                out.targets = act.targets;
+                                out.second_instance_id = act.second_instance_id;
+                                return out;
+                            }
+                            print_invalid(index_hint(req.legal.size()));
+                            continue;
                         }
-                        out_ << "输入无效，请重试。\n";
+                        print_invalid("请输入 play <序号> 或 pass。");
                     }
                 }
 
@@ -317,19 +367,28 @@ namespace tkw
                             return out;
 
                         const auto tokens = tokenize(line);
+                        if (tokens.empty())
+                        {
+                            out_ << "\n";
+                            continue;
+                        }
                         if (tokens.size() == 1 && tokens[0] == "pass")
                             return out;
 
                         int index = 0;
-                        if (tokens.size() == 2 && tokens[0] == "play" &&
-                            parse_index(tokens[1], req.options.size(), index))
+                        if (tokens.size() == 2 && tokens[0] == "play")
                         {
-                            out.instance_id = Option<std::string>::Some(
-                                req.options[static_cast<std::size_t>(index - 1)]
-                                    .instance_id);
-                            return out;
+                            if (parse_index(tokens[1], req.options.size(), index))
+                            {
+                                out.instance_id = Option<std::string>::Some(
+                                    req.options[static_cast<std::size_t>(index - 1)]
+                                        .instance_id);
+                                return out;
+                            }
+                            print_invalid(index_hint(req.options.size()));
+                            continue;
                         }
-                        out_ << "输入无效，请重试。\n";
+                        print_invalid("请输入 play <序号> 或 pass。");
                     }
                 }
 
@@ -360,23 +419,36 @@ namespace tkw
                             return out;
 
                         const auto tokens = tokenize(line);
+                        if (tokens.empty())
+                        {
+                            out_ << "\n";
+                            continue;
+                        }
                         if (tokens.size() == 1 && tokens[0] == "pass")
                             return out;
 
-                        int first = 0, second = 0;
                         if (tokens.size() == 4 && tokens[0] == "play" &&
-                            tokens[2] == "+" &&
-                            parse_index(tokens[1], hand.size(), first) &&
-                            parse_index(tokens[3], hand.size(), second) &&
-                            first != second)
+                            tokens[2] == "+")
                         {
+                            int first = 0, second = 0;
+                            if (!parse_index(tokens[1], hand.size(), first) ||
+                                !parse_index(tokens[3], hand.size(), second))
+                            {
+                                print_invalid(index_hint(hand.size()));
+                                continue;
+                            }
+                            if (first == second)
+                            {
+                                print_invalid("两张牌的序号不能相同。");
+                                continue;
+                            }
                             out.instance_id = Option<std::string>::Some(
                                 hand[static_cast<std::size_t>(first - 1)].instance_id);
                             out.second_instance_id =
                                 hand[static_cast<std::size_t>(second - 1)].instance_id;
                             return out;
                         }
-                        out_ << "输入无效，请重试。\n";
+                        print_invalid("请输入 play <序号> + <序号> 或 pass。");
                     }
                 }
 
@@ -403,18 +475,27 @@ namespace tkw
                             return out;
 
                         const auto tokens = tokenize(line);
+                        if (tokens.empty())
+                        {
+                            out_ << "\n";
+                            continue;
+                        }
                         if (tokens.size() == 1 && tokens[0] == "pass")
                             return out;
 
                         int index = 0;
-                        if (tokens.size() == 2 && tokens[0] == "pick" &&
-                            parse_index(tokens[1], req.options.size(), index))
+                        if (tokens.size() == 2 && tokens[0] == "pick")
                         {
-                            out.card = Option<card::Card>::Some(
-                                req.options[static_cast<std::size_t>(index - 1)]);
-                            return out;
+                            if (parse_index(tokens[1], req.options.size(), index))
+                            {
+                                out.card = Option<card::Card>::Some(
+                                    req.options[static_cast<std::size_t>(index - 1)]);
+                                return out;
+                            }
+                            print_invalid(index_hint(req.options.size()));
+                            continue;
                         }
-                        out_ << "输入无效，请重试。\n";
+                        print_invalid("请输入 pick <序号> 或 pass。");
                     }
                 }
 
@@ -431,46 +512,60 @@ namespace tkw
                              << req.count << " 张）：\n";
                         print_view(req);
                         print_options(req, req.options);
-                        out_ << "输入 discard <下标> ...：" << std::flush;
+                        out_ << "输入 discard <序号> ...：" << std::flush;
 
                         std::string line;
                         if (!read_line(line))
                             return out;  // EOF：空选择，交由引擎报数量不足
 
                         const auto tokens = tokenize(line);
-                        if (tokens.size() ==
-                                static_cast<std::size_t>(req.count) + 1 &&
-                            tokens[0] == "discard")
+                        if (tokens.empty())
                         {
-                            std::vector<std::size_t> chosen;
-                            bool valid = true;
-                            for (std::size_t i = 1; i < tokens.size() && valid; ++i)
-                            {
-                                int index = 0;
-                                if (!parse_index(
-                                        tokens[i], req.options.size(), index))
-                                {
-                                    valid = false;
-                                    break;
-                                }
-                                const auto pos = static_cast<std::size_t>(index - 1);
-                                if (std::find(chosen.begin(), chosen.end(), pos) !=
-                                    chosen.end())
-                                {
-                                    valid = false;
-                                    break;
-                                }
-                                chosen.push_back(pos);
-                            }
-                            if (valid)
-                            {
-                                for (const auto pos : chosen)
-                                    out.discards.push_back(
-                                        req.options[pos].instance_id);
-                                return out;
-                            }
+                            out_ << "\n";
+                            continue;
                         }
-                        out_ << "输入无效，请重试。\n";
+                        if (tokens[0] != "discard")
+                        {
+                            print_invalid("请输入 discard <序号> ...。");
+                            continue;
+                        }
+                        if (tokens.size() !=
+                            static_cast<std::size_t>(req.count) + 1)
+                        {
+                            print_invalid(
+                                "需弃 " + std::to_string(req.count) +
+                                " 张牌，请给出 " + std::to_string(req.count) +
+                                " 个序号。");
+                            continue;
+                        }
+
+                        std::vector<std::size_t> chosen;
+                        bool valid = true;
+                        for (std::size_t i = 1; i < tokens.size() && valid; ++i)
+                        {
+                            int index = 0;
+                            if (!parse_index(tokens[i], req.options.size(), index))
+                            {
+                                print_invalid(index_hint(req.options.size()));
+                                valid = false;
+                                break;
+                            }
+                            const auto pos = static_cast<std::size_t>(index - 1);
+                            if (std::find(chosen.begin(), chosen.end(), pos) !=
+                                chosen.end())
+                            {
+                                print_invalid("序号不能重复。");
+                                valid = false;
+                                break;
+                            }
+                            chosen.push_back(pos);
+                        }
+                        if (!valid)
+                            continue;
+
+                        for (const auto pos : chosen)
+                            out.discards.push_back(req.options[pos].instance_id);
+                        return out;
                     }
                 }
 
@@ -488,6 +583,11 @@ namespace tkw
                             return out;  // EOF：不发动
 
                         const auto tokens = tokenize(line);
+                        if (tokens.empty())
+                        {
+                            out_ << "\n";
+                            continue;
+                        }
                         if (tokens.size() == 1 &&
                             (tokens[0] == "y" || tokens[0] == "yes"))
                         {
@@ -497,7 +597,7 @@ namespace tkw
                         if (tokens.size() == 1 &&
                             (tokens[0] == "n" || tokens[0] == "no"))
                             return out;
-                        out_ << "输入无效，请重试。\n";
+                        print_invalid("请输入 y 或 n。");
                     }
                 }
             };
