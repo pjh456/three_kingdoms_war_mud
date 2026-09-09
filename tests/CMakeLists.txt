@@ -196,3 +196,11 @@ add_test(NAME cli_parse_error_prefix_and_rc
                  "out=$($<TARGET_FILE:tkw> new --bogus 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '^Parse Error: ' && [ $rc -eq 2 ]")
 set_tests_properties(cli_parse_error_prefix_and_rc PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 未知子命令落到框架 unknown command 文案并退出 2；近距手误已在更早的分派处纠错或
+# 报歧义，故该路径不会给出 did-you-mean 建议。文案由框架渲染，这里只钉关键词与退出码。
+add_test(NAME cli_unknown_command_message
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> nosuchcmd 2>&1); rc=$?; printf '%s' \"$out\" | grep -q 'unknown command' && [ $rc -eq 2 ]")
+set_tests_properties(cli_unknown_command_message PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

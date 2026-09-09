@@ -681,7 +681,6 @@ namespace tkw
          */
         inline void build_app(pjh::cli::App &app, Session &session)
         {
-            app.set_extra_args(ExtraArgsPolicy::Error);  // 未知命令/多余参数即报错
             app.set_help_formatter(
                 [](const pjh::cli::BaseCommand &cmd) { return render_help_zh(cmd); });
 
@@ -819,6 +818,11 @@ namespace tkw
                     }
                     return CliResult<void>::Ok();
                 });
+
+            // 根不显式设策略，未知命令才落到框架的 unknown command 提示；各子命令
+            // 显式设为 Error，保证子命令名之后的多余参数仍报错而非静默丢弃。
+            for (auto &sub : app.subcommands())
+                sub->set_extra_args(ExtraArgsPolicy::Error);
         }
     }  // namespace cli
 }  // namespace tkw
