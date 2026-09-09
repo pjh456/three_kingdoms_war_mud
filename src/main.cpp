@@ -461,13 +461,26 @@ namespace
         return text;
     }
 
+    /** 把帮助正文中独占一行的英文段标题替换为中文（只替换首个匹配）。 */
+    void replace_heading_line(
+        std::string &text, std::string_view from, std::string_view to)
+    {
+        const std::string needle = "\n" + std::string(from) + ":\n";
+        const std::string replacement = "\n" + std::string(to) + ":\n";
+        if (std::size_t pos = text.find(needle); pos != std::string::npos)
+            text.replace(pos, needle.size(), replacement);
+    }
+
     /**
      * @brief 把命令树的框架帮助数据渲染为中文帮助。
      * @param cmd 请求帮助的命令（根或任一子命令）。
      * @return 中文段标题（用法/选项/参数/子命令）的完整帮助；根命令额外附用法示例。
      * @note 只替换框架渲染结果的段标题与 usage 前缀，选项/参数/子命令的排布与
-     *       对齐仍由框架负责，避免自造排版。选项标注（如 (repeatable)）保持框架
-     *       原文。program_name 用完整命令路径，子命令帮助也带 tkw 前缀。
+     *       对齐仍由框架负责，避免自造排版。段标题在渲染后再替换，使框架仍按
+     *       英文段名选择列宽上限（选项段 32 字节）。选项标注（如 (repeatable)）
+     *       保持框架原文。program_name 用完整命令路径，子命令帮助也带 tkw 前缀。
+     *       根帮助示例按「批量一次性」与「REPL 会话」分组：会话流命令只能在
+     *       `tkw repl` 内逐条输入，不带 tkw 前缀。
      */
     std::string render_help_zh(const pjh::cli::BaseCommand &cmd)
     {
@@ -485,27 +498,27 @@ namespace
 
         pjh::cli::HelpInfo info = pjh::cli::HelpFormatter::collect_help(cmd, path);
         pjh::cli::HelpDocument doc = pjh::cli::HelpFormatter::build_document(info);
-        for (auto &section : doc.sections)
-        {
-            if (section.heading == "Options")
-                section.heading = "选项";
-            else if (section.heading == "Arguments")
-                section.heading = "参数";
-            else if (section.heading == "Subcommands")
-                section.heading = "子命令";
-        }
 
         std::string text = zh_usage_prefix(pjh::cli::HelpFormatter::format_help(doc));
+        replace_heading_line(text, "Options", "选项");
+        replace_heading_line(text, "Arguments", "参数");
+        replace_heading_line(text, "Subcommands", "子命令");
 
         if (cmd.parent() == nullptr)
             text += "示例:\n"
-                    "  跑一局 AI 对局:          tkw\n"
-                    "  进入交互模式:            tkw repl\n"
-                    "  真人参与 P0 座位:        tkw --human P0 repl\n"
-                    "  开新局后逐步推进:        tkw new --players 2 --seed 1 -> step -> status\n"
-                    "  按位置参数跑一局:        tkw deal 2 1\n"
-                    "  保存并读回:              tkw save s.json / tkw load s.json\n"
-                    "  审计牌堆:                tkw audit\n";
+                    "  批量一次性:\n"
+                    "    tkw                      跑一局 AI 对局\n"
+                    "    tkw deal 2 1             按位置参数跑一局（2 人，种子 1）\n"
+                    "    tkw audit                审计牌堆\n"
+                    "  REPL 会话（先 tkw repl，再逐条输入）:\n"
+                    "    new --players 2 --seed 1 开新局\n"
+                    "    step                     执行一个回合\n"
+                    "    status                   查看会话状态\n"
+                    "    save s.json              保存当前对局\n"
+                    "    load s.json              载入存档到会话，再 step 继续\n"
+                    "  真人参与（先 tkw --human P0 repl，再逐条输入）:\n"
+                    "    new --players 2 --seed 1 开新局\n"
+                    "    step                     轮到 P0 时按提示输入（play/pass/discard）\n";
         return text;
     }
 
@@ -560,7 +573,8 @@ namespace
             return out + "\n";
         }
         case QueryKind::NoMatch:
-            return "没有匹配的命令。试试 " + zh_usage_prefix(result.usage_line) + "\n";
+            // 调用方统一在结果末尾补一个换行，这里不自带换行以免多出空行。
+            return "没有匹配的命令。" + zh_usage_prefix(result.usage_line);
         }
         return {};
     }

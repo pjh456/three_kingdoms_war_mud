@@ -141,10 +141,11 @@ add_test(NAME cli_fuzzy_typo_resolves COMMAND tkw audti)
 set_tests_properties(cli_fuzzy_typo_resolves PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-# 根帮助应中文化段标题并附用法示例；子命令帮助同样用中文用法前缀。
+# 根帮助应中文化段标题并附用法示例；示例按批量一次性与 REPL 会话分组，会话流
+# 命令不带 tkw 前缀（照抄进 shell 会失败）。
 add_test(NAME cli_help_root_zh
          COMMAND sh -c
-                 "$<TARGET_FILE:tkw> --help | grep -q '用法:' && $<TARGET_FILE:tkw> --help | grep -q '示例:'")
+                 "out=$($<TARGET_FILE:tkw> --help); echo \"$out\" | grep -q '用法:' && echo \"$out\" | grep -q '选项:' && echo \"$out\" | grep -q '子命令:' && echo \"$out\" | grep -q '示例:' && echo \"$out\" | grep -q 'REPL 会话' && echo \"$out\" | grep -q 'tkw deal 2 1' && echo \"$out\" | grep -q 'tkw audit' && ! echo \"$out\" | grep -q 'tkw new' && ! echo \"$out\" | grep -q 'tkw save'")
 set_tests_properties(cli_help_root_zh PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
