@@ -80,12 +80,13 @@ namespace
     Options options_from(ParseContext &ctx) { return options_from(ctx, Options{}); }
 
     /**
-     * @brief 在命令上声明公共选项（牌堆/人数/手牌/种子/日志/自动存档/真人座位）。
+     * @brief 在命令上声明标量公共选项（牌堆/人数/手牌/种子/日志/自动存档）。
      * @param cmd   目标命令：根命令或会读取这些选项的 leaf。
      * @param rules 玩家数上下限来源。
      * @note pjh_cli 的选项声明只查当前命令、值才沿父链查找，故根命令与各 leaf
      *       需各声明一份，子命令名之后的选项才可解析；未显式给的项仍由
      *       options_from 沿父链或会话启动选项回落，声明处一律不设默认值。
+     *       标量「最近声明胜出」即期望语义，故 per-leaf 重声明无副作用。
      */
     void declare_common_options(
         pjh::cli::BaseCommand &cmd, const tkw::game::RulesConfig &rules)
@@ -107,6 +108,17 @@ namespace
         cmd.option<fixed_string("autosave")>(
                "--autosave", "REPL 退出时自动存档路径（空串关闭）")
             .path();
+    }
+
+    /**
+     * @brief 在根命令上声明可重复的真人座位选项。
+     * @param cmd 目标命令；只应传根命令，使父/叶混写累积进同一上下文。
+     * @note repeatable 选项的值按「最近声明」写入单一上下文，若根与 leaf 各声明
+     *       一份，`--human P0 new --human P1` 会分落两处，而读取只取最近节点，
+     *       导致 P0 静默丢弃；故仅根声明。leaf 处仍可解析（祖先链查找）。
+     */
+    void declare_human_option(pjh::cli::BaseCommand &cmd)
+    {
         cmd.option<fixed_string("human")>(
                "--human",
                "真人座位（可重复：--human P0 --human P2；存档不保存，读档后需重新指定）")
@@ -226,6 +238,13 @@ namespace
         std::cout << "  下一回合: " << s.state.current
                   << "，已执行回合: " << s.state.turns
                   << "，存活: " << ctx.entities->size() << "\n";
+        std::cout << "  真人座位: ";
+        if (s.humans.empty())
+            std::cout << "无";
+        else
+            for (std::size_t i = 0; i < s.humans.size(); ++i)
+                std::cout << (i == 0 ? "" : ",") << s.humans[i];
+        std::cout << "\n";
     }
 
     CliResult<void> cmd_new(const Options &opt, Session &s)
@@ -420,8 +439,10 @@ int main(int argc, char **argv)
     Session session;  // 跨命令持有的对局会话
 
     // 根命令选项（无子命令时直接跑一局，兼容旧用法）；读取这些选项的 leaf 各自
-    // 声明一份，使子命令名之后的选项也可解析。
+    // 声明一份标量选项，使子命令名之后的选项也可解析；--human 是 repeatable，
+    // 仅根声明以避免父/叶混写时值分落两处。
     declare_common_options(app, rules);
+    declare_human_option(app);
 
     app.action([](ParseContext &ctx) -> CliResult<void>
                { return run_game(options_from(ctx)); });

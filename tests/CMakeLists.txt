@@ -88,9 +88,23 @@ set_tests_properties(cli_option_after_subcommand PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_test(NAME cli_option_before_subcommand
-         COMMAND tkw --human P0 --players 2 --seed 1 new)
+         COMMAND tkw --human P0 new)
 set_tests_properties(cli_option_before_subcommand PROPERTIES
     PASS_REGULAR_EXPRESSION "新对局已开始"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# repeatable 选项在子命令名前后混写应累积到同一上下文，而非最近声明覆盖。
+add_test(NAME cli_human_mixed_positions
+         COMMAND tkw --human P0 new --human P1 --players 2 --seed 1)
+set_tests_properties(cli_human_mixed_positions PROPERTIES
+    PASS_REGULAR_EXPRESSION "真人座位: P0,P1"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# repl 不应被贪婪的 --human 吞掉；非 TTY 无输入时打印一次提示即 EOF 退出。
+add_test(NAME cli_repl_human_not_swallowed
+         COMMAND tkw --human P0 repl)
+set_tests_properties(cli_repl_human_not_swallowed PROPERTIES
+    PASS_REGULAR_EXPRESSION "tkw>"
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_test(NAME cli_deal_option_after_positional
