@@ -303,12 +303,12 @@ namespace tkw
             GameContext &ctx, DecisionSource &ai, const std::string &player)
         {
             int sha_played = 0;
-            const int limit = sha_limit(ctx, player);
             while (true)
             {
                 if (!is_alive(ctx, player))
                     return TurnResult<void>::Ok();
-                const TurnContext turn{player, sha_played, limit};
+                // 每轮重采样杀上限：回合中途装连弩要当轮生效，与引擎侧强制检查一致
+                const TurnContext turn{player, sha_played, sha_limit(ctx, player)};
                 auto action = ai.choose_play(ctx, turn);
                 if (action.is_none())
                     break;

@@ -608,6 +608,51 @@ TEST_CASE("game: liangnu lifts sha limit")
     CHECK(g.cards.hand_size("a") == 2); // 4 - 2 = 2（上限 4 不弃）
 }
 
+TEST_CASE("game: mid-turn liangnu allows further sha this turn")
+{
+    // 遵守回合上下文的决策源：引擎上报杀次数已用尽时不再提杀（真实 AI 的合法枚举行为）
+    struct ContextBoundDecider : TestDecider
+    {
+        Option<PlayAction> choose_play(
+            const GameContext &ctx, const TurnContext &turn) override
+        {
+            if (play_cursor >= plays.size())
+                return Option<PlayAction>::None();
+            const auto &next = plays[play_cursor];
+            for (const auto &c : ctx.cards->hand(turn.player))
+            {
+                if (c.instance_id != next.instance_id)
+                    continue;
+                const auto def = ctx.catalog->find(c.def_id);
+                if (def.is_some() && is_sha(*def.unwrap()) &&
+                    turn.sha_played >= turn.sha_limit)
+                    return Option<PlayAction>::None();
+                break;
+            }
+            return Option<PlayAction>::Some(plays[play_cursor++]);
+        }
+    };
+
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "sha", "s#1");
+    g.give("a", "liangnu", "e#0");
+    g.give("a", "sha", "s#2");
+
+    ContextBoundDecider decider;
+    decider.plays = {
+        PlayAction{"s#1", {"b"}},
+        PlayAction{"e#0", {}},
+        PlayAction{"s#2", {"b"}}
+    };
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 2);            // 两刀全中：回合中途装连弩当回合生效
+    CHECK(g.cards.hand_size("a") == 2); // 3 + 摸 2 - 打出 3 = 2
+}
+
 TEST_CASE("game: rules config drives draw and sha limit")
 {
     TestGame g("deck");
