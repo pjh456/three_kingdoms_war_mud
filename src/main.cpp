@@ -10,6 +10,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <pjh_cli.hpp>
@@ -435,6 +436,19 @@ namespace
             std::cout << "  " << id << "\n";
         return CliResult<void>::Ok();
     }
+
+    /**
+     * @brief 执行错误的用户可见文本。
+     * @param what 执行错误 what() 文本。
+     * @return 剥掉框架统一加的 "Parse Error: " 前缀；无前缀时原样返回。
+     * @note 只用于执行路径：这些错误语义上不是解析失败，保留前缀会把「没有对局/
+     *       文件不存在」误示为命令行拼写错误。解析路径的错误须保留前缀。
+     */
+    std::string_view runtime_error_text(std::string_view what)
+    {
+        constexpr std::string_view prefix = "Parse Error: ";
+        return what.starts_with(prefix) ? what.substr(prefix.size()) : what;
+    }
 }
 
 int main(int argc, char **argv)
@@ -564,7 +578,7 @@ int main(int argc, char **argv)
     auto executed = ctx.matched_command()->execute(ctx);
     if (executed.is_err())
     {
-        std::cerr << executed.unwrap_err().what() << "\n";
+        std::cerr << runtime_error_text(executed.unwrap_err().what()) << "\n";
         return 1;
     }
     return 0;

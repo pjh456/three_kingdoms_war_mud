@@ -119,6 +119,13 @@ set_tests_properties(cli_unknown_option_still_errors PROPERTIES
     WILL_FAIL TRUE
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# 执行错误（无会话）应只打印纯中文消息并退出 1，不得带框架统一的 Parse Error: 前缀。
+add_test(NAME cli_step_without_session_plain_error
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> step 2>&1); rc=$?; [ \"$out\" = 没有进行中的对局 ] && [ $rc -eq 1 ]")
+set_tests_properties(cli_step_without_session_plain_error PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # audit：只钉退出码；标准牌堆的未实现卡集合随引擎演进而变，不钉输出内容。
 add_test(NAME cli_audit_ok COMMAND tkw audit)
 set_tests_properties(cli_audit_ok PROPERTIES
