@@ -1,7 +1,8 @@
 /**
  * @file manager.hpp
  * @brief 对局作用域的卡牌容器：摸牌堆/弃牌堆 + 按 entity id 键控的
- *        手牌区/装备区/判定区（三者共用一个 CardZone 抽象）。
+ *        手牌区/装备区/判定区（三者共用一个 CardZone 抽象，区以三元素
+ *        数组存放）。
  * @note 哑状态持有者（对齐 entity/manager.hpp 的定位）：
  *       - 不校验规则：装备槽位占用、手牌上限、摸空补牌等归 gameplay；
  *       - 不发布事件：摸/弃/打出由 gameplay 观察返回值并自行发布；
@@ -13,6 +14,7 @@
 #define INCLUDE_TKW_CARD_MANAGER_HPP
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -108,9 +110,9 @@ namespace tkw
                 s.instance_seq = instance_seq;
                 s.draw = draw_pile.view();
                 s.discard = discard_pile.view();
-                s.hand = zone_snapshot(hand_zones);
-                s.equip = zone_snapshot(equip_zones);
-                s.judge = zone_snapshot(judge_zones);
+                s.hand = zone_snapshot(zones_of(Zone::Hand));
+                s.equip = zone_snapshot(zones_of(Zone::Equip));
+                s.judge = zone_snapshot(zones_of(Zone::Judge));
                 return s;
             }
 
@@ -123,9 +125,9 @@ namespace tkw
                     draw_pile.push(c);
                 for (const auto &c : s.discard)
                     discard_pile.push(c);
-                restore_zone(hand_zones, s.hand);
-                restore_zone(equip_zones, s.equip);
-                restore_zone(judge_zones, s.judge);
+                restore_zone(zones_of(Zone::Hand), s.hand);
+                restore_zone(zones_of(Zone::Equip), s.equip);
+                restore_zone(zones_of(Zone::Judge), s.judge);
             }
 
             /** @brief 清空全部牌与实例序号。 */
@@ -134,9 +136,8 @@ namespace tkw
                 instance_seq = 0;
                 draw_pile = CardStack{};
                 discard_pile = CardStack{};
-                hand_zones.clear();
-                equip_zones.clear();
-                judge_zones.clear();
+                for (auto &zones : entity_zones)
+                    zones.clear();
             }
 
             // ── 摸牌堆 / 弃牌堆 ──────────────────────────────────────────
@@ -183,79 +184,70 @@ namespace tkw
 
             void add_to_hand(const std::string &entity_id, Card card)
             {
-                hand_zones[entity_id].add(std::move(card));
+                zones_of(Zone::Hand)[entity_id].add(std::move(card));
             }
 
             Option<Card> remove_from_hand(
                 const std::string &entity_id, const std::string &instance_id)
             {
-                auto *z = find_zone(hand_zones, entity_id);
-                return z ? z->remove(instance_id) : Option<Card>::None();
+                return remove_from_zone(Zone::Hand, entity_id, instance_id);
             }
 
             std::size_t hand_size(const std::string &entity_id) const
             {
-                const auto *z = find_zone(hand_zones, entity_id);
-                return z ? z->size() : 0;
+                return zone_size(Zone::Hand, entity_id);
             }
 
             /** @brief 手牌列表（不存在实体时为空列表）。 */
             const std::vector<Card> &hand(const std::string &entity_id) const
             {
-                const auto *z = find_zone(hand_zones, entity_id);
-                return z ? z->view() : empty_list();
+                return zone_view(Zone::Hand, entity_id);
             }
 
             // ── 装备区 ──────────────────────────────────────────────────
 
             void add_to_equip(const std::string &entity_id, Card card)
             {
-                equip_zones[entity_id].add(std::move(card));
+                zones_of(Zone::Equip)[entity_id].add(std::move(card));
             }
 
             Option<Card> remove_from_equip(
                 const std::string &entity_id, const std::string &instance_id)
             {
-                auto *z = find_zone(equip_zones, entity_id);
-                return z ? z->remove(instance_id) : Option<Card>::None();
+                return remove_from_zone(Zone::Equip, entity_id, instance_id);
             }
 
             std::size_t equip_size(const std::string &entity_id) const
             {
-                const auto *z = find_zone(equip_zones, entity_id);
-                return z ? z->size() : 0;
+                return zone_size(Zone::Equip, entity_id);
             }
 
             const std::vector<Card> &equip(const std::string &entity_id) const
             {
-                const auto *z = find_zone(equip_zones, entity_id);
-                return z ? z->view() : empty_list();
+                return zone_view(Zone::Equip, entity_id);
             }
 
             // ── 判定区 ──────────────────────────────────────────────────
 
             void add_to_judge(const std::string &entity_id, Card card)
             {
-                judge_zones[entity_id].add(std::move(card));
+                zones_of(Zone::Judge)[entity_id].add(std::move(card));
             }
 
             Option<Card> remove_from_judge(
                 const std::string &entity_id, const std::string &instance_id)
             {
-                auto *z = find_zone(judge_zones, entity_id);
-                return z ? z->remove(instance_id) : Option<Card>::None();
+                return remove_from_zone(Zone::Judge, entity_id, instance_id);
             }
 
             std::size_t judge_size(const std::string &entity_id) const
             {
-                const auto *z = find_zone(judge_zones, entity_id);
-                return z ? z->size() : 0;
+                return zone_size(Zone::Judge, entity_id);
             }
 
             const std::vector<Card> &judge(const std::string &entity_id) const
             {
-                const auto *z = find_zone(judge_zones, entity_id);
-                return z ? z->view() : empty_list();
+                return zone_view(Zone::Judge, entity_id);
             }
 
             // ── 跨区操作 ────────────────────────────────────────────────
@@ -268,23 +260,15 @@ namespace tkw
                 const std::string &entity_id, const std::string &instance_id,
                 Zone *from = nullptr)
             {
-                if (auto c = remove_from_hand(entity_id, instance_id); c.is_some())
+                for (const Zone z : kSlotZones)
                 {
-                    if (from)
-                        *from = Zone::Hand;
-                    return c;
-                }
-                if (auto c = remove_from_equip(entity_id, instance_id); c.is_some())
-                {
-                    if (from)
-                        *from = Zone::Equip;
-                    return c;
-                }
-                if (auto c = remove_from_judge(entity_id, instance_id); c.is_some())
-                {
-                    if (from)
-                        *from = Zone::Judge;
-                    return c;
+                    if (auto c = remove_from_zone(z, entity_id, instance_id);
+                        c.is_some())
+                    {
+                        if (from)
+                            *from = z;
+                        return c;
+                    }
                 }
                 return Option<Card>::None();
             }
@@ -296,12 +280,12 @@ namespace tkw
             bool has_card(
                 const std::string &entity_id, const std::string &instance_id) const
             {
-                for (const auto *zones : {&hand_zones, &equip_zones, &judge_zones})
+                for (const Zone z : kSlotZones)
                 {
-                    auto it = zones->find(entity_id);
-                    if (it == zones->end())
+                    const auto *zone = find_zone(z, entity_id);
+                    if (zone == nullptr)
                         continue;
-                    for (const auto &c : it->second.view())
+                    for (const auto &c : zone->view())
                         if (c.instance_id == instance_id)
                             return true;
                 }
@@ -315,10 +299,11 @@ namespace tkw
             std::vector<Card> discard_all(const std::string &entity_id)
             {
                 std::vector<Card> out;
-                for (auto *zones : {&hand_zones, &equip_zones, &judge_zones})
+                for (const Zone z : kSlotZones)
                 {
-                    auto it = zones->find(entity_id);
-                    if (it == zones->end())
+                    ZoneMap &zones = zones_of(z);
+                    auto it = zones.find(entity_id);
+                    if (it == zones.end())
                         continue;
                     auto cards = it->second.drain();
                     for (auto &c : cards)
@@ -326,7 +311,7 @@ namespace tkw
                         out.push_back(c);
                         discard_pile.push(std::move(c));
                     }
-                    zones->erase(it);
+                    zones.erase(it);
                 }
                 return out;
             }
@@ -337,9 +322,38 @@ namespace tkw
             std::uint64_t instance_seq = 0;
             CardStack draw_pile;
             CardStack discard_pile;
-            std::unordered_map<std::string, CardZone> hand_zones;
-            std::unordered_map<std::string, CardZone> equip_zones;
-            std::unordered_map<std::string, CardZone> judge_zones;
+            std::array<ZoneMap, 3> entity_zones; /**< 槽位顺序见 kSlotZones */
+
+            /**
+             * @brief 实体区 → 槽位下标（Hand=0 / Equip=1 / Judge=2）。
+             * @note 不变量：仅 Hand/Equip/Judge 三区合法且必须与 kSlotZones
+             *       同序；其余 Zone 值（Draw/Discard/Limbo）不进入实体区。
+             */
+            static constexpr int zone_slot(Zone zone)
+            {
+                switch (zone)
+                {
+                    case Zone::Hand:
+                        return 0;
+                    case Zone::Equip:
+                        return 1;
+                    case Zone::Judge:
+                        return 2;
+                    default:
+                        return -1;
+                }
+            }
+
+            /** @brief 槽位 → 区域表：跨区操作统一按此序（Hand → Equip → Judge）。 */
+            static constexpr std::array<Zone, 3> kSlotZones = {
+                Zone::Hand, Zone::Equip, Zone::Judge};
+
+            ZoneMap &zones_of(Zone zone) { return entity_zones[zone_slot(zone)]; }
+
+            const ZoneMap &zones_of(Zone zone) const
+            {
+                return entity_zones[zone_slot(zone)];
+            }
 
             static std::vector<std::pair<std::string, std::vector<Card>>> zone_snapshot(
                 const ZoneMap &zones)
@@ -373,20 +387,40 @@ namespace tkw
                 return empty;
             }
 
-            static CardZone *find_zone(
-                std::unordered_map<std::string, CardZone> &zones,
-                const std::string &entity_id)
+            CardZone *find_zone(Zone zone, const std::string &entity_id)
             {
+                ZoneMap &zones = zones_of(zone);
                 auto it = zones.find(entity_id);
                 return it == zones.end() ? nullptr : &it->second;
             }
 
-            static const CardZone *find_zone(
-                const std::unordered_map<std::string, CardZone> &zones,
-                const std::string &entity_id)
+            const CardZone *find_zone(
+                Zone zone, const std::string &entity_id) const
             {
+                const ZoneMap &zones = zones_of(zone);
                 auto it = zones.find(entity_id);
                 return it == zones.end() ? nullptr : &it->second;
+            }
+
+            Option<Card> remove_from_zone(
+                Zone zone, const std::string &entity_id,
+                const std::string &instance_id)
+            {
+                auto *z = find_zone(zone, entity_id);
+                return z ? z->remove(instance_id) : Option<Card>::None();
+            }
+
+            std::size_t zone_size(Zone zone, const std::string &entity_id) const
+            {
+                const auto *z = find_zone(zone, entity_id);
+                return z ? z->size() : 0;
+            }
+
+            const std::vector<Card> &zone_view(
+                Zone zone, const std::string &entity_id) const
+            {
+                const auto *z = find_zone(zone, entity_id);
+                return z ? z->view() : empty_list();
             }
 
             Card make_card(const std::string &def_id, const CardCopy &copy)

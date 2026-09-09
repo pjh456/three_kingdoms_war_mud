@@ -121,6 +121,78 @@ TEST_CASE("card: manager equip/judge zones")
     CHECK(mgr.judge_size("p1") == 0);
 }
 
+TEST_CASE("card: remove_from_any removes in hand/equip/judge order and reports the source zone")
+{
+    CardManager mgr;
+    mgr.add_to_hand("p1", make_card("h#0", "sha", Suit::Spade, 7));
+    mgr.add_to_equip("p1", make_card("e#0", "liangnu", Suit::Club, 1));
+    mgr.add_to_judge("p1", make_card("j#0", "lesi", Suit::Heart, 9));
+
+    Zone from = Zone::Limbo;
+    auto first = mgr.remove_from_any("p1", "h#0", &from);
+    REQUIRE(first.is_some());
+    CHECK(first.unwrap().instance_id == "h#0");
+    CHECK(from == Zone::Hand);
+
+    from = Zone::Limbo;
+    REQUIRE(mgr.remove_from_any("p1", "e#0", &from).is_some());
+    CHECK(from == Zone::Equip);
+
+    from = Zone::Limbo;
+    REQUIRE(mgr.remove_from_any("p1", "j#0", &from).is_some());
+    CHECK(from == Zone::Judge);
+
+    // 未命中不写入来源
+    from = Zone::Limbo;
+    CHECK(mgr.remove_from_any("p1", "no-such", &from).is_none());
+    CHECK(from == Zone::Limbo);
+    CHECK(mgr.remove_from_any("ghost", "h#0", &from).is_none());
+    CHECK(from == Zone::Limbo);
+}
+
+TEST_CASE("card: has_card spans the three zones")
+{
+    CardManager mgr;
+    mgr.add_to_hand("p1", make_card("h#0", "sha", Suit::Spade, 7));
+    mgr.add_to_equip("p1", make_card("e#0", "liangnu", Suit::Club, 1));
+    mgr.add_to_judge("p1", make_card("j#0", "lesi", Suit::Heart, 9));
+
+    CHECK(mgr.has_card("p1", "h#0"));
+    CHECK(mgr.has_card("p1", "e#0"));
+    CHECK(mgr.has_card("p1", "j#0"));
+
+    REQUIRE(mgr.remove_from_hand("p1", "h#0").is_some());
+    CHECK_FALSE(mgr.has_card("p1", "h#0"));
+
+    CHECK_FALSE(mgr.has_card("p1", "no-such"));
+    CHECK_FALSE(mgr.has_card("ghost", "e#0"));
+}
+
+TEST_CASE("card: discard_all drains in hand/equip/judge order")
+{
+    CardManager mgr;
+    mgr.add_to_hand("p1", make_card("h#0", "sha", Suit::Spade, 7));
+    mgr.add_to_hand("p1", make_card("h#1", "shan", Suit::Diamond, 2));
+    mgr.add_to_equip("p1", make_card("e#0", "liangnu", Suit::Club, 1));
+    mgr.add_to_judge("p1", make_card("j#0", "lesi", Suit::Heart, 9));
+
+    auto out = mgr.discard_all("p1");
+    std::vector<std::string> order;
+    for (const auto &c : out)
+        order.push_back(c.instance_id);
+    CHECK(order == (std::vector<std::string>{"h#0", "h#1", "e#0", "j#0"}));
+    CHECK(mgr.discard_size() == 4);
+
+    // 清场后区条目已 erase
+    CHECK(mgr.hand_size("p1") == 0);
+    CHECK(mgr.equip_size("p1") == 0);
+    CHECK(mgr.judge_size("p1") == 0);
+    CHECK(mgr.hand("p1").empty());
+    CHECK(mgr.equip("p1").empty());
+    CHECK(mgr.judge("p1").empty());
+    CHECK(mgr.discard_all("p1").empty());
+}
+
 #ifdef TKW_TEST_RESOURCE_DIR
 TEST_CASE("card: build_deck materialises every copy of every def")
 {
