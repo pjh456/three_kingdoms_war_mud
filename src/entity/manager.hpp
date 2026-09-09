@@ -17,13 +17,14 @@
 
 namespace tkw
 {
-    /** @brief 实体快照：身份 + 座位 + 体力（按创建序导出）。 */
+    /** @brief 实体快照：身份 + 座位 + 体力 + 性别（按创建序导出）。 */
     struct EntitySnapshot
     {
         std::string id;
         int seat = 0;
         int hp = 0;
         int max_hp = 0;
+        entity::Gender gender = entity::Gender::Male;
     };
 
     /**
@@ -53,11 +54,13 @@ namespace tkw
          * @param id 实体 id，对局内唯一。
          * @param seat 座位号（距离计算与回合序的基础）。
          * @param hp 初始血条（体力/上限）。
+         * @param gender 性别（缺省 Male）。
          * @return Ok 时为实体指针（与 find 同稳定性：未 remove 前有效）；
          *         Err 时为 EntityError::DuplicateId。
          */
         entity::EntityResult<entity::Entity *> create(
-            std::string id, int seat, entity::Hp hp)
+            std::string id, int seat, entity::Hp hp,
+            entity::Gender gender = entity::Gender::Male)
         {
             if (contains(id))
                 return entity::EntityResult<entity::Entity *>::Err(
@@ -65,7 +68,7 @@ namespace tkw
             const std::size_t at = entities.size();
             entities.push_back(
                 std::make_unique<entity::Entity>(
-                    std::move(id), seat, std::move(hp), *bus));
+                    std::move(id), seat, std::move(hp), *bus, gender));
             index.emplace(entities[at]->get_id(), at);
             return entity::EntityResult<entity::Entity *>::Ok(entities[at].get());
         }
@@ -100,7 +103,7 @@ namespace tkw
         std::size_t size() const noexcept { return entities.size(); }
         bool empty() const noexcept { return entities.empty(); }
 
-        /** @brief 按创建序导出快照（含体力与上限）。 */
+        /** @brief 按创建序导出快照（含体力/上限与性别）。 */
         std::vector<EntitySnapshot> snapshot() const
         {
             std::vector<EntitySnapshot> out;
@@ -108,11 +111,11 @@ namespace tkw
             for (const auto &e : entities)
                 out.push_back(EntitySnapshot{
                     e->get_id(), e->get_seat(), e->get_hp(),
-                    e->get_hp_bar().get_max()});
+                    e->get_hp_bar().get_max(), e->get_gender()});
             return out;
         }
 
-        /** @brief 清空后按快照顺序重建（id/座位/体力原样恢复）。 */
+        /** @brief 清空后按快照顺序重建（id/座位/体力/性别原样恢复）。 */
         void restore(const std::vector<EntitySnapshot> &in)
         {
             clear();
@@ -120,7 +123,7 @@ namespace tkw
             {
                 entity::Hp hp = entity::Hp::make(s.max_hp);
                 hp.set_cur(s.hp);
-                (void)create(s.id, s.seat, std::move(hp));
+                (void)create(s.id, s.seat, std::move(hp), s.gender);
             }
         }
 

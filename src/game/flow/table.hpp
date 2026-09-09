@@ -42,11 +42,15 @@ namespace tkw
             Game(Game &&) = delete;
             Game &operator=(Game &&) = delete;
 
-            /** @brief 注册玩家实体（绑定本局总线）。 */
+            /**
+             * @brief 注册玩家实体（绑定本局总线）。
+             * @param gender 性别（缺省 Male）。
+             */
             entity::EntityResult<entity::Entity *> add_player(
-                std::string id, int seat, entity::Hp hp)
+                std::string id, int seat, entity::Hp hp,
+                entity::Gender gender = entity::Gender::Male)
             {
-                return entities.create(std::move(id), seat, std::move(hp));
+                return entities.create(std::move(id), seat, std::move(hp), gender);
             }
 
             /**

@@ -242,6 +242,14 @@ namespace tkw
                     !detail::read_int(*eo, "hp", e.hp) ||
                     !detail::read_int(*eo, "max_hp", e.max_hp))
                     return detail::fail(SaveErrorKind::StructureError, "entities");
+                // 旧档无 gender 字段：回落 Male，不拒绝旧档
+                if (eo->contains("gender"))
+                {
+                    auto gv = (*eo)["gender"].try_as_string();
+                    if (!gv || !gender_from(*gv, e.gender))
+                        return detail::fail(
+                            SaveErrorKind::StructureError, "entities.gender");
+                }
                 ents.push_back(std::move(e));
             }
 

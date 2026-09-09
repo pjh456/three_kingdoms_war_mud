@@ -1,6 +1,7 @@
 #ifndef INCLUDE_TKW_ENTITY_BASE_HPP
 #define INCLUDE_TKW_ENTITY_BASE_HPP
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -13,9 +14,16 @@ namespace tkw
 {
     namespace entity
     {
+        /** @brief 性别（装备能力按异性/同性区分效果）。 */
+        enum class Gender : std::uint8_t
+        {
+            Male,
+            Female,
+        };
+
         /**
          * @class Entity
-         * @brief 玩家实体：id + 座位 + 血条（Hp：体力/上限）。构造时自动绑定
+         * @brief 玩家实体：id + 座位 + 性别 + 血条（Hp：体力/上限）。构造时自动绑定
          *        体力监听：cur 变化经注入的 EventBus 发布 EntityHpChangedEvent。
          * @note 事件总线须比实体存活更久（实体析构不发布事件，
          *       但存活期间的状态变化都会发布到该总线）。
@@ -30,23 +38,29 @@ namespace tkw
             int seat = 0;
             Hp hp;
             EventBus *bus;
+            Gender gender = Gender::Male;
 
         public:
             Entity(
                 std::string eid,
                 int in_seat,
                 Hp in_hp,
-                EventBus &injected_bus) :
+                EventBus &injected_bus,
+                Gender in_gender = Gender::Male) :
                 id(std::move(eid)),
                 seat(in_seat),
                 hp(std::move(in_hp)),
-                bus(&injected_bus)
+                bus(&injected_bus),
+                gender(in_gender)
             {
                 bind_status_events();
             }
 
             const std::string &get_id() const noexcept { return id; }
             int get_seat() const noexcept { return seat; }
+
+            /** @brief 性别（未显式指定时为 Male）。 */
+            Gender get_gender() const noexcept { return gender; }
 
             /** @brief 当前体力（可为非正 = 濒死值状态）。 */
             int get_hp() const noexcept { return hp.get_cur(); }

@@ -66,6 +66,40 @@ TEST_CASE("save: round-trips a mid-game state and continues identically")
     CHECK(save::write(*a, sa, "deck") == save::write(*b, sb, "deck"));
 }
 
+TEST_CASE("save: legacy saves without gender load as all male")
+{
+    auto a = make_game(42);
+    auto ctxa = a->context();
+    GameSession sa;
+    SimpleAI ai;
+    REQUIRE(start_session(ctxa, sa, "P0").is_ok());
+    for (int i = 0; i < 3 && !session_over(ctxa); ++i)
+        REQUIRE(step_session(ctxa, ai, sa).is_ok());
+
+    const std::string text = save::write(*a, sa, "deck");
+    REQUIRE(text.find("\"gender\"") != std::string::npos);
+
+    // 去掉 gender 字段，模拟无性别字段年代的旧档
+    std::string legacy = text;
+    for (const std::string &field : {",\"gender\":\"male\"",
+                                      ",\"gender\":\"female\""})
+    {
+        std::size_t pos = 0;
+        while ((pos = legacy.find(field, pos)) != std::string::npos)
+            legacy.erase(pos, field.size());
+    }
+    CHECK(legacy.find("gender") == std::string::npos);
+
+    auto b = make_game(999);  // 不同种子，应被存档覆盖
+    GameSession sb;
+    REQUIRE(save::read(legacy, *b, sb).is_ok());
+    for (int i = 0; i < 4; ++i)
+        CHECK(b->entities.find("P" + std::to_string(i)).unwrap()->get_gender() ==
+              entity::Gender::Male);
+    // 规范化往返：旧档加载后再存 = 新格式原文
+    CHECK(save::write(*b, sb, "deck") == text);
+}
+
 TEST_CASE("save: version mismatch is rejected")
 {
     auto a = make_game(1);

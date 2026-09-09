@@ -34,6 +34,7 @@ namespace tkw
         using tkw::card::CardDefCatalog;
         using tkw::card::ResponseKind;
         using tkw::entity::Entity;
+        using tkw::entity::Gender;
         using tkw::entity::Hp;
 
         /** 测试对局：Game 应用层 + 测试辅助（发牌/装备）。 */
@@ -47,9 +48,11 @@ namespace tkw
             {
             }
 
-            Entity *add_player(const std::string &id, int seat, int hp)
+            Entity *add_player(
+                const std::string &id, int seat, int hp,
+                Gender gender = Gender::Male)
             {
-                auto r = entities.create(id, seat, Hp::make(hp));
+                auto r = entities.create(id, seat, Hp::make(hp), gender);
                 REQUIRE(r.is_ok());
                 return r.unwrap();
             }

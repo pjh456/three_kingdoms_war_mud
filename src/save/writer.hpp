@@ -224,8 +224,9 @@ namespace tkw
                 if (i)
                     os << ",";
                 os << "{\"id\":" << jstr(ents[i].id) << ",\"seat\":" << ents[i].seat
-                   << ",\"hp\":" << ents[i].hp << ",\"max_hp\":" << ents[i].max_hp
-                   << "}";
+                    << ",\"hp\":" << ents[i].hp << ",\"max_hp\":" << ents[i].max_hp
+                    << ",\"gender\":" << jstr(gender_name(ents[i].gender))
+                    << "}";
             }
             os << "]}";
             return os.str();

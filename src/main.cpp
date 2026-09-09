@@ -17,6 +17,7 @@
 #include "card/catalog.hpp"
 #include "config/error.hpp"
 #include "config/resource.hpp"
+#include "entity/base.hpp"
 #include "entity/event.hpp"
 #include "entity/hp.hpp"
 #include "event/handler.hpp"
@@ -124,6 +125,13 @@ namespace
         bool active = false;
     };
 
+    /** 性别占位：无玩家数据源，按座位奇偶交替（P0 男 / P1 女 / …）。 */
+    tkw::entity::Gender gender_for_seat(int seat)
+    {
+        return seat % 2 == 0 ? tkw::entity::Gender::Male
+                             : tkw::entity::Gender::Female;
+    }
+
     /** 按选项构建一局（加载牌堆 + 建玩家）；失败返回 nullptr 并填 err。 */
     std::unique_ptr<tkw::game::Game> make_game(const Options &opt, std::string &err)
     {
@@ -142,7 +150,8 @@ namespace
         {
             auto r = game->add_player(
                 "P" + std::to_string(i), i,
-                tkw::entity::Hp::make(tkw::game::RulesConfig{}.base_hp));
+                tkw::entity::Hp::make(tkw::game::RulesConfig{}.base_hp),
+                gender_for_seat(i));
             if (r.is_err())
             {
                 err = "创建玩家失败: P" + std::to_string(i);
@@ -369,7 +378,8 @@ namespace
         {
             auto r = game.add_player(
                 "P" + std::to_string(i), i,
-                tkw::entity::Hp::make(tkw::game::RulesConfig{}.base_hp));
+                tkw::entity::Hp::make(tkw::game::RulesConfig{}.base_hp),
+                gender_for_seat(i));
             if (r.is_err())
                 return CliFailure{CliError("创建玩家失败: P" + std::to_string(i))};
         }
