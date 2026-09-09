@@ -528,25 +528,59 @@ namespace tkw
                     text.replace(pos, needle.size(), replacement);
             }
 
-            /** 按命令名列表渲染「命令名 + 描述」两列（描述取命令树，缺失留空）。 */
+            /**
+             * @brief 按命令名列表渲染「命令名（含别名）+ 描述」两列。
+             * @param root  根命令，用于按名查子命令的别名与描述。
+             * @param names 命令名列表（查询结果为规范名，别名从命令树取）。
+             * @return 两列文本；无别名命令与既有输出逐字一致，描述缺失留空。
+             * @note 列宽按带别名后缀的名字计算，保证行对齐。
+             */
             inline std::string command_lines_zh(
                 const pjh::cli::BranchCommand &root,
                 const std::vector<std::string> &names)
             {
-                std::size_t width = 0;
-                for (const auto &n : names)
-                    if (n.size() > width)
-                        width = n.size();
+                std::vector<std::string> lefts;
+                std::vector<std::string> descs;
+                lefts.reserve(names.size());
+                descs.reserve(names.size());
 
-                std::string out;
                 for (const auto &n : names)
                 {
-                    out += "  " + n;
-                    out.append(width - n.size(), ' ');
-                    out += "  ";
+                    std::string left = n;
+                    std::string desc;
                     const pjh::cli::BaseCommand *sub = root.find_subcommand(n);
                     if (sub != nullptr)
-                        out += std::string(sub->description());
+                    {
+                        desc = sub->description();
+                        const auto &aliases = sub->aliases();
+                        if (!aliases.empty())
+                        {
+                            left += " (";
+                            for (std::size_t i = 0; i < aliases.size(); ++i)
+                            {
+                                if (i > 0)
+                                    left += ", ";
+                                left += aliases[i];
+                            }
+                            left += ")";
+                        }
+                    }
+                    lefts.push_back(std::move(left));
+                    descs.push_back(std::move(desc));
+                }
+
+                std::size_t width = 0;
+                for (const auto &l : lefts)
+                    if (l.size() > width)
+                        width = l.size();
+
+                std::string out;
+                for (std::size_t i = 0; i < names.size(); ++i)
+                {
+                    out += "  " + lefts[i];
+                    out.append(width - lefts[i].size(), ' ');
+                    out += "  ";
+                    out += descs[i];
                     out += "\n";
                 }
                 return out;
@@ -749,8 +783,9 @@ namespace tkw
                             ctx.get_or<bool, fixed_string("verbose")>(false));
                 });
 
-            // run：跑到对局结束
+            // run：跑到对局结束（别名 r，REPL 会话流高频命令）
             auto &run_cmd = app.add_leaf("run", "跑到当前会话结束");
+            run_cmd.alias("r");
             run_cmd.action(
                 [&session](ParseContext &ctx) -> CliResult<void>
                 {
@@ -760,8 +795,9 @@ namespace tkw
                             ctx.get_or<bool, fixed_string("verbose")>(false));
                 });
 
-            // status：查看会话状态
+            // status：查看会话状态（别名 st）
             auto &status_cmd = app.add_leaf("status", "查看当前会话状态");
+            status_cmd.alias("st");
             status_cmd.action(
                 [&session](ParseContext &) -> CliResult<void>
                 {
@@ -769,8 +805,9 @@ namespace tkw
                     return CliResult<void>::Ok();
                 });
 
-            // save：保存当前对局
+            // save：保存当前对局（别名 w）
             auto &save_cmd = app.add_leaf("save", "保存当前对局：save <file>");
+            save_cmd.alias("w");
             save_cmd.arg<std::string, 0>("file", "存档路径").required();
             save_cmd.action(
                 [&session](ParseContext &ctx) -> CliResult<void>
@@ -778,8 +815,9 @@ namespace tkw
                     return detail::cmd_save(ctx.get<std::string, 0>(), session);
                 });
 
-            // load：从存档继续
+            // load：从存档继续（别名 l）
             auto &load_cmd = app.add_leaf("load", "加载存档：load <file>");
+            load_cmd.alias("l");
             detail::declare_common_options(load_cmd, rules);
             load_cmd.arg<std::string, 0>("file", "存档路径").required();
             load_cmd.action(

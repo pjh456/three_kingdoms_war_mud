@@ -232,6 +232,37 @@ TEST_CASE("cli: repl query and help render commands")
     CHECK(inline_help.console.find("Inherited Options") == std::string::npos);
 }
 
+TEST_CASE("cli: aliases dispatch to canonical commands")
+{
+    Repl repl;
+
+    // 无会话时 st 精确命中 status（而非模糊歧义）。
+    auto st_empty = repl.run("st");
+    CHECK(st_empty.ok);
+    CHECK(st_empty.out.find("会话: 无") != std::string::npos);
+
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+    auto st = repl.run("st");
+    CHECK(st.ok);
+    CHECK(st.out.find("会话: 进行中") != std::string::npos);
+
+    // r 精确命中 run，跑到对局结束（seed 1 2p 确定性胜者）。
+    auto r = repl.run("r");
+    CHECK(r.ok);
+    CHECK(r.out.find("胜者") != std::string::npos);
+
+    // ? 列表以括号展示别名（REPL 内唯一浏览面，保可发现性）。
+    auto listing = repl.run("?");
+    CHECK(listing.console.find("status (st)") != std::string::npos);
+    CHECK(listing.console.find("run (r)") != std::string::npos);
+    CHECK(listing.console.find("save (w)") != std::string::npos);
+    CHECK(listing.console.find("load (l)") != std::string::npos);
+
+    // ? 过滤按别名命中：st 应列出 status。
+    auto filtered = repl.run("? st");
+    CHECK(filtered.console.find("status") != std::string::npos);
+}
+
 TEST_CASE("cli: unknown command and bad options are errors")
 {
     Repl repl;

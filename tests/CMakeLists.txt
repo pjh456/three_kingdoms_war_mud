@@ -150,6 +150,28 @@ add_test(NAME cli_fuzzy_typo_resolves COMMAND tkw audti)
 set_tests_properties(cli_fuzzy_typo_resolves PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# 短别名精确命中：st → status（无会话时打印会话: 无并退出 0），不再落入模糊歧义。
+add_test(NAME cli_alias_shorthand
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> st 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '会话: 无' && [ $rc -eq 0 ]")
+set_tests_properties(cli_alias_shorthand PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 根帮助子命令表应展示别名（框架括号展示），保批量侧可发现性。
+add_test(NAME cli_alias_help_discoverable
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> --help); printf '%s' \"$out\" | grep -q 'status (st)' && printf '%s' \"$out\" | grep -q 'save (w)' && printf '%s' \"$out\" | grep -q 'load (l)' && printf '%s' \"$out\" | grep -q 'run (r)'")
+set_tests_properties(cli_alias_help_discoverable PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# REPL 内别名直达：st 查看状态、r 跑到结束（seed 1 2p 确定性胜者）；无歧义残留。
+# 自动存档指到构建目录，避免污染源码树。
+add_test(NAME cli_repl_alias_dispatch
+         COMMAND sh -c
+                 "out=$(printf 'new --players 2 --seed 1\\nst\\nr\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave ${CMAKE_CURRENT_BINARY_DIR}/tkw-alias-e2e.json 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '会话: 进行中' && printf '%s' \"$out\" | grep -q '胜者' && ! printf '%s' \"$out\" | grep -q 'ambiguous' && [ $rc -eq 0 ]")
+set_tests_properties(cli_repl_alias_dispatch PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 根帮助应中文化段标题并附用法示例；示例按批量一次性与 REPL 会话分组，会话流
 # 命令不带 tkw 前缀（照抄进 shell 会失败）。
 add_test(NAME cli_help_root_zh
