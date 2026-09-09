@@ -321,3 +321,51 @@ TEST_CASE("ai: human decider picks card from target")
     REQUIRE(picked.is_some());
     CHECK(picked.unwrap().instance_id == "s#2");
 }
+
+TEST_CASE("ai: routed ai sends human actor to human and falls back")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "tao", "t#1");
+    g.give("a", "sha", "s#1");
+    g.give("b", "sha", "s#2");
+
+    std::istringstream in("play 1\n");
+    std::ostringstream out;
+    RoutedAI routed({"a"}, in, out);
+
+    const tkw::game::TurnContext ta{"a", 0, 1};
+    const auto a_choice = routed.choose_play(g.ctx, ta);
+    REQUIRE(a_choice.is_some());
+    CHECK(a_choice.unwrap().instance_id == "t#1");
+
+    const tkw::game::TurnContext tb{"b", 0, 1};
+    const auto b_choice = routed.choose_play(g.ctx, tb);
+    REQUIRE(b_choice.is_some());
+    CHECK(b_choice.unwrap().instance_id == "s#2");
+}
+
+TEST_CASE("ai: routed ai falls back for non-human response window")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "shan", "j#1");
+    g.give("b", "shan", "j#2");
+
+    std::istringstream in("play 1\n");
+    std::ostringstream out;
+    RoutedAI routed({"a"}, in, out);
+
+    const auto a_card =
+        routed.play_response(g.ctx, "a", tkw::card::ResponseKind::Jink);
+    REQUIRE(a_card.is_some());
+    CHECK(a_card.unwrap() == "j#1");
+
+    // b 非真人：SimpleAI 取首张闪，不消费输入流（输入已被 a 读空）。
+    const auto b_card =
+        routed.play_response(g.ctx, "b", tkw::card::ResponseKind::Jink);
+    REQUIRE(b_card.is_some());
+    CHECK(b_card.unwrap() == "j#2");
+}

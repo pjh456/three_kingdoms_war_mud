@@ -14,6 +14,8 @@
 #include <cctype>
 #include <cstddef>
 #include <istream>
+#include <map>
+#include <memory>
 #include <ostream>
 #include <string>
 #include <system_error>
@@ -23,6 +25,7 @@
 #include "card/card.hpp"
 #include "card/def.hpp"
 #include "game/ai/decider.hpp"
+#include "game/ai/simple.hpp"
 #include "game/core/decision.hpp"
 #include "util/types.hpp"
 
@@ -379,6 +382,105 @@ namespace tkw
                             return out;
                         out_ << "输入无效，请重试。\n";
                     }
+                }
+            };
+
+            /**
+             * @class HumanAI
+             * @brief 引擎可用的真人决策源：HumanDecider 经适配器接入。
+             * @note 输入/输出流由调用方持有，其生命周期须覆盖本对象。
+             */
+            class HumanAI : private HumanDecider, public RequestDecisionSource
+            {
+            public:
+                HumanAI(std::istream &in, std::ostream &out) :
+                    HumanDecider(in, out),
+                    RequestDecisionSource(static_cast<HumanDecider &>(*this))
+                {
+                }
+            };
+
+            /**
+             * @class RoutedAI
+             * @brief 按决策者 id 路由：命中真人座位走交互输入，其余回落贪心 AI。
+             * @note 每个回调携带的 actor 即该决策的发起者（出牌为回合角色，响应/
+             *       救桃/无懈/弃牌/选牌为当事人）；路由只按 id 查表，不改接缝。
+             */
+            class RoutedAI : public DecisionSource
+            {
+            public:
+                RoutedAI(
+                    const std::vector<std::string> &humans, std::istream &in,
+                    std::ostream &out)
+                {
+                    for (const auto &id : humans)
+                        humans_.emplace(id, std::make_unique<HumanAI>(in, out));
+                }
+
+                Option<std::string> play_response(
+                    const GameContext &ctx, const std::string &entity,
+                    card::ResponseKind kind) override
+                {
+                    return route(entity).play_response(ctx, entity, kind);
+                }
+
+                Option<card::Card> pick_card_from_target(
+                    const GameContext &ctx, const std::string &source,
+                    const std::string &target) override
+                {
+                    return route(source).pick_card_from_target(ctx, source, target);
+                }
+
+                Option<PlayAction> choose_play(
+                    const GameContext &ctx, const TurnContext &turn) override
+                {
+                    return route(turn.player).choose_play(ctx, turn);
+                }
+
+                std::vector<std::string> choose_discards(
+                    const GameContext &ctx, const std::string &player, int count,
+                    DiscardReason reason) override
+                {
+                    return route(player).choose_discards(ctx, player, count, reason);
+                }
+
+                Option<card::Card> pick_from_revealed(
+                    const GameContext &ctx, const std::string &player,
+                    const std::vector<card::Card> &options) override
+                {
+                    return route(player).pick_from_revealed(ctx, player, options);
+                }
+
+                Option<std::string> play_peach(
+                    const GameContext &ctx, const std::string &saver,
+                    const std::string &dying) override
+                {
+                    return route(saver).play_peach(ctx, saver, dying);
+                }
+
+                Option<std::string> play_counter(
+                    const GameContext &ctx, const std::string &player) override
+                {
+                    return route(player).play_counter(ctx, player);
+                }
+
+                bool trigger_effect(
+                    const GameContext &ctx, const std::string &player,
+                    card::Ability ability) override
+                {
+                    return route(player).trigger_effect(ctx, player, ability);
+                }
+
+            private:
+                SimpleAI fallback_;
+                std::map<std::string, std::unique_ptr<HumanAI>> humans_;
+
+                DecisionSource &route(const std::string &actor)
+                {
+                    const auto it = humans_.find(actor);
+                    if (it != humans_.end())
+                        return static_cast<DecisionSource &>(*it->second);
+                    return static_cast<DecisionSource &>(fallback_);
                 }
             };
         }
