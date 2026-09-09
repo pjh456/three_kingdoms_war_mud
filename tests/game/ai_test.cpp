@@ -290,6 +290,25 @@ TEST_CASE("ai: human decider declines the zhangba pair response")
               .is_none());
 }
 
+TEST_CASE("ai: human decider treats eof as decline in the pair response")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.equip("a", "zhangba", "e#0");
+    g.give("a", "wuzhong", "x#1");
+    g.give("a", "tao", "x#2");
+
+    std::istringstream in;  // 空流：首次读取即 EOF
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    CHECK(src.play_response(
+                g.ctx, "a", tkw::card::ResponseKind::Sha)
+              .is_none());
+}
+
 TEST_CASE("ai: human decider declines response")
 {
     TestGame g("deck");

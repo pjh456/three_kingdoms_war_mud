@@ -119,6 +119,16 @@ TEST_CASE("replay: golden fingerprints pin the rule semantics")
     //   P1 也阵亡）。虚拟杀本身：两张牌各发打出事件并进弃牌堆，无花色，
     //   仁王盾黑杀判定不适用。
     //
+    // 丈八响应侧打出（杀响应窗口两张手牌当杀）上线后的漂移（新旧日志逐行
+    // diff 核对过）：
+    // - 2 人 seed 1：逐字节不变——对局中无人进入响应侧虚拟杀状态（装备丈八 +
+    //   无真杀 + 手牌 ≥2 + 杀响应窗口）。
+    // - 4 人 seed 42：416 → 415 行。首个分叉在 P2 的借刀（P0 刚阵亡、P2 刚装备
+    //   丈八且仍持借刀）：P3（持武器者、B=A 自目标）有真杀，以真杀响应；自杀
+    //   被自己的闪闪掉，不受伤。对目标结算的杀响应事件语法统一为打出（与虚拟
+    //   杀一致），原先随出的额外一行弃置事件行移除，即减少的一行。局内未达响应
+    //   侧 pair 态（无真杀 + 装备丈八 + 手牌 ≥2 + 杀响应窗口）。
+    //
     // 弃牌接入牌价值升序排序后的漂移（新旧日志逐行 diff + 决策请求计数
     // 核对过）：
     // - 2 人 seed 1：75 → 79 行。首个分叉在 P0 第二轮弃牌阶段：手牌
@@ -135,6 +145,6 @@ TEST_CASE("replay: golden fingerprints pin the rule semantics")
     CHECK(fingerprint(two) == 12977149775915994001ULL);
 
     const auto four = run_game(42, 4);
-    CHECK(four.size() == 416);
-    CHECK(fingerprint(four) == 10438528796142965889ULL);
+    CHECK(four.size() == 415);
+    CHECK(fingerprint(four) == 14527444784400290652ULL);
 }

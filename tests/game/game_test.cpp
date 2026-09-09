@@ -2205,6 +2205,27 @@ TEST_CASE("game: zhangba answers a borrowed sword with a virtual sha")
     CHECK(g.cards.hand_size("a") == 0);  // 未夺回武器
 }
 
+TEST_CASE("game: zhangba answers a borrowed sword on itself")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("b", "zhangba", "e#0");  // b 的武器即丈八蛇矛
+    g.give("a", "jiedao", "j#0");
+    g.give("b", "wuzhong", "x#1");
+    g.give("b", "tao", "x#2");  // b 无真杀：两张手牌当杀，目标即自己
+
+    TestDecider decider;
+    decider.respond = true;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "b"});  // A=B=b
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);             // 虚拟杀命中自身
+    CHECK(g.cards.hand_size("b") == 0); // 两张牌已消耗
+    CHECK(g.cards.equip_size("b") == 1); // 武器仍在
+    CHECK(g.cards.hand_size("a") == 0);  // 未夺回武器
+}
+
 TEST_CASE("game: zhangba response sha can still be jinked")
 {
     TestGame g("deck");
