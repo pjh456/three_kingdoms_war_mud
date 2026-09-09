@@ -116,3 +116,32 @@ TEST_CASE("save: atomic write round-trips through a file")
 
     std::filesystem::remove_all(dir);
 }
+
+TEST_CASE("save: failed rng restore leaves the target untouched")
+{
+    // 源档：合法存档文本
+    auto a = make_game(42);
+    auto ctxa = a->context();
+    GameSession sa;
+    SimpleAI ai;
+    REQUIRE(start_session(ctxa, sa, "P0").is_ok());
+    for (int i = 0; i < 7 && !session_over(ctxa); ++i)
+        REQUIRE(step_session(ctxa, ai, sa).is_ok());
+    std::string bad = save::write(*a, sa, "deck");
+
+    // 破坏 rng 状态首字符（十进制数字变 x）→ load_state 必失败
+    const auto pos = bad.find("\"rng\":{\"data\":\"");
+    REQUIRE(pos != std::string::npos);
+    bad.replace(pos + 15, 1, "x");
+
+    // 目标先置非默认状态以便观测（rules + session），基线一次覆盖五段
+    auto b = make_game(7);
+    b->rules.draw_per_turn = 9;
+    GameSession sb{"P0", 5, true};
+    const std::string before = save::write(*b, sb, "deck");
+
+    auto r = save::read(bad, *b, sb);
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err().kind == save::SaveErrorKind::RngError);
+    CHECK(save::write(*b, sb, "deck") == before);
+}

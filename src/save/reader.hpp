@@ -1,7 +1,7 @@
 /**
  * @file reader.hpp
  * @brief 存档 JSON 文本 → 对局状态。
- * @note 校验 format/version/牌表指纹；失败不修改目标（除已通过的阶段）。
+ * @note 校验 format/version/牌表指纹；失败不修改目标。
  */
 
 #ifndef INCLUDE_TKW_SAVE_READER_HPP
@@ -245,10 +245,10 @@ namespace tkw
                 ents.push_back(std::move(e));
             }
 
-            // ── 全部校验通过后再落子 ──
-            g.rules = rc;
+            // ── 全部校验通过后再落子；rng 恢复是唯一可能失败的阶段，先于其余赋值 ──
             if (g.rng && !g.rng->load_state(RngState{rng_data}))
                 return detail::fail(SaveErrorKind::RngError, "rng.data");
+            g.rules = rc;
             session = std::move(s);
             g.cards.restore(snap);
             g.entities.restore(ents);
