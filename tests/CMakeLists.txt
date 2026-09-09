@@ -190,6 +190,13 @@ add_test(NAME cli_repl_banner
 set_tests_properties(cli_repl_banner PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# REPL 退出自动存档失败必须显式提示，不得静默丢档（父目录缺失 → NotExist，确定性失败）。
+add_test(NAME cli_autosave_failure_message
+         COMMAND sh -c
+                 "out=$(printf 'new --players 2 --seed 1\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave /nonexistent-dir/x.json 2>&1); printf '%s' \"$out\" | grep -q '自动存档失败'")
+set_tests_properties(cli_autosave_failure_message PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 解析错误保留框架统一前缀并退出 2（执行错误走另一路径，退出 1）。
 add_test(NAME cli_parse_error_prefix_and_rc
          COMMAND sh -c

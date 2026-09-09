@@ -808,6 +808,10 @@ namespace tkw
                         if (tkw::io::write_text_atomic(opt.autosave, text).is_ok())
                             std::cout << "已自动存档: " << opt.autosave.string()
                                       << "\n";
+                        else
+                            // 静默失败会让用户下次 load 才发现丢档，必须显式提示
+                            std::cerr << "自动存档失败: " << opt.autosave.string()
+                                      << "\n";
                     }
                     return CliResult<void>::Ok();
                 });
