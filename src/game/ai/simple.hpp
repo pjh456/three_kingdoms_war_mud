@@ -4,8 +4,9 @@
  * @note 逻辑集中在 SimpleDecider::decide（只读 DecisionRequest）；SimpleAI 把
  *       它经 RequestDecisionSource 适配成引擎可用的 DecisionSource。只做「合法
  *       且能推进」的动作：出杀（按回合上下文给的次数上限）、可结算锦囊、装备。
- *       不出无懈（避免自抵消）；武器效果按代价可付性决定是否发动。响应窗口取
- *       第一张真响应牌，杀响应无真杀时用两张手牌当杀（丈八蛇矛）。
+ *       不出无懈（避免自抵消）；武器效果按代价可付性决定是否发动。弃牌按牌
+ *       价值升序取（先弃最低价值，同价值保持手牌序）。响应窗口取第一张真响应
+ *       牌，杀响应无真杀时用两张手牌当杀（丈八蛇矛）。
  */
 
 #ifndef INCLUDE_TKW_GAME_AI_SIMPLE_HPP
@@ -20,6 +21,7 @@
 #include "card/card.hpp"
 #include "card/def.hpp"
 #include "game/ai/decider.hpp"
+#include "game/ai/evaluator.hpp"
 #include "game/ai/legal.hpp"
 #include "util/types.hpp"
 
@@ -96,15 +98,28 @@ namespace tkw
                     return out;
                 }
 
+                /**
+                 * @brief 弃牌：候选按牌价值升序稳定排序（先弃最低价值），
+                 *        同价值保持手牌序，取前 count 张。
+                 * @note 目录缺失时全部价值为 0，稳定排序退化回手牌原序。
+                 */
                 static DecisionChoice decide_discard(const DecisionRequest &req)
                 {
-                    DecisionChoice out;
+                    std::vector<const card::Card *> order;
+                    order.reserve(req.options.size());
                     for (const auto &c : req.options)
-                    {
-                        if (static_cast<int>(out.discards.size()) >= req.count)
-                            break;
-                        out.discards.push_back(c.instance_id);
-                    }
+                        order.push_back(&c);
+                    std::stable_sort(
+                        order.begin(), order.end(),
+                        [&req](const card::Card *a, const card::Card *b)
+                        { return discard_value(req, *a) < discard_value(req, *b); });
+
+                    DecisionChoice out;
+                    for (std::size_t i = 0;
+                         i < order.size() &&
+                         static_cast<int>(out.discards.size()) < req.count;
+                         ++i)
+                        out.discards.push_back(order[i]->instance_id);
                     return out;
                 }
 
@@ -259,6 +274,14 @@ namespace tkw
                         return nullptr;
                     const auto d = req.catalog->find(def_id);
                     return d.is_some() ? d.unwrap() : nullptr;
+                }
+
+                /** @brief 弃牌排序用的单牌价值；目录缺失或 def 未命中时回 0。 */
+                static int discard_value(
+                    const DecisionRequest &req, const card::Card &c)
+                {
+                    const card::CardDef *def = find_def(req, c.def_id);
+                    return def ? card_value(*def) : 0;
                 }
 
                 static int hp_of(const AiView &view, const std::string &id)

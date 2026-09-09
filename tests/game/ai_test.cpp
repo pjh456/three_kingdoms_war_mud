@@ -481,3 +481,58 @@ TEST_CASE("ai: routed ai falls back for non-human response window")
     REQUIRE(b_card.is_some());
     CHECK(b_card.unwrap().instance_id == "j#2");
 }
+
+TEST_CASE("ai: simple discard prefers the lowest value cards")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "tao", "t#1");    // 桃 50
+    g.give("a", "shan", "j#2");  // 闪 35
+    g.give("a", "sha", "s#3");   // 杀 40
+    g.give("a", "wuxie", "w#4");  // 无懈可击 55
+
+    SimpleAI ai;
+    const auto chosen = ai.choose_discards(
+        g.ctx, "a", 2, tkw::game::DiscardReason::TurnLimit);
+    REQUIRE(chosen.size() == 2);
+    CHECK(chosen[0] == "j#2");  // 价值最低的先弃
+    CHECK(chosen[1] == "s#3");
+}
+
+TEST_CASE("ai: simple discard keeps hand order for equal values")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "shan", "j#1");  // 闪 35
+    g.give("a", "sha", "s#2");   // 杀 40
+    g.give("a", "shan", "j#3");  // 闪 35
+
+    SimpleAI ai;
+    const auto chosen = ai.choose_discards(
+        g.ctx, "a", 2, tkw::game::DiscardReason::TurnLimit);
+    REQUIRE(chosen.size() == 2);
+    CHECK(chosen[0] == "j#1");  // 同价值保持手牌序
+    CHECK(chosen[1] == "j#3");
+}
+
+TEST_CASE("ai: simple discard orders the whole hand by value")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "tao", "t#1");
+    g.give("a", "shan", "j#2");
+    g.give("a", "sha", "s#3");
+    g.give("a", "wuxie", "w#4");
+
+    SimpleAI ai;
+    const auto chosen = ai.choose_discards(
+        g.ctx, "a", 4, tkw::game::DiscardReason::TurnLimit);
+    REQUIRE(chosen.size() == 4);
+    CHECK(chosen[0] == "j#2");  // 35
+    CHECK(chosen[1] == "s#3");  // 40
+    CHECK(chosen[2] == "t#1");  // 50
+    CHECK(chosen[3] == "w#4");  // 55
+}
