@@ -350,21 +350,12 @@ namespace
 
     CliResult<void> run_game(const Options &opt)
     {
-        tkw::config::ResourceStore store(opt.deck);
-        auto catalog = tkw::card::CardDefCatalog::load(store, "deck");
-        if (catalog.is_err())
-        {
-            const auto &e = catalog.unwrap_err();
-            return CliFailure{CliError(
-                "加载牌堆失败 (kind=" + std::to_string(static_cast<int>(e.kind)) +
-                "): " + e.detail)};
-        }
+        std::string err;
+        auto game = build_game(opt, err);
+        if (!game)
+            return CliFailure{CliError(err)};
 
-        tkw::game::Game game(
-            std::move(catalog).unwrap(),
-            std::make_unique<tkw::SeededRng>(opt.seed));
-
-        const auto unsupported = tkw::game::unsupported_cards(game.catalog);
+        const auto unsupported = tkw::game::unsupported_cards(game->catalog);
         if (!unsupported.empty())
         {
             std::cerr << "警告: 牌堆含 " << unsupported.size()
@@ -374,22 +365,12 @@ namespace
             std::cerr << "\n";
         }
 
-        for (int i = 0; i < opt.players; ++i)
-        {
-            auto r = game.add_player(
-                "P" + std::to_string(i), i,
-                tkw::entity::Hp::make(tkw::game::RulesConfig{}.base_hp),
-                gender_for_seat(i));
-            if (r.is_err())
-                return CliFailure{CliError("创建玩家失败: P" + std::to_string(i))};
-        }
-
-        const std::string verr = validate_humans(game, opt.humans);
+        const std::string verr = validate_humans(*game, opt.humans);
         if (!verr.empty())
             return CliFailure{CliError(verr)};
 
-        auto ctx = game.context();
-        auto log = subscribe_event_log(game, opt.verbose);
+        auto ctx = game->context();
+        auto log = subscribe_event_log(*game, opt.verbose);
 
         auto ai = make_decision_source(opt.humans);
         auto outcome = tkw::game::play_game(ctx, *ai, "P0", opt.hand);
@@ -412,12 +393,12 @@ namespace
 
     CliResult<void> audit_deck(const Options &opt)
     {
-        tkw::config::ResourceStore store(opt.deck);
-        auto catalog = tkw::card::CardDefCatalog::load(store, "deck");
-        if (catalog.is_err())
-            return CliFailure{CliError("加载牌堆失败: " + catalog.unwrap_err().detail)};
+        std::string err;
+        auto game = build_game(opt, err);
+        if (!game)
+            return CliFailure{CliError(err)};
 
-        const auto unsupported = tkw::game::unsupported_cards(catalog.unwrap());
+        const auto unsupported = tkw::game::unsupported_cards(game->catalog);
         if (unsupported.empty())
         {
             std::cout << "牌堆全部可结算\n";

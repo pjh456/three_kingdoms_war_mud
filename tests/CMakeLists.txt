@@ -104,3 +104,13 @@ add_test(NAME cli_unknown_option_still_errors
 set_tests_properties(cli_unknown_option_still_errors PROPERTIES
     WILL_FAIL TRUE
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# audit：只钉退出码；标准牌堆的未实现卡集合随引擎演进而变，不钉输出内容。
+add_test(NAME cli_audit_ok COMMAND tkw audit)
+set_tests_properties(cli_audit_ok PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_test(NAME cli_audit_bad_deck COMMAND tkw audit --deck /nonexistent-deck-dir)
+set_tests_properties(cli_audit_bad_deck PROPERTIES
+    WILL_FAIL TRUE
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
