@@ -1,9 +1,11 @@
 #include <doctest/doctest.h>
 
 #include <cstddef>
+#include <sstream>
 #include <string>
 
 #include "game/ai/evaluator.hpp"
+#include "game/ai/human.hpp"
 #include "game/ai/legal.hpp"
 #include "game/ai/simple.hpp"
 #include "game/ai/view.hpp"
@@ -160,4 +162,162 @@ TEST_CASE("ai: simple trigger respects the discard cost")
         g.ctx, "a", tkw::card::Ability::DiscardTwoForceDamage));
     CHECK(ai.trigger_effect(
         g.ctx, "a", tkw::card::Ability::ExtraShaAfterJink));
+}
+
+TEST_CASE("ai: human decider plays chosen legal action")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+
+    std::istringstream in("play 1\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+    const tkw::game::TurnContext turn{"a", 0, 1};
+
+    const auto chosen = src.choose_play(g.ctx, turn);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().instance_id == "s#1");
+    CHECK(out.str().find("s#1") != std::string::npos);
+}
+
+TEST_CASE("ai: human decider declines response")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "shan", "j#1");
+
+    std::istringstream in("pass\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Jink).is_none());
+}
+
+TEST_CASE("ai: human decider picks discards by indices")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+    g.give("a", "shan", "j#2");
+    g.give("a", "tao", "t#3");
+
+    std::istringstream in("discard 1 1\ndiscard 1\ndiscard 1 3\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    const auto chosen = src.choose_discards(
+        g.ctx, "a", 2, tkw::game::DiscardReason::TurnLimit);
+    REQUIRE(chosen.size() == 2);
+    CHECK(chosen[0] == "s#1");
+    CHECK(chosen[1] == "t#3");
+    CHECK(out.str().find("输入无效") != std::string::npos);
+}
+
+TEST_CASE("ai: human decider reprompts on invalid input")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+
+    std::istringstream in("foo\nplay 99\nplay 1\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+    const tkw::game::TurnContext turn{"a", 0, 1};
+
+    const auto chosen = src.choose_play(g.ctx, turn);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().instance_id == "s#1");
+
+    std::size_t reprompts = 0;
+    const std::string text = out.str();
+    for (std::size_t pos = text.find("输入无效"); pos != std::string::npos;
+         pos = text.find("输入无效", pos + 1))
+        ++reprompts;
+    CHECK(reprompts == 2);
+}
+
+TEST_CASE("ai: human decider trigger reads yes and no")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+
+    {
+        std::istringstream in("y\n");
+        std::ostringstream out;
+        HumanDecider dec(in, out);
+        RequestDecisionSource src(dec);
+        CHECK(src.trigger_effect(g.ctx, "a", tkw::card::Ability::NoShaLimit));
+    }
+    {
+        std::istringstream in("n\n");
+        std::ostringstream out;
+        HumanDecider dec(in, out);
+        RequestDecisionSource src(dec);
+        CHECK_FALSE(
+            src.trigger_effect(g.ctx, "a", tkw::card::Ability::NoShaLimit));
+    }
+    {
+        std::istringstream in("maybe\ny\n");
+        std::ostringstream out;
+        HumanDecider dec(in, out);
+        RequestDecisionSource src(dec);
+        CHECK(src.trigger_effect(g.ctx, "a", tkw::card::Ability::NoShaLimit));
+    }
+}
+
+TEST_CASE("ai: human decider treats eof as decline")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+    g.give("a", "shan", "j#1");
+    g.give("a", "tao", "t#1");
+    g.give("b", "sha", "s#2");
+
+    std::istringstream in;
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+    const tkw::game::TurnContext turn{"a", 0, 1};
+
+    CHECK(src.choose_play(g.ctx, turn).is_none());
+    CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha).is_none());
+    CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Jink).is_none());
+    CHECK(src.play_peach(g.ctx, "a", "b").is_none());
+    CHECK(src.play_counter(g.ctx, "a").is_none());
+    CHECK_FALSE(src.trigger_effect(g.ctx, "a", tkw::card::Ability::NoShaLimit));
+    CHECK(src.pick_card_from_target(g.ctx, "a", "b").is_none());
+    const auto revealed = g.ctx.cards->hand("a");
+    CHECK(src.pick_from_revealed(g.ctx, "a", revealed).is_none());
+    CHECK(src.choose_discards(
+                  g.ctx, "a", 1, tkw::game::DiscardReason::TurnLimit)
+              .empty());
+}
+
+TEST_CASE("ai: human decider picks card from target")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("b", "sha", "s#2");
+
+    std::istringstream in("pick 1\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    const auto picked = src.pick_card_from_target(g.ctx, "a", "b");
+    REQUIRE(picked.is_some());
+    CHECK(picked.unwrap().instance_id == "s#2");
 }
