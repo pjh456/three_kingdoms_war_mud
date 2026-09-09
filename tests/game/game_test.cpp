@@ -1582,6 +1582,44 @@ TEST_CASE("game: hanbing converts damage into discarding two cards")
     CHECK(g.cards.hand_size("b") == 0);  // 改为弃两张牌
 }
 
+TEST_CASE("game: hanbing does not prevent damage when the target holds fewer than two cards")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "hanbing", "e#0");
+    g.give("a", "sha", "s#1");
+    g.give("b", "sha", "s#2");  // 目标仅一张牌，弃牌代价付不起
+
+    TestDecider decider;
+    decider.triggers = {Ability::DamageAsDiscard};
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);          // 免伤不成立，伤害照常
+    CHECK(g.cards.hand_size("b") == 1);  // 未弃任何牌
+}
+
+TEST_CASE("game: hanbing does not prevent damage when the cost cannot be fully discarded")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "hanbing", "e#0");
+    g.give("a", "sha", "s#1");
+    g.give("b", "shan", "s#2");
+    g.cards.add_to_judge("b", Card{"j#1", "shan", Suit::Spade, 5});  // 可选总数 2，预检通过
+
+    TestDecider decider;  // pick_card_from_target 只看手牌：第 2 次选不满
+    decider.triggers = {Ability::DamageAsDiscard};
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);            // 只弃了 1 张，不免伤
+    CHECK(g.cards.hand_size("b") == 0);  // 手牌已弃
+    CHECK(g.cards.judge_size("b") == 1);  // 判定区未动（部分代价不回滚）
+}
+
 TEST_CASE("game: qinglong follows up with another sha after jink")
 {
     TestGame g("deck");

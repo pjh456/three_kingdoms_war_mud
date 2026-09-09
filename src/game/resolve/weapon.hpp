@@ -70,11 +70,15 @@ namespace tkw
             return Option<card::Card>::None();
         }
 
-        /** @brief 弃置目标 count 张牌（寒冰剑）。 */
-        inline void discard_target_cards(
+        /**
+         * @brief 弃置目标 count 张牌（寒冰剑）。
+         * @return 实际弃成功的张数（决策源返回幽灵 id 或选不满时少于请求数）。
+         */
+        inline int discard_target_cards(
             GameContext &ctx, DecisionSource &ai,
             const std::string &attacker, const std::string &target, int count)
         {
+            int discarded = 0;
             for (int i = 0; i < count; ++i)
             {
                 const auto picked = ai.pick_card_from_target(ctx, attacker, target);
@@ -84,10 +88,12 @@ namespace tkw
                 if (remove_card_from_zones(
                         ctx, target, picked.unwrap().instance_id, removed))
                 {
+                    ++discarded;
                     ctx.cards->discard(removed);
                     emit_card_discarded(ctx, target, removed);
                 }
             }
+            return discarded;
         }
 
         /** @brief 弃置目标装备区的一匹坐骑（麒麟弓）。 */
@@ -203,14 +209,30 @@ namespace tkw
                 sc.responded = false;
         }
 
-        /** @brief 寒冰剑：防止伤害改为弃置目标两张牌。 */
+        /**
+         * @brief 寒冰剑：防止伤害改为弃置目标两张牌。
+         * @note 目标弃满两张才免伤：目标可选区（手牌+装备+判定）不足 2 张
+         *       不发动（不询问、不弃牌、不免伤）；实际弃不满 2 张（含幽灵
+         *       引用）不免伤。
+         */
         inline void hook_hanbing(ShaContext &sc)
         {
+            // 发动前置：目标可选区不足 2 张付不起代价，直接不发动
+            if (sc.ctx.cards->hand_size(sc.target) +
+                    sc.ctx.cards->equip_size(sc.target) +
+                    sc.ctx.cards->judge_size(sc.target) < 2)
+                return;
+
             if (!sc.ai.trigger_effect(
                     sc.ctx, sc.attacker, card::Ability::DamageAsDiscard))
                 return;
-            discard_target_cards(sc.ctx, sc.ai, sc.attacker, sc.target, 2);
-            sc.prevented = true;
+
+            const int discarded =
+                discard_target_cards(sc.ctx, sc.ai, sc.attacker, sc.target, 2);
+
+            // 弃满两张才免伤，否则伤害照常落地
+            if (discarded == 2)
+                sc.prevented = true;
         }
 
         /** @brief 麒麟弓：造成伤害后可弃置目标一匹坐骑。 */
