@@ -176,8 +176,16 @@ namespace
         return game;
     }
 
+    /** 卡牌 id → 目录中文名；目录未收录该 id 时回落 id 本身。 */
+    const std::string &card_name(
+        const tkw::card::CardDefCatalog &catalog, const std::string &def_id)
+    {
+        auto def = catalog.find(def_id);
+        return def.is_some() ? def.unwrap()->name : def_id;
+    }
+
     /**
-     * @brief 订阅本局事件日志：verbose 为真时打印摸牌/打牌/弃牌/阵亡。
+     * @brief 订阅本局事件日志：verbose 为真时打印摸牌/打牌/弃牌/伤害/体力/阵亡。
      * @return 订阅句柄；verbose 为假时为空，句柄析构即退订。
      * @note 句柄只应活在需要日志的命令作用域内，不得存入 Session：会话被覆盖
      *       时会先析构旧 Game（含总线），遗留句柄将对已释放总线退订。
@@ -189,17 +197,32 @@ namespace
         if (!verbose)
             return handles;
         handles.push_back(game.bus.subscribe(tkw::Handler<tkw::CardPlayedEvent>(
-            [](tkw::HandlerContext<tkw::CardPlayedEvent> &c)
-            { std::cout << "[打出] " << c.event.user << " " << c.event.def_id << "\n"; })));
+            [&catalog = game.catalog](tkw::HandlerContext<tkw::CardPlayedEvent> &c) {
+                std::cout << "[打出] " << c.event.user << " "
+                          << card_name(catalog, c.event.def_id) << "\n";
+            })));
         handles.push_back(
             game.bus.subscribe(tkw::Handler<tkw::CardDiscardedEvent>(
-                [](tkw::HandlerContext<tkw::CardDiscardedEvent> &c) {
-                    std::cout << "[弃置] " << c.event.entity << " " << c.event.def_id
-                              << "\n";
+                [&catalog = game.catalog](
+                    tkw::HandlerContext<tkw::CardDiscardedEvent> &c) {
+                    std::cout << "[弃置] " << c.event.entity << " "
+                              << card_name(catalog, c.event.def_id) << "\n";
                 })));
         handles.push_back(game.bus.subscribe(tkw::Handler<tkw::CardDrawnEvent>(
-            [](tkw::HandlerContext<tkw::CardDrawnEvent> &c)
-            { std::cout << "[摸牌] " << c.event.entity << " " << c.event.def_id << "\n"; })));
+            [&catalog = game.catalog](tkw::HandlerContext<tkw::CardDrawnEvent> &c) {
+                std::cout << "[摸牌] " << c.event.entity << " "
+                          << card_name(catalog, c.event.def_id) << "\n";
+            })));
+        handles.push_back(game.bus.subscribe(tkw::Handler<tkw::EntityDamagedEvent>(
+            [](tkw::HandlerContext<tkw::EntityDamagedEvent> &c) {
+                std::cout << "[伤害] " << c.event.source << " -> " << c.event.target
+                          << " " << c.event.amount << "\n";
+            })));
+        handles.push_back(game.bus.subscribe(tkw::Handler<tkw::EntityHpChangedEvent>(
+            [](tkw::HandlerContext<tkw::EntityHpChangedEvent> &c) {
+                std::cout << "[体力] " << c.event.entity_id << " " << c.event.old_cur
+                          << "->" << c.event.new_cur << "/" << c.event.max << "\n";
+            })));
         handles.push_back(game.bus.subscribe(tkw::Handler<tkw::EntityDiedEvent>(
             [](tkw::HandlerContext<tkw::EntityDiedEvent> &c)
             { std::cout << "[阵亡] " << c.event.entity_id << "\n"; })));

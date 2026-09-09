@@ -160,3 +160,10 @@ add_test(NAME cli_repl_query_and_help_zh
                  "out=$(printf '?\\nhelp new\\nquit\\n' | $<TARGET_FILE:tkw> repl); echo \"$out\" | grep -q '审计牌堆' && echo \"$out\" | grep -q '用法:'")
 set_tests_properties(cli_repl_query_and_help_zh PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# verbose 日志可读性：卡牌事件用中文卡名，且补伤害/体力行（seed 固定，输出确定）。
+add_test(NAME cli_verbose_log_zh
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> --verbose deal 2 1 2>&1); printf '%s' \"$out\" | grep -q '\\[打出\\] P0 杀' && printf '%s' \"$out\" | grep -q '\\[伤害\\] P0 -> P1' && printf '%s' \"$out\" | grep -q '\\[体力\\] P1'")
+set_tests_properties(cli_verbose_log_zh PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
