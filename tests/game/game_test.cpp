@@ -1227,6 +1227,28 @@ TEST_CASE("game: tao is a basic card and cannot be countered")
     CHECK(g.cards.hand_size("a") == 1);  // 无懈未被消耗
 }
 
+TEST_CASE("game: simple ai counters a delayed trick during judgement")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.cards.add_to_judge("a", Card{"L#0", "lesi", Suit::Spade, 6});
+    g.give("a", "sha", "s#1");
+    g.give("a", "wuxie", "w#0");
+
+    // 判定牌（未被无懈时才会被抽）+ 摸牌两张，均非红桃
+    g.cards.add_to_draw(Card{"d#0", "shan", Suit::Diamond, 3});
+    g.cards.add_to_draw(Card{"d#1", "shan", Suit::Diamond, 2});
+    g.cards.add_to_draw(Card{"d#2", "sha", Suit::Spade, 6});
+
+    SimpleAI ai;
+    auto r = execute_turn(g.ctx, ai, "a");
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.judge_size("a") == 0);  // 无懈抵消，乐不思蜀被弃置
+    CHECK(b->get_hp() == 3);             // 出牌阶段未跳过，杀命中
+    CHECK(g.cards.hand_size("a") == 2);  // 无懈已消费，仅剩摸的 2 张
+}
+
 // ── 对局主循环 ───────────────────────────────────────────────────────
 
 TEST_CASE("game: next_player wraps and skips removed players")

@@ -550,3 +550,109 @@ TEST_CASE("ai: simple discard orders the whole hand by value")
     CHECK(chosen[2] == "t#1");  // 50
     CHECK(chosen[3] == "w#4");  // 55
 }
+
+TEST_CASE("ai: simple counter plays against an enemy trick targeting self")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("b", "wuxie", "w#0");
+
+    SimpleAI ai;
+    const auto chosen = ai.play_counter(g.ctx, "b", "a", {"b"});
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap() == "w#0");
+}
+
+TEST_CASE("ai: simple counter declines own trick")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "wuxie", "w#0");
+
+    SimpleAI ai;
+    CHECK(ai.play_counter(g.ctx, "a", "a", {"b"}).is_none());  // 冲别人的
+    CHECK(ai.play_counter(g.ctx, "a", "a", {"a"}).is_none());  // 自益
+}
+
+TEST_CASE("ai: simple counter declines a third party's trick")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.add_player("d", 3, 4);
+    g.give("b", "wuxie", "w#2");
+    g.give("c", "wuxie", "w#0");
+    g.give("d", "wuxie", "w#3");
+
+    SimpleAI ai;
+    // a 的锦囊冲 c：旁观者 b/d 持无懈也不出（省牌），目标本人 c 出
+    CHECK(ai.play_counter(g.ctx, "b", "a", {"c"}).is_none());
+    CHECK(ai.play_counter(g.ctx, "d", "a", {"c"}).is_none());
+    const auto chosen = ai.play_counter(g.ctx, "c", "a", {"c"});
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap() == "w#0");
+}
+
+TEST_CASE("ai: simple counter plays on a delayed trick judged on self")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "wuxie", "w#1");
+    g.give("b", "wuxie", "w#0");
+
+    SimpleAI ai;
+    // 判定窗口：使用者空串哨兵，目标 = 被判定玩家
+    const auto chosen = ai.play_counter(g.ctx, "b", "", {"b"});
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap() == "w#0");
+    // 第三方持无懈也不救
+    CHECK(ai.play_counter(g.ctx, "a", "", {"b"}).is_none());
+}
+
+TEST_CASE("ai: human decider counter window renders context and reads play")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "wuxie", "w#0");
+
+    std::istringstream in("play 1\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    const auto chosen = src.play_counter(g.ctx, "a", "b", {"a"});
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap() == "w#0");
+    CHECK(out.str().find("w#0") != std::string::npos);  // 无懈候选渲染
+    CHECK(out.str().find("使用者: b") != std::string::npos);
+    CHECK(out.str().find("目标: a") != std::string::npos);
+}
+
+TEST_CASE("ai: human decider counter window declines on pass or eof")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "wuxie", "w#0");
+
+    {
+        std::istringstream in("pass\n");
+        std::ostringstream out;
+        HumanDecider dec(in, out);
+        RequestDecisionSource src(dec);
+        CHECK(src.play_counter(g.ctx, "a", "", {"a"}).is_none());
+        CHECK(out.str().find("延时锦囊判定") != std::string::npos);
+    }
+    {
+        std::istringstream in;  // 空流：首次读取即 EOF
+        std::ostringstream out;
+        HumanDecider dec(in, out);
+        RequestDecisionSource src(dec);
+        CHECK(src.play_counter(g.ctx, "a", "b", {"a"}).is_none());
+    }
+}

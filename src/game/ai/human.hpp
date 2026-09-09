@@ -63,7 +63,7 @@ namespace tkw
                         return decide_choose_id(
                             request, "濒死救场（濒死者: " + request.dying + "）");
                     case DecisionKind::Counter:
-                        return decide_choose_id(request, "无懈可击窗口");
+                        return decide_choose_id(request, counter_title(request));
                     case DecisionKind::Trigger:
                         return decide_trigger(request);
                     case DecisionKind::PickCard:
@@ -148,6 +148,28 @@ namespace tkw
                         out_ << "  " << (i + 1) << ") "
                              << card_name(req, options[i].def_id) << " "
                              << options[i].instance_id << "\n";
+                }
+
+                /**
+                 * @brief 无懈窗口提示标题：锦囊使用者（判定窗口使用者不可考 →
+                 *        延时判定标注）与目标集合。
+                 */
+                static std::string counter_title(const DecisionRequest &req)
+                {
+                    std::string title = "无懈可击窗口";
+                    if (req.counter_user.empty())
+                        title += "（延时锦囊判定）";
+                    else
+                        title += "（使用者: " + req.counter_user + "）";
+                    for (std::size_t i = 0; i < req.counter_targets.size(); ++i)
+                    {
+                        if (i > 0)
+                            title += ",";
+                        else
+                            title += "目标: ";
+                        title += req.counter_targets[i];
+                    }
+                    return title;
                 }
 
                 static const char *reason_text(DiscardReason reason)

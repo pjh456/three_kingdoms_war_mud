@@ -4,9 +4,10 @@
  * @note 逻辑集中在 SimpleDecider::decide（只读 DecisionRequest）；SimpleAI 把
  *       它经 RequestDecisionSource 适配成引擎可用的 DecisionSource。只做「合法
  *       且能推进」的动作：出杀（按回合上下文给的次数上限）、可结算锦囊、装备。
- *       不出无懈（避免自抵消）；武器效果按代价可付性决定是否发动。弃牌按牌
- *       价值升序取（先弃最低价值，同价值保持手牌序）。响应窗口取第一张真响应
- *       牌，杀响应无真杀时用两张手牌当杀（丈八蛇矛）。
+ *       无懈不抵消自己的锦囊；敌人锦囊冲自己或自己判定区有延时锦囊时出第一张，
+ *       其余不出；武器效果按代价可付性决定是否发动。弃牌按牌价值升序取（先弃
+ *       最低价值，同价值保持手牌序）。响应窗口取第一张真响应牌，杀响应无真杀
+ *       时用两张手牌当杀（丈八蛇矛）。
  */
 
 #ifndef INCLUDE_TKW_GAME_AI_SIMPLE_HPP
@@ -44,8 +45,9 @@ namespace tkw
                     case DecisionKind::Response:
                         return decide_response(req);
                     case DecisionKind::Peach:
-                    case DecisionKind::Counter:
                         return decide_first_id(req);
+                    case DecisionKind::Counter:
+                        return decide_counter(req);
                     case DecisionKind::Trigger:
                         return decide_trigger(req);
                     case DecisionKind::PickCard:
@@ -78,15 +80,36 @@ namespace tkw
                     return out;
                 }
 
-                /** 救桃取第一张候选；无懈一律不出（避免自抵消）。 */
+                /** 救桃取第一张候选。 */
                 static DecisionChoice decide_first_id(const DecisionRequest &req)
                 {
                     DecisionChoice out;
-                    if (req.kind == DecisionKind::Counter)
-                        return out;
                     if (!req.options.empty())
                         out.instance_id = Option<std::string>::Some(
                             req.options.front().instance_id);
+                    return out;
+                }
+
+                /**
+                 * @brief 无懈窗口：自己的锦囊不自我抵消；锦囊目标含决策者
+                 *        （敌人锦囊冲我 / 我判定区的延时锦囊）时出第一张无懈；
+                 *        其余（敌人自益锦囊、第三方锦囊）不出。
+                 * @note 候选已由适配器滤为无懈牌且窗口询问前保证非空；直调
+                 *       decide 时按不出处理空候选。
+                 */
+                static DecisionChoice decide_counter(const DecisionRequest &req)
+                {
+                    DecisionChoice out;
+                    if (req.counter_user == req.actor)
+                        return out;
+                    if (std::find(req.counter_targets.begin(),
+                                  req.counter_targets.end(), req.actor) ==
+                        req.counter_targets.end())
+                        return out;
+                    if (req.options.empty())
+                        return out;
+                    out.instance_id = Option<std::string>::Some(
+                        req.options.front().instance_id);
                     return out;
                 }
 
