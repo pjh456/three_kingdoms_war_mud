@@ -541,7 +541,7 @@ namespace tkw
         /**
          * @brief 把命令树的框架帮助数据渲染为中文帮助。
          * @param cmd 请求帮助的命令（根或任一子命令）。
-         * @return 中文段标题（用法/选项/参数/子命令）的完整帮助；根命令额外附用法示例。
+         * @return 中文段标题（用法/选项/公共选项/参数/子命令）的完整帮助；根命令额外附用法示例。
          * @note 只替换框架渲染结果的段标题与 usage 前缀，选项/参数/子命令的排布与
          *       对齐仍由框架负责，避免自造排版。段标题在渲染后再替换，使框架仍按
          *       英文段名选择列宽上限（选项段 32 字节）。选项标注（如 (repeatable)）
@@ -569,6 +569,7 @@ namespace tkw
             std::string text =
                 detail::zh_usage_prefix(pjh::cli::HelpFormatter::format_help(doc));
             detail::replace_heading_line(text, "Options", "选项");
+            detail::replace_heading_line(text, "Inherited Options", "公共选项");
             detail::replace_heading_line(text, "Arguments", "参数");
             detail::replace_heading_line(text, "Subcommands", "子命令");
 
