@@ -577,6 +577,42 @@ TEST_CASE("game: jiedao requires holder to have a weapon")
     CHECK(g.cards.hand_size("a") == 1);  // 未消耗
 }
 
+TEST_CASE("game: validate_effect_targets pins the borrowed sword special case")
+{
+    // targets = {A(持武器者), B(A 攻击范围内角色)}
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.add_player("d", 3, 4);
+    g.add_player("e", 4, 4);
+    g.add_player("f", 5, 4);
+    g.equip("b", "qinggang", "e#0");  // b 持武器，攻击范围 2
+    const CardDef &jiedao = *g.catalog.find("jiedao").unwrap();
+
+    // 持武器者 + 攻击范围内目标：合法
+    CHECK(validate_effect_targets(g.ctx, "a", jiedao, {"b", "d"}).is_ok());
+
+    // 目标数量不符 scope
+    auto r = validate_effect_targets(g.ctx, "a", jiedao, {"b"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+
+    // 目标超出持武器者攻击范围
+    r = validate_effect_targets(g.ctx, "a", jiedao, {"b", "e"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::OutOfRange);
+
+    // 持武器者无武器
+    TestGame h("deck");
+    h.add_player("a", 0, 4);
+    h.add_player("b", 1, 4);
+    const CardDef &jiedao2 = *h.catalog.find("jiedao").unwrap();
+    r = validate_effect_targets(h.ctx, "a", jiedao2, {"b", "b"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+}
+
 // ── 回合流程 ──────────────────────────────────────────────────────────
 
 TEST_CASE("game: turn draws two and trims to hand limit")

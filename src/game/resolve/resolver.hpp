@@ -109,29 +109,19 @@ namespace tkw
             return out;
         }
 
-        // ── 结算入口 ────────────────────────────────────────────────────
-
         /**
-         * @brief 结算「player 打出 played 牌，指定 targets」。
-         * @note played 按值传入：结算过程会把该牌移出手牌，引用会失效。
-         *       校验失败（未知卡/越范围/未实现/空目标）不消耗该牌；
-         *       校验通过后先把打出的牌弃置，再应用效果。
+         * @brief 主动效果的目标预校验（只读，不消费打出的牌）。
+         * @return Ok 通过；错误值：
+         *         - NoTarget：无目标；
+         *         - OutOfRange：目标超出攻击范围/距离；
+         *         - InvalidTarget：目标数量不符 scope 或不在合法集合内。
+         * @note 前置：def.effect.is_some()（结算入口与出牌动作校验两处均满足）。
+         *       借刀杀人特例（targets = {持武器者, 其攻击范围内角色}）在此统一校验。
          */
-        inline GameResult<void> resolve_play(
-            GameContext &ctx, DecisionSource &ai, const std::string &player,
-            card::Card played, const std::vector<std::string> &targets)
+        inline GameResult<void> validate_effect_targets(
+            const GameContext &ctx, const std::string &player,
+            const card::CardDef &def, const std::vector<std::string> &targets)
         {
-            const auto def_opt = ctx.catalog->find(played.def_id);
-            if (def_opt.is_none())
-                return GameResult<void>::Err(EffectError::UnknownCard);
-            const card::CardDef &def = *def_opt.unwrap();
-            if (def.effect.is_none())
-            {
-                // 装备由 equip_card 处理；其余无主动效果（如无懈）不可主动打出
-                if (def.type == card::CardType::Equipment)
-                    return GameResult<void>::Ok();
-                return GameResult<void>::Err(EffectError::UnsupportedKind);
-            }
             const card::CardEffect &eff = def.effect.unwrap();
 
             // 预校验：目标非空 + 距离
@@ -198,6 +188,38 @@ namespace tkw
                 if (!target_ok)
                     return GameResult<void>::Err(EffectError::InvalidTarget);
             }
+            return GameResult<void>::Ok();
+        }
+
+        // ── 结算入口 ────────────────────────────────────────────────────
+
+        /**
+         * @brief 结算「player 打出 played 牌，指定 targets」。
+         * @note played 按值传入：结算过程会把该牌移出手牌，引用会失效。
+         *       校验失败（未知卡/越范围/未实现/空目标）不消耗该牌；
+         *       校验通过后先把打出的牌弃置，再应用效果。
+         */
+        inline GameResult<void> resolve_play(
+            GameContext &ctx, DecisionSource &ai, const std::string &player,
+            card::Card played, const std::vector<std::string> &targets)
+        {
+            const auto def_opt = ctx.catalog->find(played.def_id);
+            if (def_opt.is_none())
+                return GameResult<void>::Err(EffectError::UnknownCard);
+            const card::CardDef &def = *def_opt.unwrap();
+            if (def.effect.is_none())
+            {
+                // 装备由 equip_card 处理；其余无主动效果（如无懈）不可主动打出
+                if (def.type == card::CardType::Equipment)
+                    return GameResult<void>::Ok();
+                return GameResult<void>::Err(EffectError::UnsupportedKind);
+            }
+            const card::CardEffect &eff = def.effect.unwrap();
+
+            // 目标预校验（单一副本见 validate_effect_targets；本处为最终闸门）
+            auto tr = validate_effect_targets(ctx, player, def, targets);
+            if (tr.is_err())
+                return tr;
 
             // 未实现的效果：不消耗打出的牌
             if (!is_settleable_kind(eff.kind))
