@@ -39,8 +39,7 @@ int main(int argc, char **argv)
     auto executed = ctx.matched_command()->execute(ctx);
     if (executed.is_err())
     {
-        std::cerr << tkw::cli::runtime_error_text(executed.unwrap_err().what())
-                  << "\n";
+        std::cerr << executed.unwrap_err().what() << "\n";
         return 1;
     }
     return 0;
