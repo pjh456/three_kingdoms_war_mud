@@ -178,6 +178,39 @@ TEST_CASE("ai: human decider plays chosen legal action")
     CHECK(out.str().find("s#1") != std::string::npos);
 }
 
+TEST_CASE("ai: human decider renders the situation summary")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 3);
+    g.give("a", "sha", "s#1");
+    g.give("b", "tao", "t#9");
+    g.equip("a", "bagua", "e#0");
+    g.equip("b", "qinglong", "e#1");
+    const auto lesi = g.catalog.find("lesi");
+    REQUIRE(lesi.is_some());
+    const auto &copy = lesi.unwrap()->copies[0];
+    g.cards.add_to_judge(
+        "a", tkw::card::Card{"d#1", "lesi", copy.suit, copy.number});
+
+    std::istringstream in("pass\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    CHECK(src.choose_play(g.ctx, turn).is_none());
+
+    const std::string text = out.str();
+    // 己方：体力/手牌数/装备/判定逐项渲染
+    CHECK(text.find("[a] 体力 4/4  手牌 1  装备 八卦阵  判定 乐不思蜀") !=
+          std::string::npos);
+    // 对手：体力/手牌数/装备/距离逐项渲染
+    CHECK(text.find("b 体力 3/3  手牌 1  装备 青龙偃月刀  距离 1") !=
+          std::string::npos);
+    CHECK(text.find("s#1") != std::string::npos);      // 候选仍渲染
+    CHECK(text.find("t#9") == std::string::npos);      // 对手手牌内容不泄露
+}
+
 TEST_CASE("ai: human decider plays the zhangba two-card action")
 {
     TestGame g("deck");

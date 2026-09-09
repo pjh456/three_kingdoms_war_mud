@@ -139,6 +139,44 @@ namespace tkw
                     return def_id;
                 }
 
+                /** @brief 把某个区域渲染成「卡名/卡名」；空区域回落「无」。 */
+                static std::string zone_names(
+                    const DecisionRequest &req,
+                    const std::vector<card::Card> &zone)
+                {
+                    if (zone.empty())
+                        return "无";
+                    std::string out;
+                    for (std::size_t i = 0; i < zone.size(); ++i)
+                    {
+                        if (i > 0)
+                            out += "/";
+                        out += card_name(req, zone[i].def_id);
+                    }
+                    return out;
+                }
+
+                /**
+                 * @brief 打印决策者视角的局面摘要：己方体力/手牌数/装备/判定，
+                 *        其余角色逐行给体力/手牌数/装备/距离。
+                 * @note 严格渲染 req.view 的可见性边界：双方手牌都只出数量，
+                 *       绝不展开牌面内容。
+                 * @note 纯展示，不改变候选与输入语法；每次重提示都会重绘。
+                 */
+                void print_view(const DecisionRequest &req)
+                {
+                    const auto &v = req.view;
+                    out_ << "[" << v.self << "] 体力 " << v.self_hp << "/"
+                         << v.self_max_hp << "  手牌 " << v.hand.size()
+                         << "  装备 " << zone_names(req, v.equip) << "  判定 "
+                         << zone_names(req, v.judge) << "\n";
+                    for (const auto &e : v.others)
+                        out_ << e.id << " 体力 " << e.hp << "/" << e.max_hp
+                             << "  手牌 " << e.hand_size << "  装备 "
+                             << zone_names(req, e.equip) << "  距离 " << e.distance
+                             << "\n";
+                }
+
                 /** @brief 打印 1 基编号的牌候选列表。 */
                 void print_options(
                     const DecisionRequest &req,
@@ -212,6 +250,7 @@ namespace tkw
                     for (;;)
                     {
                         out_ << "[" << req.actor << "] 出牌阶段：\n";
+                        print_view(req);
                         for (std::size_t i = 0; i < req.legal.size(); ++i)
                         {
                             const auto &act = req.legal[i];
@@ -269,6 +308,7 @@ namespace tkw
                     for (;;)
                     {
                         out_ << "[" << req.actor << "] " << title << "：\n";
+                        print_view(req);
                         print_options(req, req.options);
                         out_ << "输入 play <序号> 或 pass：" << std::flush;
 
@@ -308,6 +348,7 @@ namespace tkw
                     for (;;)
                     {
                         out_ << "[" << req.actor << "] 响应（杀）：打出两张手牌当杀：\n";
+                        print_view(req);
                         for (std::size_t i = 0; i < hand.size(); ++i)
                             out_ << "  " << (i + 1) << ") "
                                  << card_name(req, hand[i].def_id) << " "
@@ -353,6 +394,7 @@ namespace tkw
                         if (!req.target.empty())
                             out_ << "（目标: " << req.target << "）";
                         out_ << "：\n";
+                        print_view(req);
                         print_options(req, req.options);
                         out_ << "输入 pick <序号> 或 pass：" << std::flush;
 
@@ -387,6 +429,7 @@ namespace tkw
                         out_ << "[" << req.actor << "] 弃牌（"
                              << reason_text(req.discard_reason) << "，需弃 "
                              << req.count << " 张）：\n";
+                        print_view(req);
                         print_options(req, req.options);
                         out_ << "输入 discard <下标> ...：" << std::flush;
 
@@ -436,6 +479,7 @@ namespace tkw
                     DecisionChoice out;
                     for (;;)
                     {
+                        print_view(req);
                         out_ << "[" << req.actor << "] 发动 " << ability_name(req)
                              << "？(y/n)：" << std::flush;
 

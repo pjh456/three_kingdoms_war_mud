@@ -245,6 +245,13 @@ namespace
             for (std::size_t i = 0; i < s.humans.size(); ++i)
                 std::cout << (i == 0 ? "" : ",") << s.humans[i];
         std::cout << "\n";
+        std::cout << "  局面:\n";
+        for (const auto &e : *ctx.entities)
+            std::cout << "    " << e->get_id() << " 体力 " << e->get_hp() << "/"
+                      << e->get_hp_bar().get_max() << " 手牌 "
+                      << ctx.cards->hand_size(e->get_id()) << " 装备 "
+                      << ctx.cards->equip_size(e->get_id()) << " 判定 "
+                      << ctx.cards->judge_size(e->get_id()) << "\n";
     }
 
     CliResult<void> cmd_new(const Options &opt, Session &s)
