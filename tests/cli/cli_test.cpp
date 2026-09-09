@@ -220,11 +220,16 @@ TEST_CASE("cli: repl query and help render commands")
     CHECK(unknown.ok);
     CHECK(unknown.console.find("未知命令") != std::string::npos);
 
-    // REPL 内 `new --help` 走解析器的内建帮助渲染（与批量 --help 的中文渲染不同），
-    // 这里只钉帮助正文确实输出且含命令描述。
+    // REPL 内 `new --help` 走 App 注入的 help_formatter，与批量 --help 同一
+    // 中文渲染路径：钉中文章节标题齐全，且不残留英文段标题。
     auto inline_help = repl.run("new --help");
     CHECK(inline_help.ok);
     CHECK(inline_help.console.find("开新对局") != std::string::npos);
+    CHECK(inline_help.console.find("用法:") != std::string::npos);
+    CHECK(inline_help.console.find("选项:") != std::string::npos);
+    CHECK(inline_help.console.find("公共选项:") != std::string::npos);
+    CHECK(inline_help.console.find("Usage:") == std::string::npos);
+    CHECK(inline_help.console.find("Inherited Options") == std::string::npos);
 }
 
 TEST_CASE("cli: unknown command and bad options are errors")

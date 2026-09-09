@@ -171,6 +171,23 @@ add_test(NAME cli_repl_query_and_help_zh
 set_tests_properties(cli_repl_query_and_help_zh PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# REPL 内 `new --help` 走 App 帮助格式化器（与批量 --help 同一中文渲染路径）：
+# 钉中文段标题齐全且无英文残留。与上面 `?`/`help` 的导航渲染链互为补充，两条链
+# 分开验收；渲染改回英文即红，防子模块/渲染回退。
+add_test(NAME cli_repl_subcommand_help_zh
+         COMMAND sh -c
+                 "out=$(printf 'new --help\\nquit\\n' | $<TARGET_FILE:tkw> repl 2>&1); printf '%s' \"$out\" | grep -q '用法:' && printf '%s' \"$out\" | grep -q '选项:' && printf '%s' \"$out\" | grep -q '公共选项:' && ! printf '%s' \"$out\" | grep -q 'Usage:'")
+set_tests_properties(cli_repl_subcommand_help_zh PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# REPL 无会话执行错误的打印路径（run() → print_error 默认 what()）只输出纯中文
+# 消息、不带 Parse Error 前缀；cli_tests 直调 process_line 不经过该路径，E2E 补上。
+add_test(NAME cli_repl_runtime_error_no_prefix
+         COMMAND sh -c
+                 "out=$(printf 'step\\nquit\\n' | $<TARGET_FILE:tkw> repl 2>&1); printf '%s' \"$out\" | grep -q '没有进行中的对局' && ! printf '%s' \"$out\" | grep -q 'Parse Error'")
+set_tests_properties(cli_repl_runtime_error_no_prefix PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # verbose 日志可读性：卡牌事件用中文卡名，且补伤害/体力行（seed 固定，输出确定）。
 add_test(NAME cli_verbose_log_zh
          COMMAND sh -c
