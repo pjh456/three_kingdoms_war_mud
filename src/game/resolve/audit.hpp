@@ -21,8 +21,8 @@ namespace tkw
     {
         /**
          * @brief 返回牌堆中「本应可主动打出但引擎尚未实现」的卡 id（deck 序）。
-         * @note 装备牌打出即装备、闪/无懈为响应牌，均不计入未实现；
-         *       延时锦囊的判定阶段已实现，但出牌阶段尚无法放置，故计入。
+         * @note 装备牌打出即装备、闪/无懈为响应牌、延时锦囊可于出牌阶段放置且
+         *       判定阶段已实现，均不计入。
          */
         inline std::vector<std::string> unsupported_cards(
             const card::CardDefCatalog &catalog)

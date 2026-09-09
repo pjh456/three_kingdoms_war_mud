@@ -64,8 +64,8 @@ namespace tkw
             Steal,         /**< 获得目标 count 张牌（顺手牵羊） */
             AoeDamage,     /**< 全场响应 response，否则受 amount 伤害 */
             Duel,          /**< 决斗：轮流出杀 */
-            RevealPick,    /**< 五谷丰登（未实现） */
-            BorrowedSword, /**< 借刀杀人（未实现） */
+            RevealPick,    /**< 亮出等同存活人数的牌，按座位序各选一张（五谷丰登） */
+            BorrowedSword, /**< 持武器者对攻击范围内角色出杀，否则使用者得其武器（借刀杀人） */
         };
 
         /** @brief 装备被动能力（一件装备可带多个，经 equip.hpp 查询）。 */
