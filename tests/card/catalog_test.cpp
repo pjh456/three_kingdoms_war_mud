@@ -102,7 +102,8 @@ TEST_CASE("card: judge descriptor parses")
             "id": "shandian", "name": "闪电", "type": "trick", "subtype": "delayed",
             "copies": [ {"suit": "spade", "number": 1} ],
             "judge": {"trigger": "spade_2_9", "success": "damage",
-                      "failure": "pass_to_next", "amount": 3}
+                      "failure": "pass_to_next", "amount": 3,
+                      "scope": "one_other"}
         })").root(), "shandian");
     REQUIRE(d.is_ok());
     REQUIRE(d.unwrap().judge.is_some());
@@ -111,6 +112,7 @@ TEST_CASE("card: judge descriptor parses")
     CHECK(j.success == JudgeAction::Damage);
     CHECK(j.failure == JudgeAction::PassToNext);
     CHECK(j.amount == 3);
+    CHECK(j.scope.contains(Scope::OneOther));
 }
 
 TEST_CASE("card: parse_card_def default set / missing optionals")
@@ -149,6 +151,13 @@ TEST_CASE("card: parse errors carry field paths")
                  "copies": [ {"suit": "star", "number": 1} ]})").root(), "a");
     REQUIRE(bad_suit.is_err());
     CHECK(bad_suit.unwrap_err() == ConfigError{ConfigErrorKind::InvalidValue, "a.copies[0].suit"});
+
+    auto bad_scope = parse_card_def(
+        doc(R"({"id": "a", "name": "a", "type": "basic", "copies": [],
+                 "effect": {"kind": "damage", "amount": 1, "scope": "everyone"}})").root(), "a");
+    REQUIRE(bad_scope.is_err());
+    CHECK(bad_scope.unwrap_err() ==
+          ConfigError{ConfigErrorKind::InvalidValue, "a.effect.scope"});
 }
 
 TEST_CASE("card: opt default must not swallow type mismatch")

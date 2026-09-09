@@ -34,22 +34,6 @@ namespace tkw
 
         namespace detail
         {
-            /** 错误消息里的字段路径：path 为空即顶层。 */
-            inline std::string key_path(std::string_view path, std::string_view key)
-            {
-                if (path.empty())
-                    return std::string(key);
-                return std::string(path) + "." + std::string(key);
-            }
-
-            /** 构造携带字段路径错误的 Result。 */
-            template <typename T>
-            cfg::ConfigResult<T> fail_parse(cfg::ConfigErrorKind kind, std::string detail)
-            {
-                return cfg::ConfigResult<T>::Err(
-                    cfg::ConfigError{kind, std::move(detail)});
-            }
-
             /** @brief subtype 封闭集合（空串 = 未分类，合法）。 */
             inline bool is_valid_subtype(std::string_view s)
             {
@@ -57,6 +41,11 @@ namespace tkw
                        s == "instant" || s == "delayed" || s == "weapon" ||
                        s == "armor" || s == "horse";
             }
+
+            /** scope 字段封闭四值集：effect/judge 解析共用的单一表源。 */
+            inline constexpr std::initializer_list<std::pair<std::string_view, Scope>>
+                scope_table{{"self", Scope::Self}, {"one_other", Scope::OneOther},
+                             {"all_others", Scope::AllOthers}, {"all", Scope::All}};
 
             /** 字符串 → 封闭枚举：未知值报 InvalidValue（detail = 字段路径）。 */
             template <typename E>
@@ -67,7 +56,7 @@ namespace tkw
                 for (const auto &[key, val] : table)
                     if (key == s)
                         return cfg::ConfigResult<E>::Ok(val);
-                return fail_parse<E>(cfg::ConfigErrorKind::InvalidValue, std::string(path));
+                return cfg::fail<E>(cfg::ConfigErrorKind::InvalidValue, std::string(path));
             }
 
             /** 必填字符串字段 → 枚举。缺失/类型不符 → Missing/TypeMismatch。 */
@@ -79,7 +68,7 @@ namespace tkw
                 auto s = cfg::require_string(obj, key, path);
                 if (s.is_err())
                     return cfg::ConfigResult<E>::Err(s.unwrap_err());
-                return enum_value<E>(s.unwrap(), key_path(path, key), table);
+                return enum_value<E>(s.unwrap(), cfg::field_path(path, key), table);
             }
 
             /** 可选字符串字段 → 枚举：缺失回落 None；类型不符仍失败。 */
@@ -90,17 +79,17 @@ namespace tkw
             {
                 const auto *o = obj.try_as_object();
                 if (!o)
-                    return fail_parse<Option<E>>(
+                    return cfg::fail<Option<E>>(
                         cfg::ConfigErrorKind::TypeMismatch,
-                        std::string(path.empty() ? "root" : path));
+                        cfg::container_path(path));
                 if (!o->contains(key))
                     return cfg::ConfigResult<Option<E>>::Ok(Option<E>::None());
                 const json::Json &v = (*o)[key];
                 auto s = v.try_as_string();
                 if (!s)
-                    return fail_parse<Option<E>>(
-                        cfg::ConfigErrorKind::TypeMismatch, key_path(path, key));
-                auto r = enum_value<E>(*s, key_path(path, key), table);
+                    return cfg::fail<Option<E>>(
+                        cfg::ConfigErrorKind::TypeMismatch, cfg::field_path(path, key));
+                auto r = enum_value<E>(*s, cfg::field_path(path, key), table);
                 if (r.is_err())
                     return cfg::ConfigResult<Option<E>>::Err(r.unwrap_err());
                 return cfg::ConfigResult<Option<E>>::Ok(Option<E>::Some(r.unwrap()));
@@ -112,16 +101,16 @@ namespace tkw
             {
                 const auto *o = obj.try_as_object();
                 if (!o)
-                    return fail_parse<Option<const json::Json *>>(
+                    return cfg::fail<Option<const json::Json *>>(
                         cfg::ConfigErrorKind::TypeMismatch,
-                        std::string(path.empty() ? "root" : path));
+                        cfg::container_path(path));
                 if (!o->contains(key))
                     return cfg::ConfigResult<Option<const json::Json *>>::Ok(
                         Option<const json::Json *>::None());
                 const json::Json &v = (*o)[key];
                 if (!v.try_as_object())
-                    return fail_parse<Option<const json::Json *>>(
-                        cfg::ConfigErrorKind::TypeMismatch, key_path(path, key));
+                    return cfg::fail<Option<const json::Json *>>(
+                        cfg::ConfigErrorKind::TypeMismatch, cfg::field_path(path, key));
                 return cfg::ConfigResult<Option<const json::Json *>>::Ok(
                     Option<const json::Json *>::Some(&v));
             }
@@ -142,8 +131,8 @@ namespace tkw
                     return cfg::ConfigResult<CardCopy>::Err(num.unwrap_err());
                 const auto n = num.unwrap();
                 if (n < 1 || n > 13)
-                    return fail_parse<CardCopy>(
-                        cfg::ConfigErrorKind::InvalidValue, key_path(ip, "number"));
+                    return cfg::fail<CardCopy>(
+                        cfg::ConfigErrorKind::InvalidValue, cfg::field_path(ip, "number"));
 
                 return cfg::ConfigResult<CardCopy>::Ok(
                     CardCopy{suit.unwrap(), static_cast<int>(n)});
@@ -180,10 +169,7 @@ namespace tkw
                     return cfg::ConfigResult<CardEffect>::Err(count.unwrap_err());
                 eff.count = static_cast<int>(count.unwrap());
 
-                auto scope = opt_enum<Scope>(
-                    obj, "scope", path,
-                    {{"self", Scope::Self}, {"one_other", Scope::OneOther},
-                     {"all_others", Scope::AllOthers}, {"all", Scope::All}});
+                auto scope = opt_enum<Scope>(obj, "scope", path, scope_table);
                 if (scope.is_err())
                     return cfg::ConfigResult<CardEffect>::Err(scope.unwrap_err());
                 eff.scope = scope.unwrap();
@@ -208,26 +194,26 @@ namespace tkw
                 case CardEffectKind::Heal:
                 case CardEffectKind::Duel:
                     if (eff.amount <= 0)
-                        return fail_parse<CardEffect>(
+                        return cfg::fail<CardEffect>(
                             cfg::ConfigErrorKind::InvalidValue,
-                            key_path(path, "amount"));
+                            cfg::field_path(path, "amount"));
                     break;
                 case CardEffectKind::Draw:
                 case CardEffectKind::DiscardTarget:
                     if (eff.count <= 0)
-                        return fail_parse<CardEffect>(
+                        return cfg::fail<CardEffect>(
                             cfg::ConfigErrorKind::InvalidValue,
-                            key_path(path, "count"));
+                            cfg::field_path(path, "count"));
                     break;
                 case CardEffectKind::Steal:
                     if (eff.count <= 0)
-                        return fail_parse<CardEffect>(
+                        return cfg::fail<CardEffect>(
                             cfg::ConfigErrorKind::InvalidValue,
-                            key_path(path, "count"));
+                            cfg::field_path(path, "count"));
                     if (eff.range <= 0)
-                        return fail_parse<CardEffect>(
+                        return cfg::fail<CardEffect>(
                             cfg::ConfigErrorKind::InvalidValue,
-                            key_path(path, "range"));
+                            cfg::field_path(path, "range"));
                     break;
                 default:
                     break;
@@ -300,10 +286,7 @@ namespace tkw
                     return cfg::ConfigResult<JudgeEffect>::Err(amount.unwrap_err());
                 j.amount = static_cast<int>(amount.unwrap());
 
-                auto scope = opt_enum<Scope>(
-                    obj, "scope", path,
-                    {{"self", Scope::Self}, {"one_other", Scope::OneOther},
-                     {"all_others", Scope::AllOthers}, {"all", Scope::All}});
+                auto scope = opt_enum<Scope>(obj, "scope", path, scope_table);
                 if (scope.is_err())
                     return cfg::ConfigResult<JudgeEffect>::Err(scope.unwrap_err());
                 j.scope = scope.unwrap();
@@ -318,26 +301,26 @@ namespace tkw
                 std::vector<Ability> out;
                 const auto *o = root.try_as_object();
                 if (!o)
-                    return fail_parse<std::vector<Ability>>(
+                    return cfg::fail<std::vector<Ability>>(
                         cfg::ConfigErrorKind::TypeMismatch,
-                        std::string(path.empty() ? "root" : path));
+                        cfg::container_path(path));
                 if (!o->contains("abilities"))
                     return cfg::ConfigResult<std::vector<Ability>>::Ok(std::move(out));
 
                 const json::Json &v = (*o)["abilities"];
                 const auto *arr = v.try_as_array();
                 if (!arr)
-                    return fail_parse<std::vector<Ability>>(
+                    return cfg::fail<std::vector<Ability>>(
                         cfg::ConfigErrorKind::TypeMismatch,
-                        key_path(path, "abilities"));
+                        cfg::field_path(path, "abilities"));
 
-                const auto prefix = key_path(path, "abilities");
+                const auto prefix = cfg::field_path(path, "abilities");
                 for (std::size_t i = 0; i < arr->size(); ++i)
                 {
                     const std::string ip = prefix + "[" + std::to_string(i) + "]";
                     auto s = (*arr)[i].try_as_string();
                     if (!s)
-                        return fail_parse<std::vector<Ability>>(
+                        return cfg::fail<std::vector<Ability>>(
                             cfg::ConfigErrorKind::TypeMismatch, ip);
                     auto a = enum_value<Ability>(
                         *s, ip,
@@ -392,9 +375,9 @@ namespace tkw
                     return cfg::ConfigResult<CardDef>::Err(subtype.unwrap_err());
                 def.subtype = subtype.unwrap();
                 if (!is_valid_subtype(def.subtype))
-                    return fail_parse<CardDef>(
+                    return cfg::fail<CardDef>(
                         cfg::ConfigErrorKind::InvalidValue,
-                        key_path(path, "subtype"));
+                        cfg::field_path(path, "subtype"));
 
                 auto text = cfg::opt_string(root, "text", "", path);
                 if (text.is_err())
@@ -420,7 +403,7 @@ namespace tkw
                 if (effect.unwrap().is_some())
                 {
                     auto eff = parse_card_effect(
-                        *effect.unwrap().unwrap(), key_path(path, "effect"));
+                        *effect.unwrap().unwrap(), cfg::field_path(path, "effect"));
                     if (eff.is_err())
                         return cfg::ConfigResult<CardDef>::Err(eff.unwrap_err());
                     def.effect = Option<CardEffect>::Some(std::move(eff).unwrap());
@@ -432,7 +415,7 @@ namespace tkw
                 if (equip.unwrap().is_some())
                 {
                     auto eq = parse_card_equip(
-                        *equip.unwrap().unwrap(), key_path(path, "equip"));
+                        *equip.unwrap().unwrap(), cfg::field_path(path, "equip"));
                     if (eq.is_err())
                         return cfg::ConfigResult<CardDef>::Err(eq.unwrap_err());
                     def.equip = Option<CardEquip>::Some(std::move(eq).unwrap());
@@ -444,7 +427,7 @@ namespace tkw
                 if (judge.unwrap().is_some())
                 {
                     auto j = parse_judge(
-                        *judge.unwrap().unwrap(), key_path(path, "judge"));
+                        *judge.unwrap().unwrap(), cfg::field_path(path, "judge"));
                     if (j.is_err())
                         return cfg::ConfigResult<CardDef>::Err(j.unwrap_err());
                     def.judge = Option<JudgeEffect>::Some(std::move(j).unwrap());
@@ -503,12 +486,12 @@ namespace tkw
                 {
                     auto id_s = item.try_as_string();
                     if (!id_s)
-                        return detail::fail_parse<void>(
+                        return cfg::fail<void>(
                             cfg::ConfigErrorKind::TypeMismatch, std::string(ip));
                     const std::string cid(*id_s);
 
                     if (catalog.index.find(cid) != catalog.index.end())
-                        return detail::fail_parse<void>(
+                        return cfg::fail<void>(
                             cfg::ConfigErrorKind::InvalidValue,
                             std::string(ip) + " 重复引用卡牌 " + cid);
 
@@ -522,7 +505,7 @@ namespace tkw
                         return cfg::ConfigResult<void>::Err(def.unwrap_err());
 
                     if (def.unwrap().id != cid)
-                        return detail::fail_parse<void>(
+                        return cfg::fail<void>(
                             cfg::ConfigErrorKind::InvalidValue, file + ".id");
 
                     catalog.index.emplace(cid, catalog.defs.size());
