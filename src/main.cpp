@@ -133,7 +133,7 @@ namespace
     }
 
     /** 按选项构建一局（加载牌堆 + 建玩家）；失败返回 nullptr 并填 err。 */
-    std::unique_ptr<tkw::game::Game> make_game(const Options &opt, std::string &err)
+    std::unique_ptr<tkw::game::Game> build_game(const Options &opt, std::string &err)
     {
         tkw::config::ResourceStore store(opt.deck);
         auto catalog = tkw::card::CardDefCatalog::load(store, "deck");
@@ -150,7 +150,7 @@ namespace
         {
             auto r = game->add_player(
                 "P" + std::to_string(i), i,
-                tkw::entity::Hp::make(tkw::game::RulesConfig{}.base_hp),
+                tkw::entity::Hp::make(game->rules.base_hp),
                 gender_for_seat(i));
             if (r.is_err())
             {
@@ -231,7 +231,7 @@ namespace
     CliResult<void> cmd_new(const Options &opt, Session &s)
     {
         std::string err;
-        auto game = make_game(opt, err);
+        auto game = build_game(opt, err);
         if (!game)
             return CliFailure{CliError(err)};
         const std::string verr = validate_humans(*game, opt.humans);
@@ -323,7 +323,7 @@ namespace
         if (text.is_err())
             return CliFailure{CliError("读取存档失败: " + file.string())};
         std::string err;
-        auto game = make_game(opt, err);
+        auto game = build_game(opt, err);
         if (!game)
             return CliFailure{CliError(err)};
         tkw::game::GameSession state;
