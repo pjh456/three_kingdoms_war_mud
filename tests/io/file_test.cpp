@@ -91,7 +91,7 @@ TEST_CASE("io: write_text overwrites existing content")
 TEST_CASE("io: unreadable file is Permission")
 {
     if (geteuid() == 0)
-        doctest::skip("running as root: permission checks are bypassed");
+        return;  // running as root: 权限检查被绕过，直接跳过（doctest 2.5 无运行时 skip API）
 
     const auto dir = temp_dir("tkw_io_permission");
     const auto f = dir / "locked.txt";
