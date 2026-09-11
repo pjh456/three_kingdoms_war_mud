@@ -89,6 +89,21 @@ TEST_CASE("game: seat distance follows the living ring after a death")
     CHECK(seat_distance(g.ctx, "d", "e") == 1);
 }
 
+TEST_CASE("game: seat distance on the eight-player cap ring")
+{
+    // 8 人满座（存活环长 8）：验证最大玩家数下环距离的对称与回绕。
+    TestGame g("deck");
+    for (int i = 0; i < 8; ++i)
+        g.add_player("P" + std::to_string(i), i, 4);
+
+    CHECK(seat_distance(g.ctx, "P0", "P0") == 0);
+    CHECK(seat_distance(g.ctx, "P0", "P4") == 4);  // 对径 min(4, 8-4)
+    CHECK(seat_distance(g.ctx, "P0", "P5") == 3);  // min(5, 3)
+    CHECK(seat_distance(g.ctx, "P0", "P6") == 2);
+    CHECK(seat_distance(g.ctx, "P0", "P7") == 1);  // 座位 7 回绕紧邻座位 0
+    CHECK(seat_distance(g.ctx, "P1", "P7") == 2);  // min(6, 2)
+}
+
 TEST_CASE("game: attack range base and weapon")
 {
     TestGame g("deck");
@@ -492,6 +507,29 @@ TEST_CASE("game: wugu reveal refills from the discard pile when the draw pile ru
     CHECK(g.cards.hand_size("b") == 1);  // 后位 b 也有牌可选
     CHECK(g.cards.draw_size() == 2);     // 3 张洗回、亮 2 张后余 2
     CHECK(g.cards.discard_size() == 0);  // 洗回后无牌滞留弃牌堆
+}
+
+TEST_CASE("game: wugu reveals one card per player at the eight-player cap")
+{
+    // 8 人满座：五谷按存活人数亮 8 张，每人各选一张，无余牌滞留。
+    TestGame g("deck");
+    for (int i = 0; i < 8; ++i)
+        g.add_player("P" + std::to_string(i), i, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("P0", "wugu", "wg#0");
+
+    TestDecider decider;
+    std::vector<std::string> targets;
+    for (int i = 0; i < 8; ++i)
+        targets.push_back("P" + std::to_string(i));
+    const auto played = g.cards.hand("P0")[0];
+    auto r = resolve_play(g.ctx, decider, "P0", played, targets);
+    REQUIRE(r.is_ok());
+
+    for (int i = 0; i < 8; ++i)
+        CHECK(g.cards.hand_size("P" + std::to_string(i)) == 1);
+    CHECK(g.cards.draw_size() == 108 - 8);  // 亮 8 张
+    CHECK(g.cards.discard_size() == 1);     // 仅打出的五谷
 }
 
 TEST_CASE("game: guohe discards target card")

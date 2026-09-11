@@ -308,6 +308,21 @@ TEST_CASE("cli: unknown command and bad options are errors")
     CHECK_FALSE(bad_value.ok);
 }
 
+TEST_CASE("cli: new accepts the eight-player cap and rejects one above it")
+{
+    Repl repl;
+
+    // 上界含 8：满座开局成功，实体数如实为 8。
+    auto created = repl.run("new --players 8 --seed 1");
+    REQUIRE(created.ok);
+    REQUIRE(repl.session.game != nullptr);
+    CHECK(repl.session.game->entities.size() == 8);
+
+    // 上界之上拒绝（与既有 --players 99 互补，钉住 8 是合法上界）。
+    auto over = repl.run("new --players 9 --seed 1");
+    CHECK_FALSE(over.ok);
+}
+
 TEST_CASE("cli: invalid human seats are rejected")
 {
     Repl repl;
