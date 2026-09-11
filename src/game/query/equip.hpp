@@ -23,7 +23,7 @@ namespace tkw
          * @note 需要读取装备上的判定描述（如八卦阵）时用本函数。
          */
         inline const card::CardDef *find_equipment(
-            const GameContext &ctx,
+            const ReadOnlyContext &ctx,
             const std::string &entity_id,
             card::Ability ability)
         {
@@ -42,7 +42,7 @@ namespace tkw
 
         /** @brief 实体装备区是否存在带指定能力的装备。 */
         inline bool has_ability(
-            const GameContext &ctx,
+            const ReadOnlyContext &ctx,
             const std::string &entity_id,
             card::Ability ability)
         {
@@ -54,7 +54,7 @@ namespace tkw
          * @note 回合流程与出牌动作校验的单一采样点；调用方每轮重采样，
          *       回合中途装备连弩当轮即生效。
          */
-        inline int sha_limit(const GameContext &ctx, const std::string &player)
+        inline int sha_limit(const ReadOnlyContext &ctx, const std::string &player)
         {
             if (has_ability(ctx, player, card::Ability::NoShaLimit))
                 return std::numeric_limits<int>::max();
@@ -69,7 +69,7 @@ namespace tkw
          *       目标数放宽由 validate_effect_targets 消费。
          */
         inline bool sha_multi_target(
-            const GameContext &ctx, const std::string &player,
+            const ReadOnlyContext &ctx, const std::string &player,
             std::size_t cards_consumed = 1)
         {
             return has_ability(ctx, player, card::Ability::MultiTargetSha) &&
@@ -78,7 +78,7 @@ namespace tkw
 
         /** @brief 实体装备区是否存在指定槽位的装备（如借刀杀人的武器）。 */
         inline bool has_equip_slot(
-            const GameContext &ctx, const std::string &entity_id,
+            const ReadOnlyContext &ctx, const std::string &entity_id,
             card::EquipSlot slot)
         {
             for (const auto &c : ctx.cards->equip(entity_id))

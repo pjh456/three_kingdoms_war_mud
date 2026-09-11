@@ -73,13 +73,26 @@ namespace tkw
             return entity::EntityResult<entity::Entity *>::Ok(entities[at].get());
         }
 
-        /** @brief O(1) 按 id 查询；不存在时为 None。 */
-        Option<entity::Entity *> find(const std::string &id) const
+        /**
+         * @brief O(1) 按 id 查询（可写容器）；不存在时为 None。
+         * @note 与 const 重载按 this 的 cv 选择：非 const 容器得到可变实体，
+         *       const 容器得到只读实体。
+         */
+        Option<entity::Entity *> find(const std::string &id)
         {
             auto it = index.find(id);
             if (it == index.end())
                 return Option<entity::Entity *>::None();
             return Option<entity::Entity *>::Some(entities[it->second].get());
+        }
+
+        /** @brief O(1) 按 id 查询（只读容器）；不存在时为 None。 */
+        Option<const entity::Entity *> find(const std::string &id) const
+        {
+            auto it = index.find(id);
+            if (it == index.end())
+                return Option<const entity::Entity *>::None();
+            return Option<const entity::Entity *>::Some(entities[it->second].get());
         }
 
         bool contains(const std::string &id) const
@@ -176,6 +189,20 @@ namespace tkw
             if (it != ids.end())
                 std::rotate(ids.begin(), it, ids.end());
             return ids;
+        }
+
+        /**
+         * @brief 按创建序导出只读实体视图（副本）。
+         * @note 直接迭代 unique_ptr 容器经 operator-> 仍会泄漏可变 Entity*；
+         *       只读路径用本视图取 const 实体。
+         */
+        std::vector<const entity::Entity *> const_view() const
+        {
+            std::vector<const entity::Entity *> out;
+            out.reserve(entities.size());
+            for (const auto &e : entities)
+                out.push_back(e.get());
+            return out;
         }
 
         /** @brief 按创建序迭代（即座位回合序）。 */

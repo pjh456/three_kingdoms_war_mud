@@ -71,7 +71,7 @@ namespace tkw
          * @note 虚拟杀（两张手牌当一张杀）借用其效果参数（伤害量/作用范围），
          *       牌堆含多张 Damage 卡时取 deck 序第一张。
          */
-        inline Option<const card::CardDef *> find_sha_def(const GameContext &ctx)
+        inline Option<const card::CardDef *> find_sha_def(const ReadOnlyContext &ctx)
         {
             for (const auto &def : *ctx.catalog)
                 if (def.effect.is_some() && is_sha_kind(def.effect.unwrap().kind))
@@ -81,7 +81,7 @@ namespace tkw
 
         /** @brief 按 effect.scope 返回该牌在当前局面下的合法目标集合（含距离过滤）。 */
         inline std::vector<std::string> valid_targets(
-            const GameContext &ctx, const std::string &player, const card::CardDef &def)
+            const ReadOnlyContext &ctx, const std::string &player, const card::CardDef &def)
         {
             std::vector<std::string> out;
             if (def.effect.is_none())
@@ -91,7 +91,7 @@ namespace tkw
 
             auto all_others = [&]()
             {
-                for (const auto &e : *ctx.entities)
+                for (const auto *e : ctx.entities->const_view())
                     if (e->get_id() != player)
                         out.push_back(e->get_id());
             };
@@ -102,7 +102,7 @@ namespace tkw
                 out.push_back(player);
                 break;
             case card::Scope::All:
-                for (const auto &e : *ctx.entities)
+                for (const auto *e : ctx.entities->const_view())
                     out.push_back(e->get_id());
                 break;
             case card::Scope::AllOthers:
@@ -145,7 +145,7 @@ namespace tkw
          *       OneOther 数量上限放宽为 3（额外至多 2 名，卡面）。
          */
         inline GameResult<void> validate_effect_targets(
-            const GameContext &ctx, const std::string &player,
+            const ReadOnlyContext &ctx, const std::string &player,
             const card::CardDef &def, const std::vector<std::string> &targets,
             std::size_t cards_consumed = 1)
         {
@@ -248,7 +248,7 @@ namespace tkw
          *       equip_card / place_delayed / resolve_play。
          */
         inline GameResult<void> validate_play_action(
-            const GameContext &ctx, const std::string &player,
+            const ReadOnlyContext &ctx, const std::string &player,
             const card::CardDef &def, const card::Card &card,
             const std::vector<std::string> &targets, const TurnContext &turn)
         {
@@ -308,7 +308,7 @@ namespace tkw
          *       牌、不发事件；实际消费归 resolve_virtual_sha。
          */
         inline GameResult<void> validate_virtual_sha(
-            const GameContext &ctx, const std::string &player,
+            const ReadOnlyContext &ctx, const std::string &player,
             const std::string &first_id, const std::string &second_id,
             const std::vector<std::string> &targets, const TurnContext &turn)
         {

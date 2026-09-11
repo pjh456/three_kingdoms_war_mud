@@ -870,7 +870,7 @@ TEST_CASE("game: mid-turn liangnu allows further sha this turn")
     struct ContextBoundDecider : TestDecider
     {
         Option<PlayAction> choose_play(
-            const GameContext &ctx, const TurnContext &turn) override
+            const ReadOnlyContext &ctx, const TurnContext &turn) override
         {
             if (play_cursor >= plays.size())
                 return Option<PlayAction>::None();
@@ -1793,7 +1793,7 @@ TEST_CASE("game: a killing blow on the turn past the cap still yields a winner")
         std::map<std::string, std::size_t> cursor;
 
         Option<PlayAction> choose_play(
-            const GameContext &, const TurnContext &turn) override
+            const ReadOnlyContext &, const TurnContext &turn) override
         {
             // 每回合至多出一张杀：已出杀即停（脚本全为杀）
             if (turn.sha_played > 0)

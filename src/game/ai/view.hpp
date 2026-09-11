@@ -54,7 +54,7 @@ namespace tkw
             };
 
             /** @brief 构造 player 的观察（拷贝必要数据，不引用对局内部容器）。 */
-            inline AiView make_view(const GameContext &ctx, const std::string &player)
+            inline AiView make_view(const ReadOnlyContext &ctx, const std::string &player)
             {
                 AiView v;
                 v.self = player;
@@ -69,7 +69,7 @@ namespace tkw
                 v.equip = ctx.cards->equip(player);
                 v.judge = ctx.cards->judge(player);
 
-                for (const auto &e : *ctx.entities)
+                for (const auto *e : ctx.entities->const_view())
                 {
                     if (e->get_id() == player)
                         continue;

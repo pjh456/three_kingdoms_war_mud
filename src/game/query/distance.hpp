@@ -41,7 +41,7 @@ namespace tkw
          *       「存活数」直接相减，须先取存活者座位环上的下标。
          */
         inline int seat_distance(
-            const GameContext &ctx, const std::string &a, const std::string &b)
+            const ReadOnlyContext &ctx, const std::string &a, const std::string &b)
         {
             const auto ids = ctx.entities->ordered_ids();
             const auto ia = std::find(ids.begin(), ids.end(), a);
@@ -57,7 +57,7 @@ namespace tkw
 
         /** @brief 解析某实体装备区：武器 range 与坐骑方向（经 catalog）。 */
         inline EquipSummary summarize_equipment(
-            const GameContext &ctx, const std::string &entity_id)
+            const ReadOnlyContext &ctx, const std::string &entity_id)
         {
             EquipSummary s;
             for (const auto &c : ctx.cards->equip(entity_id))
@@ -83,7 +83,7 @@ namespace tkw
          * @brief from 到 to 的调整后距离（含坐骑修正，下限 1）。
          */
         inline int distance_between(
-            const GameContext &ctx, const std::string &from, const std::string &to)
+            const ReadOnlyContext &ctx, const std::string &from, const std::string &to)
         {
             int d = seat_distance(ctx, from, to);
             const auto fs = summarize_equipment(ctx, from);
@@ -100,7 +100,7 @@ namespace tkw
          * @note 顺手牵羊（range=1）等按距离结算的牌走这里。
          */
         inline bool distance_le(
-            const GameContext &ctx, const std::string &from,
+            const ReadOnlyContext &ctx, const std::string &from,
             const std::string &to, int range)
         {
             return distance_between(ctx, from, to) <= range;
@@ -108,7 +108,7 @@ namespace tkw
 
         /** @brief 攻击距离判定：from 能否攻击 to（武器 range，无武器为 1）。 */
         inline bool in_attack_range(
-            const GameContext &ctx, const std::string &from, const std::string &to)
+            const ReadOnlyContext &ctx, const std::string &from, const std::string &to)
         {
             const int range = summarize_equipment(ctx, from).weapon_range;
             return distance_le(ctx, from, to, range > 0 ? range : 1);

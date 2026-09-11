@@ -48,8 +48,8 @@ namespace tkw
         /**
          * @class DecisionSource
          * @brief 结算/回合期间的玩家决策接口。
-         * @note 只读：收到的 GameContext 为 const，决策源不得直接改状态；
-         *       所有落子（消费牌/改血/移除实体）都由引擎完成。
+         * @note 只读：收到的 ReadOnlyContext 只聚合 const 容器指针，决策源
+         *       从类型上无法改状态；所有落子（消费牌/改血/移除实体）都由引擎完成。
          */
         class DecisionSource
         {
@@ -62,7 +62,7 @@ namespace tkw
              *         结算器会先检查手牌里确有响应牌，并负责消费。
              */
             virtual Option<PlayAction> play_response(
-                const GameContext &ctx,
+                const ReadOnlyContext &ctx,
                 const std::string &entity_id,
                 card::ResponseKind kind) = 0;
 
@@ -72,7 +72,7 @@ namespace tkw
              *         依赖默认构造的牌）。
              */
             virtual Option<card::Card> pick_card_from_target(
-                const GameContext &ctx,
+                const ReadOnlyContext &ctx,
                 const std::string &source,
                 const std::string &target) = 0;
 
@@ -83,14 +83,14 @@ namespace tkw
              *       杀次数，实现无需自行维护跨调用状态。
              */
             virtual Option<PlayAction> choose_play(
-                const GameContext &ctx, const TurnContext &turn) = 0;
+                const ReadOnlyContext &ctx, const TurnContext &turn) = 0;
 
             /**
              * @brief 弃牌阶段/能力代价：弃置 count 张手牌。
              * @note 回合流程按 count 逐张校验并弃置；数量不符/引用不存在会报错。
              */
             virtual std::vector<std::string> choose_discards(
-                const GameContext &ctx, const std::string &player, int count,
+                const ReadOnlyContext &ctx, const std::string &player, int count,
                 DiscardReason reason) = 0;
 
             /**
@@ -98,7 +98,7 @@ namespace tkw
              * @return 选中的牌；None = 放弃/非法（结算器回落到第一张）。
              */
             virtual Option<card::Card> pick_from_revealed(
-                const GameContext &ctx, const std::string &player,
+                const ReadOnlyContext &ctx, const std::string &player,
                 const std::vector<card::Card> &options) = 0;
 
             /**
@@ -107,7 +107,7 @@ namespace tkw
              *         确有救场牌再询问，并负责消费。
              */
             virtual Option<std::string> play_peach(
-                const GameContext &ctx, const std::string &saver,
+                const ReadOnlyContext &ctx, const std::string &saver,
                 const std::string &dying) = 0;
 
             /**
@@ -120,7 +120,7 @@ namespace tkw
              * @note 接缝只传事实（谁的锦囊、冲谁），不传「该不该出」的结论。
              */
             virtual Option<std::string> play_counter(
-                const GameContext &ctx, const std::string &player,
+                const ReadOnlyContext &ctx, const std::string &player,
                 const std::string &trick_user,
                 const std::vector<std::string> &trick_targets) = 0;
 
@@ -130,7 +130,7 @@ namespace tkw
              * @note 实现应只在「有牌可弃/有效果可用」时返回 true。
              */
             virtual bool trigger_effect(
-                const GameContext &ctx, const std::string &player,
+                const ReadOnlyContext &ctx, const std::string &player,
                 card::Ability ability) = 0;
         };
     }

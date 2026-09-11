@@ -37,7 +37,7 @@ namespace tkw
 
         /** @brief 实体任一区域是否有牌（拆/顺的目标需有牌可拿）。 */
         inline bool entity_has_any_card(
-            const GameContext &ctx, const std::string &id)
+            const ReadOnlyContext &ctx, const std::string &id)
         {
             return ctx.cards->hand_size(id) > 0 || ctx.cards->equip_size(id) > 0 ||
                    ctx.cards->judge_size(id) > 0;
@@ -50,7 +50,7 @@ namespace tkw
          *       目标合法性归校验层（主动侧 validate_virtual_sha / 响应侧预校验）。
          */
         inline std::vector<std::pair<card::Card, card::Card>> two_cards_as_sha_pairs(
-            const GameContext &ctx, const std::string &player)
+            const ReadOnlyContext &ctx, const std::string &player)
         {
             std::vector<std::pair<card::Card, card::Card>> out;
             if (!has_ability(ctx, player, card::Ability::TwoCardsAsSha))
@@ -77,7 +77,7 @@ namespace tkw
          * @note 覆盖装备、延时锦囊、主动效果牌，以及借刀杀人的双目标特例。
          */
         inline std::vector<LegalAction> legal_actions(
-            const GameContext &ctx, const std::string &player, const TurnContext &turn)
+            const ReadOnlyContext &ctx, const std::string &player, const TurnContext &turn)
         {
             std::vector<LegalAction> out;
 
@@ -115,14 +115,15 @@ namespace tkw
                 if (kind == card::CardEffectKind::BorrowedSword)
                 {
                     // targets = {A(持武器者), B(A攻击范围内另一名角色)}
-                    for (const auto &e : *ctx.entities)
+                    const auto view = ctx.entities->const_view();
+                    for (const auto *e : view)
                     {
                         const std::string &holder = e->get_id();
                         if (holder == player)
                             continue;
                         if (!has_equip_slot(ctx, holder, card::EquipSlot::Weapon))
                             continue;
-                        for (const auto &b : *ctx.entities)
+                        for (const auto *b : view)
                         {
                             const std::string &victim = b->get_id();
                             if (victim != holder &&

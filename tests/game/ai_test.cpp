@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "game/ai/evaluator.hpp"
@@ -854,4 +855,42 @@ TEST_CASE("ai: human decider counter window declines on pass or eof")
         RequestDecisionSource src(dec);
         CHECK(src.play_counter(g.ctx, "a", "b", {"a"}).is_none());
     }
+}
+
+namespace
+{
+    /** @brief 可变实体上可扣血（红侧对照：证明该操作确实存在）。 */
+    template <typename T>
+    concept HasTakeDamage = requires(T *e) {
+        e->take_damage("x", 1, false);
+    };
+
+    /** @brief 可变牌容器上可移除手牌（红侧对照）。 */
+    template <typename T>
+    concept CanRemoveFromHand = requires(T *c, const std::string &id) {
+        c->remove_from_hand(id, id);
+    };
+}
+
+TEST_CASE("ai: decision context is read-only at compile time")
+{
+    using tkw::game::GameContext;
+    using tkw::game::ReadOnlyContext;
+    // 接缝只暴露 const 容器指针
+    static_assert(std::is_same_v<decltype(ReadOnlyContext{}.cards),
+                                 const tkw::card::CardManager *>);
+    static_assert(std::is_same_v<decltype(ReadOnlyContext{}.entities),
+                                 const tkw::EntityManager *>);
+    static_assert(std::is_same_v<decltype(ReadOnlyContext{}.catalog),
+                                 const tkw::card::CardDefCatalog *>);
+    static_assert(std::is_same_v<decltype(ReadOnlyContext{}.rules),
+                                 const tkw::game::RulesConfig *>);
+    // 同一改状态操作在可变容器成立、在接缝的 const 容器上不可达
+    static_assert(HasTakeDamage<tkw::entity::Entity>);
+    static_assert(!HasTakeDamage<const tkw::entity::Entity>);
+    static_assert(CanRemoveFromHand<tkw::card::CardManager>);
+    static_assert(!CanRemoveFromHand<const tkw::card::CardManager>);
+    // 接缝无法还原出可变上下文（一旦进入只读，改状态路径被类型切断）
+    static_assert(!std::is_convertible_v<ReadOnlyContext, GameContext>);
+    CHECK(true);
 }

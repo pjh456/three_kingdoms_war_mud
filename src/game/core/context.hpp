@@ -23,6 +23,19 @@ namespace tkw
 {
     namespace game
     {
+        /**
+         * @brief 决策接缝的只读上下文：聚合 const 容器指针。
+         * @note 不暴露事件总线与随机源：决策源不得发事件、不得推进随机；
+         *       传入本类型即从类型上排除改状态的可能（所有成员为 const 指针）。
+         */
+        struct ReadOnlyContext
+        {
+            const EntityManager *entities = nullptr;
+            const card::CardManager *cards = nullptr;
+            const card::CardDefCatalog *catalog = nullptr;
+            const RulesConfig *rules = nullptr;
+        };
+
         /** @brief 对局上下文（引用捆绑，不持有）。 */
         struct GameContext
         {
@@ -32,10 +45,16 @@ namespace tkw
             const card::CardDefCatalog *catalog = nullptr;
             Rng *rng = nullptr;                  /**< 判定/洗牌随机源（由对局持有） */
             const RulesConfig *rules = nullptr;  /**< 规则数值（由对局持有） */
+
+            /** @brief 隐式转出只读视图（值拷贝四个 const 指针），供决策接缝使用。 */
+            operator ReadOnlyContext() const
+            {
+                return ReadOnlyContext{entities, cards, catalog, rules};
+            }
         };
 
         /** @brief 取规则数值；ctx 未绑定规则时回落到默认值（测试便利）。 */
-        inline const RulesConfig &rules_of(const GameContext &ctx)
+        inline const RulesConfig &rules_of(const ReadOnlyContext &ctx)
         {
             static const RulesConfig fallback{};
             return ctx.rules ? *ctx.rules : fallback;

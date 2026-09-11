@@ -3,7 +3,7 @@
  * @brief 统一决策接缝：把 DecisionSource 的 8 个分散回调收敛成单个
  *        decide(DecisionRequest)，并附带只读观察与候选枚举。
  * @note 状态机只需实现 Decider::decide；RequestDecisionSource 负责从
- *       GameContext 抽取观察/候选并适配回引擎的 DecisionSource。请求只含
+ *       ReadOnlyContext 抽取观察/候选并适配回引擎的 DecisionSource。请求只含
  *       只读数据（观察 + 候选 + 卡牌目录），故决策是纯函数、可回放、可单测。
  */
 
@@ -114,7 +114,7 @@ namespace tkw
                 explicit RequestDecisionSource(Decider &decider) : decider_(&decider) {}
 
                 Option<PlayAction> play_response(
-                    const GameContext &ctx, const std::string &entity,
+                    const ReadOnlyContext &ctx, const std::string &entity,
                     card::ResponseKind kind) override
                 {
                     DecisionRequest req = base_request(ctx, entity);
@@ -136,7 +136,7 @@ namespace tkw
                 }
 
                 Option<std::string> play_peach(
-                    const GameContext &ctx, const std::string &saver,
+                    const ReadOnlyContext &ctx, const std::string &saver,
                     const std::string &dying) override
                 {
                     DecisionRequest req = base_request(ctx, saver);
@@ -149,7 +149,7 @@ namespace tkw
                 }
 
                 Option<std::string> play_counter(
-                    const GameContext &ctx, const std::string &player,
+                    const ReadOnlyContext &ctx, const std::string &player,
                     const std::string &trick_user,
                     const std::vector<std::string> &trick_targets) override
                 {
@@ -164,7 +164,7 @@ namespace tkw
                 }
 
                 bool trigger_effect(
-                    const GameContext &ctx, const std::string &player,
+                    const ReadOnlyContext &ctx, const std::string &player,
                     card::Ability ability) override
                 {
                     DecisionRequest req = base_request(ctx, player);
@@ -174,7 +174,7 @@ namespace tkw
                 }
 
                 Option<card::Card> pick_card_from_target(
-                    const GameContext &ctx, const std::string &source,
+                    const ReadOnlyContext &ctx, const std::string &source,
                     const std::string &target) override
                 {
                     DecisionRequest req = base_request(ctx, source);
@@ -193,7 +193,7 @@ namespace tkw
                 }
 
                 Option<card::Card> pick_from_revealed(
-                    const GameContext &ctx, const std::string &player,
+                    const ReadOnlyContext &ctx, const std::string &player,
                     const std::vector<card::Card> &options) override
                 {
                     DecisionRequest req = base_request(ctx, player);
@@ -203,7 +203,7 @@ namespace tkw
                 }
 
                 Option<PlayAction> choose_play(
-                    const GameContext &ctx, const TurnContext &turn) override
+                    const ReadOnlyContext &ctx, const TurnContext &turn) override
                 {
                     DecisionRequest req = base_request(ctx, turn.player);
                     req.kind = DecisionKind::Play;
@@ -218,7 +218,7 @@ namespace tkw
                 }
 
                 std::vector<std::string> choose_discards(
-                    const GameContext &ctx, const std::string &player, int count,
+                    const ReadOnlyContext &ctx, const std::string &player, int count,
                     DiscardReason reason) override
                 {
                     DecisionRequest req = base_request(ctx, player);
@@ -233,7 +233,7 @@ namespace tkw
                 Decider *decider_;
 
                 static DecisionRequest base_request(
-                    const GameContext &ctx, const std::string &actor)
+                    const ReadOnlyContext &ctx, const std::string &actor)
                 {
                     DecisionRequest req;
                     req.actor = actor;
@@ -243,21 +243,21 @@ namespace tkw
                 }
 
                 static bool is_response_card(
-                    const GameContext &ctx, const card::Card &c,
+                    const ReadOnlyContext &ctx, const card::Card &c,
                     card::ResponseKind kind)
                 {
                     const auto def = ctx.catalog->find(c.def_id);
                     return def.is_some() && is_response_def(*def.unwrap(), kind);
                 }
 
-                static bool is_rescue_card(const GameContext &ctx, const card::Card &c)
+                static bool is_rescue_card(const ReadOnlyContext &ctx, const card::Card &c)
                 {
                     const auto def = ctx.catalog->find(c.def_id);
                     return def.is_some() && is_rescue_def(*def.unwrap());
                 }
 
                 static bool is_counter_card(
-                    const GameContext &ctx, const card::Card &c)
+                    const ReadOnlyContext &ctx, const card::Card &c)
                 {
                     const auto def = ctx.catalog->find(c.def_id);
                     return def.is_some() && is_counter_def(*def.unwrap());

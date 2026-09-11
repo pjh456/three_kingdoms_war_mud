@@ -19,7 +19,7 @@ namespace tkw
     {
         /** @brief 该实体判定区是否已有同名延时锦囊（判定区不可叠加）。 */
         inline bool has_same_delayed(
-            const GameContext &ctx, const std::string &entity,
+            const ReadOnlyContext &ctx, const std::string &entity,
             const std::string &def_id)
         {
             for (const auto &c : ctx.cards->judge(entity))
@@ -35,7 +35,7 @@ namespace tkw
          * @note 判定区不可叠加同名延时锦囊；死亡者已从容器移除故天然跳过。
          */
         inline std::string next_delayed_target(
-            const GameContext &ctx, const std::string &player,
+            const ReadOnlyContext &ctx, const std::string &player,
             const std::string &def_id)
         {
             const auto order = ctx.entities->order_from(ctx.entities->next(player));
@@ -63,14 +63,14 @@ namespace tkw
          * @note 先取 scope 合法集，再剔除判定区已有同名延时锦囊的目标。
          */
         inline std::vector<std::string> delayed_legal_targets(
-            const GameContext &ctx, const std::string &player,
+            const ReadOnlyContext &ctx, const std::string &player,
             const card::CardDef &def)
         {
             std::vector<std::string> out;
             if (is_delayed_scope_target(player, def, player) &&
                 !has_same_delayed(ctx, player, def.id))
                 out.push_back(player);
-            for (const auto &e : *ctx.entities)
+            for (const auto *e : ctx.entities->const_view())
             {
                 const std::string &t = e->get_id();
                 if (t == player)

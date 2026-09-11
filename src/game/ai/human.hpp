@@ -657,48 +657,48 @@ namespace tkw
                 }
 
                 Option<PlayAction> play_response(
-                    const GameContext &ctx, const std::string &entity,
+                    const ReadOnlyContext &ctx, const std::string &entity,
                     card::ResponseKind kind) override
                 {
                     return route(entity).play_response(ctx, entity, kind);
                 }
 
                 Option<card::Card> pick_card_from_target(
-                    const GameContext &ctx, const std::string &source,
+                    const ReadOnlyContext &ctx, const std::string &source,
                     const std::string &target) override
                 {
                     return route(source).pick_card_from_target(ctx, source, target);
                 }
 
                 Option<PlayAction> choose_play(
-                    const GameContext &ctx, const TurnContext &turn) override
+                    const ReadOnlyContext &ctx, const TurnContext &turn) override
                 {
                     return route(turn.player).choose_play(ctx, turn);
                 }
 
                 std::vector<std::string> choose_discards(
-                    const GameContext &ctx, const std::string &player, int count,
+                    const ReadOnlyContext &ctx, const std::string &player, int count,
                     DiscardReason reason) override
                 {
                     return route(player).choose_discards(ctx, player, count, reason);
                 }
 
                 Option<card::Card> pick_from_revealed(
-                    const GameContext &ctx, const std::string &player,
+                    const ReadOnlyContext &ctx, const std::string &player,
                     const std::vector<card::Card> &options) override
                 {
                     return route(player).pick_from_revealed(ctx, player, options);
                 }
 
                 Option<std::string> play_peach(
-                    const GameContext &ctx, const std::string &saver,
+                    const ReadOnlyContext &ctx, const std::string &saver,
                     const std::string &dying) override
                 {
                     return route(saver).play_peach(ctx, saver, dying);
                 }
 
                 Option<std::string> play_counter(
-                    const GameContext &ctx, const std::string &player,
+                    const ReadOnlyContext &ctx, const std::string &player,
                     const std::string &trick_user,
                     const std::vector<std::string> &trick_targets) override
                 {
@@ -707,7 +707,7 @@ namespace tkw
                 }
 
                 bool trigger_effect(
-                    const GameContext &ctx, const std::string &player,
+                    const ReadOnlyContext &ctx, const std::string &player,
                     card::Ability ability) override
                 {
                     return route(player).trigger_effect(ctx, player, ability);

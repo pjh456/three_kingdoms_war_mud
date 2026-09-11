@@ -104,7 +104,7 @@ namespace tkw
             std::size_t play_cursor = 0;
 
             Option<PlayAction> play_response(
-                const GameContext &ctx, const std::string &entity,
+                const ReadOnlyContext &ctx, const std::string &entity,
                 ResponseKind kind) override
             {
                 if (!response_id.empty())
@@ -138,7 +138,7 @@ namespace tkw
             }
 
             Option<std::string> play_peach(
-                const GameContext &ctx, const std::string &saver,
+                const ReadOnlyContext &ctx, const std::string &saver,
                 const std::string &) override
             {
                 if (!save)
@@ -153,7 +153,7 @@ namespace tkw
             }
 
             Option<std::string> play_counter(
-                const GameContext &ctx, const std::string &player,
+                const ReadOnlyContext &ctx, const std::string &player,
                 const std::string &,
                 const std::vector<std::string> &trick_targets) override
             {
@@ -170,7 +170,7 @@ namespace tkw
             }
 
             bool trigger_effect(
-                const GameContext &, const std::string &, Ability ability) override
+                const ReadOnlyContext &, const std::string &, Ability ability) override
             {
                 trigger_calls.push_back(ability);
                 return std::find(triggers.begin(), triggers.end(), ability) !=
@@ -178,7 +178,7 @@ namespace tkw
             }
 
             Option<card::Card> pick_card_from_target(
-                const GameContext &ctx, const std::string &,
+                const ReadOnlyContext &ctx, const std::string &,
                 const std::string &target) override
             {
                 if (bogus_pick)
@@ -191,7 +191,7 @@ namespace tkw
             }
 
             Option<card::Card> pick_from_revealed(
-                const GameContext &, const std::string &,
+                const ReadOnlyContext &, const std::string &,
                 const std::vector<card::Card> &options) override
             {
                 if (options.empty())
@@ -200,7 +200,7 @@ namespace tkw
             }
 
             Option<PlayAction> choose_play(
-                const GameContext &, const TurnContext &) override
+                const ReadOnlyContext &, const TurnContext &) override
             {
                 if (play_cursor >= plays.size())
                     return Option<PlayAction>::None();
@@ -208,7 +208,7 @@ namespace tkw
             }
 
             std::vector<std::string> choose_discards(
-                const GameContext &ctx, const std::string &player, int count,
+                const ReadOnlyContext &ctx, const std::string &player, int count,
                 DiscardReason) override
             {
                 if (decline_discards)
