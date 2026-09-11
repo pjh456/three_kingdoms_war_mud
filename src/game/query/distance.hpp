@@ -2,7 +2,7 @@
  * @file distance.hpp
  * @brief 距离与攻击范围：座次环距离 + 装备（武器攻击范围 / 坐骑 ±1）修正。
  * @note 规则约定：
- *       - 座次距离 = min(|a-b|, n-|a-b|)（环）；
+ *       - 座次距离 = 存活者座位环上两下标的最短弧长（死亡者退出环，座位不回填）；
  *       - 攻击范围 = 武器 range，无武器为 1；
  *       - -1马（进攻马）：使用者计算到他人距离 -1；
  *       - +1马（防御马）：他人计算到自己的距离 +1；
@@ -33,16 +33,25 @@ namespace tkw
             bool defensive_horse = false; /**< +1马 */
         };
 
-        /** @brief 座次距离（环）：min(|a-b|, n-|a-b|)。 */
+        /**
+         * @brief 座次距离（存活者环）：min(|i-j|, n-|i-j|)，i/j 为
+         *        ordered_ids() 中按座位升序的下标。
+         * @return 两实体都在容器内时返回环上最短弧长；任一不存在时返回 0。
+         * @note 死亡者已从容器移除但座位号不回填，故不能拿「绝对座位差」与
+         *       「存活数」直接相减，须先取存活者座位环上的下标。
+         */
         inline int seat_distance(
             const GameContext &ctx, const std::string &a, const std::string &b)
         {
-            const auto ea = ctx.entities->find(a);
-            const auto eb = ctx.entities->find(b);
-            if (ea.is_none() || eb.is_none())
+            const auto ids = ctx.entities->ordered_ids();
+            const auto ia = std::find(ids.begin(), ids.end(), a);
+            const auto ib = std::find(ids.begin(), ids.end(), b);
+            if (ia == ids.end() || ib == ids.end())
                 return 0;
-            const int n = static_cast<int>(ctx.entities->size());
-            const int d = std::abs(ea.unwrap()->get_seat() - eb.unwrap()->get_seat());
+            const int n = static_cast<int>(ids.size());
+            const int i = static_cast<int>(ia - ids.begin());
+            const int j = static_cast<int>(ib - ids.begin());
+            const int d = std::abs(i - j);
             return std::min(d, n - d);
         }
 

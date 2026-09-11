@@ -64,6 +64,27 @@ TEST_CASE("game: seat distance on a circle")
     CHECK(seat_distance(g.ctx, "b", "d") == 2);
 }
 
+TEST_CASE("game: seat distance follows the living ring after a death")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.add_player("d", 3, 4);
+    g.add_player("e", 4, 4);
+
+    // 死亡者退出座次环、座位号不回填；直接移除实体等价于结算后移除。
+    // 存活环序 [a, b, d, e]，环上下标 [0, 1, 2, 3]。
+    g.ctx.entities->remove("c");
+
+    CHECK(seat_distance(g.ctx, "b", "d") == 1);
+    CHECK(seat_distance(g.ctx, "b", "e") == 2);
+    CHECK(seat_distance(g.ctx, "a", "d") == 2);
+    CHECK(seat_distance(g.ctx, "a", "e") == 1);
+    CHECK(seat_distance(g.ctx, "a", "b") == 1);
+    CHECK(seat_distance(g.ctx, "d", "e") == 1);
+}
+
 TEST_CASE("game: attack range base and weapon")
 {
     TestGame g("deck");
@@ -99,6 +120,24 @@ TEST_CASE("game: horses adjust attack distance")
     CHECK(!in_attack_range(g.ctx, "c", "b"));
     // a→b 仍为 1（-1 与 +1 相抵）
     CHECK(in_attack_range(g.ctx, "a", "b"));
+}
+
+TEST_CASE("game: distance_le uses the living ring when seats are not adjacent")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.add_player("d", 3, 4);
+
+    // 移除 b：存活环序 [a, c, d]，座位 3 的 d 紧邻座位 0 的 a（座位不回填）。
+    g.ctx.entities->remove("b");
+    g.equip("d", "jueying", "h#1");  // d 的 +1马
+
+    CHECK(seat_distance(g.ctx, "a", "d") == 1);
+    CHECK(distance_between(g.ctx, "a", "d") == 2);
+    CHECK_FALSE(distance_le(g.ctx, "a", "d", 1));
+    CHECK_FALSE(in_attack_range(g.ctx, "a", "d"));
 }
 
 TEST_CASE("game: offensive and defensive horses coexist")
