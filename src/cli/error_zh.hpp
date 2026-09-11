@@ -1,10 +1,10 @@
 /**
  * @file error_zh.hpp
- * @brief CLI 错误中文渲染：框架 CliError 与存档读写失败均渲染为面向用户的中文文本。
+ * @brief CLI 错误中文渲染：框架 CliError 与资源/存档/对局失败均渲染为面向用户的中文文本。
  * @note 只渲染不改退出码：解析错误（Parse）加中文前缀 + 中文正文，运行时错误
  *       （Runtime）原样返回 what()（项目自身消息本已中文、无前缀）。批量入口与
- *       REPL 共用同一渲染，保证两条路径文案一致。存档读写的根因标签与路径
- *       在此统一拼装，CLI 命令体只负责取 Result 错误值。
+ *       REPL 共用同一渲染，保证两条路径文案一致。资源加载、存档读写与对局失败的
+ *       根因标签在此统一拼装，CLI 命令体只负责取 Result 错误值。
  */
 #ifndef INCLUDE_TKW_CLI_ERROR_ZH_HPP
 #define INCLUDE_TKW_CLI_ERROR_ZH_HPP
@@ -20,6 +20,8 @@
 
 #include <pjh_cli.hpp>
 
+#include "config/error.hpp"
+#include "game/flow/loop.hpp"
 #include "io/error.hpp"
 #include "save/error.hpp"
 
@@ -240,6 +242,65 @@ namespace tkw
         {
             return "写入存档失败（" + std::string(io_error_zh(e, true)) +
                    "）: " + file.string();
+        }
+
+        /**
+         * @brief 资源加载失败类别 → 中文根因标签。
+         * @param kind 配置层返回的失败类别。
+         * @return 六个枚举值各自的中文标签；未命中回落「未知错误」。
+         * @note 穷举 `ConfigErrorKind`，新增枚举值时编译器以 `-Wswitch` 提示补充。
+         *       `detail` 为文件路径或字段路径，由调用方保留在标签之后。
+         */
+        inline std::string_view config_error_kind_zh(config::ConfigErrorKind kind)
+        {
+            switch (kind)
+            {
+            case config::ConfigErrorKind::FileNotFound:
+                return "文件不存在";
+            case config::ConfigErrorKind::IoFailed:
+                return "文件读写失败";
+            case config::ConfigErrorKind::ParseError:
+                return "JSON 非法";
+            case config::ConfigErrorKind::MissingField:
+                return "缺少字段";
+            case config::ConfigErrorKind::TypeMismatch:
+                return "字段类型不符";
+            case config::ConfigErrorKind::InvalidValue:
+                return "字段值非法";
+            }
+            return "未知错误";
+        }
+
+        /**
+         * @brief 对局流程错误 → 中文根因标签。
+         * @param code 非平局的流程错误。
+         * @return 三个枚举值各自的中文标签；未命中回落「未知错误」。
+         * @note 穷举 `LoopError`，新增枚举值时编译器以 `-Wswitch` 提示补充。
+         *       `MaxRounds` 由调用方映射为平局，标签仅供异常直落路径使用。
+         */
+        inline std::string_view loop_error_label_zh(game::LoopError code)
+        {
+            switch (code)
+            {
+            case game::LoopError::NoPlayers:
+                return "无可用玩家";
+            case game::LoopError::TurnFailed:
+                return "回合流程失败";
+            case game::LoopError::MaxRounds:
+                return "达到最大回合数";
+            }
+            return "未知错误";
+        }
+
+        /**
+         * @brief 对局失败文案：`对局失败（<标签>）`。
+         * @param code 非 MaxRounds 的流程错误；达回合上限由调用方映射为平局。
+         * @return 固定前缀 + 中文根因标签；对局错误无 detail 字段。
+         * @note 仅一次性跑局与批量模拟使用；step/run 的运行期错误不带 code。
+         */
+        inline std::string loop_error_zh(game::LoopError code)
+        {
+            return "对局失败（" + std::string(loop_error_label_zh(code)) + "）";
         }
     }  // namespace cli
 }  // namespace tkw

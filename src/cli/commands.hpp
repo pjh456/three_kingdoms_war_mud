@@ -189,26 +189,26 @@ namespace tkw
             }
 
             /**
-             * @brief 牌堆加载失败 → 用户可见文案（kind + detail）。
+             * @brief 牌堆加载失败 → 用户可见文案（中文根因标签 + detail）。
              * @param e 目录加载错误；detail 为文件路径或字段路径。
-             * @return 固定前缀「加载牌堆失败」+ kind 数值 + detail 的文案。
+             * @return 固定前缀「加载牌堆失败」+ 类别中文标签 + detail 的文案。
              */
             inline std::string format_load_error(const tkw::config::ConfigError &e)
             {
-                return "加载牌堆失败 (kind=" +
-                       std::to_string(static_cast<int>(e.kind)) + "): " + e.detail;
+                return "加载牌堆失败（" +
+                       std::string(config_error_kind_zh(e.kind)) + "）: " +
+                       e.detail;
             }
 
             /**
-             * @brief 对局失败 → 带 LoopError code 的用户可见文案。
+             * @brief 对局失败 → 带中文根因标签的用户可见文案。
              * @param code 非 MaxRounds 的流程错误；达回合上限由调用方映射为平局。
-             * @return 固定前缀「对局失败」+ LoopError 数值的文案。
+             * @return 「对局失败（<标签>）」文案。
              * @note 仅一次性跑局与批量模拟使用；step/run 的运行期错误不带 code。
              */
             inline std::string format_loop_error(tkw::game::LoopError code)
             {
-                return "对局失败 (LoopError=" +
-                       std::to_string(static_cast<int>(code)) + ")";
+                return loop_error_zh(code);
             }
 
             /** 建局错误 → 用户可见文案（目录加载与玩家创建两类错误面）。 */

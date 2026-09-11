@@ -14,6 +14,8 @@
 #include "cli/error_zh.hpp"
 #include "cli/help_zh.hpp"
 #include "cli/render.hpp"
+#include "config/error.hpp"
+#include "game/flow/loop.hpp"
 #include "io/file.hpp"
 
 namespace
@@ -741,4 +743,31 @@ TEST_CASE("cli: load rejects a directory with a non-file reason")
     CHECK(repl.session.state.current == current);
 
     std::filesystem::remove_all(dir, ec);
+}
+
+TEST_CASE("cli: resource and loop failures render Chinese reason labels")
+{
+    using tkw::config::ConfigErrorKind;
+    using tkw::game::LoopError;
+
+    // 配置加载失败：六类根因各自的中文标签（穷举，防数值 kind 回归）。
+    CHECK(tkw::cli::config_error_kind_zh(ConfigErrorKind::FileNotFound) ==
+          "文件不存在");
+    CHECK(tkw::cli::config_error_kind_zh(ConfigErrorKind::IoFailed) ==
+          "文件读写失败");
+    CHECK(tkw::cli::config_error_kind_zh(ConfigErrorKind::ParseError) ==
+          "JSON 非法");
+    CHECK(tkw::cli::config_error_kind_zh(ConfigErrorKind::MissingField) ==
+          "缺少字段");
+    CHECK(tkw::cli::config_error_kind_zh(ConfigErrorKind::TypeMismatch) ==
+          "字段类型不符");
+    CHECK(tkw::cli::config_error_kind_zh(ConfigErrorKind::InvalidValue) ==
+          "字段值非法");
+
+    // 对局流程失败：标签 + 合成文案前缀固定。
+    CHECK(tkw::cli::loop_error_label_zh(LoopError::NoPlayers) == "无可用玩家");
+    CHECK(tkw::cli::loop_error_label_zh(LoopError::TurnFailed) == "回合流程失败");
+    CHECK(tkw::cli::loop_error_label_zh(LoopError::MaxRounds) == "达到最大回合数");
+    CHECK(tkw::cli::loop_error_zh(LoopError::NoPlayers) ==
+          "对局失败（无可用玩家）");
 }

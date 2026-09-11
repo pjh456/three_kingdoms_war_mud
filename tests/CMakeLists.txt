@@ -144,7 +144,7 @@ set_tests_properties(cli_audit_ok PROPERTIES
 
 add_test(NAME cli_audit_bad_deck
          COMMAND sh -c
-                 "out=$($<TARGET_FILE:tkw> audit --deck /nonexistent-deck-dir 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '加载牌堆失败' && [ $rc -eq 1 ]")
+                 "out=$($<TARGET_FILE:tkw> audit --deck /nonexistent-deck-dir 2>&1); rc=$?; printf '%s' \"$out\" | grep -Fq '加载牌堆失败（文件不存在）' && printf '%s' \"$out\" | grep -q '/nonexistent-deck-dir/deck.json' && [ $rc -eq 1 ]")
 set_tests_properties(cli_audit_bad_deck PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
@@ -170,8 +170,17 @@ set_tests_properties(cli_cards_list PROPERTIES
 
 add_test(NAME cli_cards_bad_deck
          COMMAND sh -c
-                 "out=$($<TARGET_FILE:tkw> cards --deck /nonexistent-deck-dir 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '加载牌堆失败' && [ $rc -eq 1 ]")
+                 "out=$($<TARGET_FILE:tkw> cards --deck /nonexistent-deck-dir 2>&1); rc=$?; printf '%s' \"$out\" | grep -Fq '加载牌堆失败（文件不存在）' && printf '%s' \"$out\" | grep -q '/nonexistent-deck-dir/deck.json' && [ $rc -eq 1 ]")
 set_tests_properties(cli_cards_bad_deck PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 坏牌堆 JSON：配置层 ParseError 中文标签，保留文件路径，rc 仍 1。
+add_test(NAME cli_cards_bad_deck_json
+         COMMAND sh -c
+                 "d=$(mktemp -d); printf '%s' '{not json' > $d/deck.json; \
+                  out=$($<TARGET_FILE:tkw> cards --deck $d 2>&1); rc=$?; rm -rf $d; \
+                  printf '%s' \"$out\" | grep -Fq '加载牌堆失败（JSON 非法）' && [ $rc -eq 1 ]")
+set_tests_properties(cli_cards_bad_deck_json PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # 批量入口模糊匹配：唯一近距手误自动纠错到 audit；钉纠错后真跑到 audit。
@@ -390,10 +399,10 @@ add_test(NAME cli_simulate_deterministic
 set_tests_properties(cli_simulate_deterministic PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-# 坏牌堆目录：错误面与 audit/cards 同款（加载牌堆失败，rc=1）。
+# 坏牌堆目录：错误面与 audit/cards 同款（加载牌堆失败中文标签，rc=1）。
 add_test(NAME cli_simulate_bad_deck
          COMMAND sh -c
-                 "out=$($<TARGET_FILE:tkw> simulate 1 2 --deck /nonexistent-deck-dir 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '加载牌堆失败' && [ $rc -eq 1 ]")
+                 "out=$($<TARGET_FILE:tkw> simulate 1 2 --deck /nonexistent-deck-dir 2>&1); rc=$?; printf '%s' \"$out\" | grep -Fq '加载牌堆失败（文件不存在）' && printf '%s' \"$out\" | grep -q '/nonexistent-deck-dir/deck.json' && [ $rc -eq 1 ]")
 set_tests_properties(cli_simulate_bad_deck PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
