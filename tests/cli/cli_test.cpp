@@ -985,3 +985,28 @@ TEST_CASE("cli: status shows the session deck source")
     std::filesystem::remove(save, ec);
     std::filesystem::remove_all(dir, ec);
 }
+
+TEST_CASE("cli: status flags a session at the round cap")
+{
+    Repl repl;
+
+    // 普通进行中不出现上限提示。
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+    auto normal = repl.run("status");
+    CHECK(normal.ok);
+    CHECK(normal.out.find("会话: 进行中") != std::string::npos);
+    CHECK(normal.out.find("已达回合上限") == std::string::npos);
+
+    // 上限压到 0：2p seed1 首回合无人阵亡，run 必走 MaxRounds 且会话未终结。
+    repl.session.game->rules.max_turns = 0;
+    auto ran = repl.run("run");
+    CHECK(ran.ok);
+    CHECK(ran.out.find("平局（达到最大回合数）") != std::string::npos);
+
+    auto capped = repl.run("status");
+    CHECK(capped.ok);
+    CHECK(capped.out.find("会话: 进行中") != std::string::npos);
+    CHECK(capped.out.find("已达回合上限") != std::string::npos);
+    CHECK(capped.out.find("下一回合") != std::string::npos);
+    CHECK(capped.out.find("会话: 已结束") == std::string::npos);
+}

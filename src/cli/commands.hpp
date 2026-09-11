@@ -414,8 +414,8 @@ namespace tkw
              * @brief 打印会话状态：无会话 / 进行中 / 已结束三态。
              * @param s 当前会话；active 为假或 game 为空时只打印「会话: 无」。
              * @note 结束态以引擎 session_over（存活 ≤ 1）判定，胜者经 winner_label
-             *       回落，0 存活显示「平局（同归于尽）」；仅进行中打印「下一回合」，
-             *       并展示本会话牌表来源。
+             *       回落，0 存活显示「平局（同归于尽）」；仅进行中打印「下一回合」
+             *       与牌表来源，已达回合上限但未终结时追加一行提示。
              */
             inline void print_status(const Session &s)
             {
@@ -427,6 +427,10 @@ namespace tkw
 
                 auto ctx = s.game->context();
                 const bool over = tkw::game::session_over(ctx);
+                // 达上限仅供展示提示：session_over 仍是唯一结束口径，会话未终结、
+                // step 的致死击落仍可能产出唯一胜者，不能据此标为已结束。
+                const bool at_cap =
+                    !over && s.state.turns > tkw::game::rules_of(ctx).max_turns;
                 std::cout << "会话: " << (over ? "已结束" : "进行中") << "\n";
 
                 // 已结束不再提示下一回合，与 run/deal 共用 winner_label 回落。
@@ -435,9 +439,14 @@ namespace tkw
                               << "，已执行回合: " << s.state.turns
                               << "，存活: " << ctx.entities->size() << "\n";
                 else
+                {
                     std::cout << "  下一回合: " << s.state.current
                               << "，已执行回合: " << s.state.turns
                               << "，存活: " << ctx.entities->size() << "\n";
+                    if (at_cap)
+                        std::cout << "  提示: 已达回合上限；继续 step 仍有机会分出"
+                                     "胜负，否则为平局\n";
+                }
 
                 std::cout << "  AI 难度: " << ai_level_name(s.ai) << "\n";
                 std::cout << "  牌表: " << s.deck.string() << "\n";
