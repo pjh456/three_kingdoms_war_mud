@@ -98,6 +98,7 @@ namespace tkw
             std::string response_id;  /**< 非空时响应窗口固定打出该牌 */
             std::string response_second_id; /**< 非空时与 response_id 成对（两张当杀） */
             std::vector<Ability> triggers;
+            std::vector<Ability> trigger_calls; /**< 实际被询问的发动能力（按顺序） */
             std::vector<PlayAction> plays;
             std::size_t play_cursor = 0;
 
@@ -170,6 +171,7 @@ namespace tkw
             bool trigger_effect(
                 const GameContext &, const std::string &, Ability ability) override
             {
+                trigger_calls.push_back(ability);
                 return std::find(triggers.begin(), triggers.end(), ability) !=
                        triggers.end();
             }

@@ -2032,10 +2032,29 @@ TEST_CASE("game: bagua red judge counts as jink")
     g.cards.add_to_draw(Card{"j#0", "sha", Suit::Heart, 3});  // 判定：红桃
 
     TestDecider decider;
+    decider.triggers = {Ability::JudgementJink};
     const auto played = g.cards.hand("a")[0];
     auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 4);  // 红判定视为闪，未受伤
+}
+
+TEST_CASE("game: bagua can be declined")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("b", "bagua", "e#0");
+    g.give("a", "sha", "s#1");
+    g.cards.add_to_draw(Card{"j#0", "sha", Suit::Heart, 3});  // 判定：红桃
+
+    TestDecider decider;  // 未登记 JudgementJink → 拒绝发动
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);              // 未判定，又无闪 → 受伤
+    CHECK(g.cards.draw_size() == 1);      // 判定牌未被消费
+    CHECK(g.cards.discard_size() == 1);   // 仅打出的杀入弃牌堆
 }
 
 TEST_CASE("game: bagua black judge does not dodge")
@@ -2048,6 +2067,7 @@ TEST_CASE("game: bagua black judge does not dodge")
     g.cards.add_to_draw(Card{"j#0", "sha", Suit::Spade, 6});  // 判定：黑桃
 
     TestDecider decider;  // 不打闪
+    decider.triggers = {Ability::JudgementJink};
     const auto played = g.cards.hand("a")[0];
     auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
     REQUIRE(r.is_ok());
@@ -2110,6 +2130,23 @@ TEST_CASE("game: qilin discards target horse after damage")
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 3);              // 命中
     CHECK(g.cards.equip_size("b") == 0);  // 坐骑被弃
+}
+
+TEST_CASE("game: qilin does not ask when the target has no horse")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "qilin", "e#0");
+    g.give("a", "sha", "s#1");
+
+    TestDecider decider;
+    decider.triggers = {Ability::DiscardHorseOnDamage};
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);  // 命中
+    CHECK(decider.trigger_calls.empty());  // 无马不询问
 }
 
 TEST_CASE("game: hanbing converts damage into discarding two cards")

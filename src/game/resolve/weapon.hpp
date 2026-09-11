@@ -104,17 +104,35 @@ namespace tkw
             return discarded;
         }
 
+        /** @brief 卡牌定义是否为坐骑（麒麟弓预检与弃置共用）。 */
+        inline bool is_horse_def(const card::CardDef &def)
+        {
+            if (def.equip.is_none())
+                return false;
+            const auto slot = def.equip.unwrap().slot;
+            return slot == card::EquipSlot::OffensiveHorse ||
+                   slot == card::EquipSlot::DefensiveHorse;
+        }
+
+        /** @brief 目标装备区是否有坐骑（麒麟弓无马时不询问发动）。 */
+        inline bool target_has_horse(const GameContext &ctx, const std::string &target)
+        {
+            for (const auto &c : ctx.cards->equip(target))
+            {
+                const auto def = ctx.catalog->find(c.def_id);
+                if (def.is_some() && is_horse_def(*def.unwrap()))
+                    return true;
+            }
+            return false;
+        }
+
         /** @brief 弃置目标装备区的一匹坐骑（麒麟弓）。 */
         inline bool discard_first_horse(GameContext &ctx, const std::string &target)
         {
             for (const auto &c : ctx.cards->equip(target))
             {
                 const auto def = ctx.catalog->find(c.def_id);
-                if (def.is_some() && def.unwrap()->equip.is_some() &&
-                    (def.unwrap()->equip.unwrap().slot ==
-                         card::EquipSlot::OffensiveHorse ||
-                     def.unwrap()->equip.unwrap().slot ==
-                         card::EquipSlot::DefensiveHorse))
+                if (def.is_some() && is_horse_def(*def.unwrap()))
                 {
                     auto removed = ctx.cards->remove_from_equip(target, c.instance_id);
                     if (removed.is_some())
@@ -179,10 +197,17 @@ namespace tkw
                 sc.blocked = true;
         }
 
-        /** @brief 八卦阵：需出闪时判定，判定描述来自装备数据。 */
+        /**
+         * @brief 八卦阵：需出闪时可判定，判定描述来自装备数据。
+         * @note 目标可选择发动（卡面「可进行判定」）：拒绝则跳过判定，
+         *       由后续响应窗口决定是否出闪。
+         */
         inline void hook_bagua(ShaContext &sc)
         {
             if (sc.ignore_armor || sc.responded)
+                return;
+            if (!sc.ai.trigger_effect(
+                    sc.ctx, sc.target, card::Ability::JudgementJink))
                 return;
             const card::CardDef *armor = find_equipment(
                 sc.ctx, sc.target, card::Ability::JudgementJink);
@@ -286,9 +311,15 @@ namespace tkw
                 sc.prevented = true;
         }
 
-        /** @brief 麒麟弓：造成伤害后可弃置目标一匹坐骑。 */
+        /**
+         * @brief 麒麟弓：造成伤害后，目标装备区有坐骑时询问攻击方是否弃置其一。
+         * @note 无坐骑不询问（避免空操作）；弃哪一匹当前取装备区首个。
+         */
         inline void hook_qilin(ShaContext &sc)
         {
+            if (!target_has_horse(sc.ctx, sc.target))
+                return;
+
             if (sc.ai.trigger_effect(
                     sc.ctx, sc.attacker, card::Ability::DiscardHorseOnDamage))
                 discard_first_horse(sc.ctx, sc.target);
