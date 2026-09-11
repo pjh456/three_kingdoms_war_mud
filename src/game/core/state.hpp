@@ -115,6 +115,43 @@ namespace tkw
             return true;
         }
 
+        /** @brief 弃置一张牌并发布弃置事件。按值拷贝入弃牌堆，事件读原牌。 */
+        inline void discard_and_emit(
+            GameContext &ctx, const std::string &owner, const card::Card &c)
+        {
+            ctx.cards->discard(c);
+            emit_card_discarded(ctx, owner, c);
+        }
+
+        /**
+         * @brief 从手牌移除指定牌并按谓词校验；合法则弃置并发布弃置事件。
+         * @tparam Accept 谓词类型：接受 `const card::CardDef &`、返回 bool。
+         * @param instance_id 待消费的手牌实例；不在手牌时直接失败。
+         * @return Some(消费的牌) 成功；None = 牌不在手牌，或目录缺失/谓词不匹配
+         *         （非法选择已退回手牌）。
+         * @note 弃置按值拷贝、事件读原牌后再整体移动返回，返回值保持完整。
+         */
+        template <class Accept>
+        inline Option<card::Card> consume_hand_card_matching(
+            GameContext &ctx, const std::string &owner, const std::string &instance_id,
+            Accept accept)
+        {
+            auto removed = ctx.cards->remove_from_hand(owner, instance_id);
+            if (removed.is_none())
+                return Option<card::Card>::None();
+            card::Card card = std::move(removed).unwrap();
+
+            const auto def = ctx.catalog->find(card.def_id);
+            if (def.is_none() || !accept(*def.unwrap()))
+            {
+                ctx.cards->add_to_hand(owner, std::move(card));  // 非法选择退回
+                return Option<card::Card>::None();
+            }
+
+            discard_and_emit(ctx, owner, card);
+            return Option<card::Card>::Some(std::move(card));
+        }
+
         /**
          * @brief 判定：从摸牌堆顶揭示一张（牌堆空则弃牌堆洗回）。
          * @return None 表示摸牌堆与弃牌堆皆空（无法判定）。

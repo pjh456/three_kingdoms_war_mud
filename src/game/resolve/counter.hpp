@@ -20,10 +20,10 @@
 #include "card/catalog.hpp"
 #include "card/def.hpp"
 #include "card/manager.hpp"
-#include "game/core/card_event.hpp"
 #include "game/core/context.hpp"
 #include "game/core/decision.hpp"
 #include "game/core/effect.hpp"
+#include "game/core/state.hpp"
 #include "util/types.hpp"
 
 namespace tkw
@@ -45,19 +45,10 @@ namespace tkw
             GameContext &ctx, const std::string &player,
             const std::string &instance_id)
         {
-            auto removed = ctx.cards->remove_from_hand(player, instance_id);
-            if (removed.is_none())
-                return false;
-            card::Card card = std::move(removed).unwrap();
-            const auto def = ctx.catalog->find(card.def_id);
-            if (def.is_none() || !is_counter_def(*def.unwrap()))
-            {
-                ctx.cards->add_to_hand(player, std::move(card));  // 非法选择退回
-                return false;
-            }
-            ctx.cards->discard(card);
-            emit_card_discarded(ctx, player, card);
-            return true;
+            return consume_hand_card_matching(
+                       ctx, player, instance_id,
+                       [](const card::CardDef &def) { return is_counter_def(def); })
+                .is_some();
         }
 
         /** @brief 座位序（从 start 开始环绕）。 */

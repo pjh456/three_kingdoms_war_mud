@@ -49,19 +49,10 @@ namespace tkw
             GameContext &ctx, const std::string &player,
             const std::string &instance_id)
         {
-            auto removed = ctx.cards->remove_from_hand(player, instance_id);
-            if (removed.is_none())
-                return false;
-            card::Card card = std::move(removed).unwrap();
-            const auto def = ctx.catalog->find(card.def_id);
-            if (def.is_none() || !is_rescue_def(*def.unwrap()))
-            {
-                ctx.cards->add_to_hand(player, std::move(card));  // 非法选择退回
-                return false;
-            }
-            ctx.cards->discard(card);
-            emit_card_discarded(ctx, player, card);
-            return true;
+            return consume_hand_card_matching(
+                       ctx, player, instance_id,
+                       [](const card::CardDef &def) { return is_rescue_def(def); })
+                .is_some();
         }
 
         /** @brief 死亡清场：手牌/装备/判定区全部置入弃牌堆，移除实体并发布死亡事件。 */

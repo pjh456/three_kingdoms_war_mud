@@ -15,10 +15,10 @@
 #include "card/catalog.hpp"
 #include "card/def.hpp"
 #include "card/manager.hpp"
-#include "game/core/card_event.hpp"
 #include "game/core/context.hpp"
 #include "game/core/decision.hpp"
 #include "game/core/effect.hpp"
+#include "game/core/state.hpp"
 #include "game/query/equip.hpp"
 #include "util/types.hpp"
 
@@ -60,21 +60,9 @@ namespace tkw
             if (chosen.is_none())
                 return Option<card::Card>::None();
 
-            auto removed =
-                ctx.cards->remove_from_hand(entity_id, chosen.unwrap().instance_id);
-            if (removed.is_none())
-                return Option<card::Card>::None();
-            card::Card card = std::move(removed).unwrap();
-
-            const auto def = ctx.catalog->find(card.def_id);
-            if (def.is_none() || !is_response_def(*def.unwrap(), kind))
-            {
-                ctx.cards->add_to_hand(entity_id, std::move(card));  // 非法选择退回
-                return Option<card::Card>::None();
-            }
-            ctx.cards->discard(card);
-            emit_card_discarded(ctx, entity_id, card);
-            return Option<card::Card>::Some(std::move(card));
+            return consume_hand_card_matching(
+                ctx, entity_id, chosen.unwrap().instance_id,
+                [kind](const card::CardDef &def) { return is_response_def(def, kind); });
         }
 
         /**
