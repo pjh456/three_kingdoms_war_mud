@@ -3,11 +3,10 @@
  * @brief 攻击优先策略：伤害/多目标先行的决策档，供 CLI `--ai aggressive` 使用。
  * @note 逻辑集中在 AggressiveDecider::decide（只读 DecisionRequest）；AggressiveAI
  *       把它经 RequestDecisionSource 适配成引擎可用的 DecisionSource。相对贪心档
- *       的难度定位：出牌阶段按「卡类优先级」选组打出（伤害 1 > AOE 2 > 延时 3 >
- *       决斗 4 > 拆 5 > 顺 6 > 摸 7 > 借刀 8 > 自疗 9 > 装备 10），同分取 legal
- *       序靠前者；选牌分支（PickCard/PickRevealed）取最高牌价值而非首张。其余
- *       六个分支（响应/救桃/无懈/触发/弃牌/丈八组目标）与贪心档同逻辑。无随机、
- *       无隐藏状态，确定性可回放。
+ *       的难度定位：出牌阶段按「卡类优先级」选组打出（小者先打，顺序见
+ *       kPlayPriority* 常量，同分取 legal 序靠前者）；选牌分支
+ *       （PickCard/PickRevealed）取最高牌价值而非首张。其余六个分支（响应/救桃/
+ *       无懈/触发/弃牌/丈八组目标）与贪心档同逻辑。无随机、无隐藏状态，确定性可回放。
  */
 
 #ifndef INCLUDE_TKW_GAME_AI_AGGRESSIVE_HPP
@@ -41,6 +40,19 @@ namespace tkw
                 }
 
             private:
+                // 卡类出牌优先级（小者先打；同分取 legal 序靠前者）；-1 = 跳过该组。
+                static constexpr int kPlayPriorityDamage = 1;        /**< 伤害/丈八两张当杀 */
+                static constexpr int kPlayPriorityAoe = 2;           /**< 群体伤害 */
+                static constexpr int kPlayPriorityDelayed = 3;       /**< 延时锦囊 */
+                static constexpr int kPlayPriorityDuel = 4;          /**< 决斗 */
+                static constexpr int kPlayPriorityDiscard = 5;       /**< 过河拆桥 */
+                static constexpr int kPlayPrioritySteal = 6;         /**< 顺手牵羊 */
+                static constexpr int kPlayPriorityDraw = 7;          /**< 无中生有 */
+                static constexpr int kPlayPriorityBorrowedSword = 8; /**< 借刀杀人 */
+                static constexpr int kPlayPriorityHeal = 9;          /**< 桃（满血跳过） */
+                static constexpr int kPlayPriorityOther = 10;        /**< 装备/无效果/亮牌/未知兜底 */
+                static constexpr int kPlayPrioritySkip = -1;         /**< 跳过（缺 def / 满血自疗） */
+
                 /**
                  * @brief 选牌（PickCard/PickRevealed）：取牌价值最高者；同值保持
                  *        候选序靠前者；空候选返回 None（PickRevealed 由引擎回落
@@ -139,9 +151,9 @@ namespace tkw
                 }
 
                 /**
-                 * @brief 卡组优先级：含两张当杀动作的组按伤害（1）；否则按组
+                 * @brief 卡组优先级：含两张当杀动作的组按伤害档；否则按组
                  *        首张卡的定义分派。
-                 * @return -1 = 该组跳过（目录缺失；满血自疗）。
+                 * @return kPlayPrioritySkip = 该组跳过（目录缺失；满血自疗）。
                  * @note 丈八 pair 仅在无真杀时产出，与真杀同优先级无冲突。
                  */
                 static int group_priority(
@@ -150,18 +162,17 @@ namespace tkw
                 {
                     for (const auto &a : opts)
                         if (!a.second_instance_id.empty())
-                            return 1;
+                            return kPlayPriorityDamage;
                     const card::CardDef *def =
                         find_def(req, opts.front().card.def_id);
                     if (!def)
-                        return -1;
+                        return kPlayPrioritySkip;
                     return play_priority(req, *def);
                 }
 
                 /**
-                 * @brief 卡类优先级（小者先打）：伤害 1 / AOE 2 / 延时锦囊 3 /
-                 *        决斗 4 / 拆 5 / 顺 6 / 摸 7 / 借刀 8 / 自疗 9 / 装备等 10。
-                 * @return -1 = 跳过（满血自疗，同贪心档「满血不打桃」）。
+                 * @brief 卡类优先级（小者先打）：顺序见 kPlayPriority* 常量。
+                 * @return kPlayPrioritySkip = 跳过（满血自疗，同贪心档「满血不打桃」）。
                  * @note 无主动效果的锦囊（延时判定牌）排装备之前；响应牌不会
                  *       进入 legal，归入兜底档。
                  */
@@ -171,36 +182,36 @@ namespace tkw
                     if (def.effect.is_none())
                         return (def.type == card::CardType::Trick &&
                                 def.judge.is_some())
-                            ? 3
-                            : 10;
+                            ? kPlayPriorityDelayed
+                            : kPlayPriorityOther;
                     const card::CardEffect &eff = def.effect.unwrap();
                     switch (eff.kind)
                     {
                     case card::CardEffectKind::Damage:
-                        return 1;
+                        return kPlayPriorityDamage;
                     case card::CardEffectKind::AoeDamage:
-                        return 2;
+                        return kPlayPriorityAoe;
                     case card::CardEffectKind::Duel:
-                        return 4;
+                        return kPlayPriorityDuel;
                     case card::CardEffectKind::DiscardTarget:
-                        return 5;
+                        return kPlayPriorityDiscard;
                     case card::CardEffectKind::Steal:
-                        return 6;
+                        return kPlayPrioritySteal;
                     case card::CardEffectKind::Draw:
-                        return 7;
+                        return kPlayPriorityDraw;
                     case card::CardEffectKind::BorrowedSword:
-                        return 8;
+                        return kPlayPriorityBorrowedSword;
                     case card::CardEffectKind::Heal:
                         if (eff.scope.unwrap_or(card::Scope::Self) ==
                                 card::Scope::Self &&
                             req.view.self_hp >= req.view.self_max_hp)
-                            return -1;  // 满血不打桃
-                        return 9;
+                            return kPlayPrioritySkip;  // 满血不打桃
+                        return kPlayPriorityHeal;
                     case card::CardEffectKind::Jink:
                     case card::CardEffectKind::RevealPick:
                         break;
                     }
-                    return 10;
+                    return kPlayPriorityOther;
                 }
             };
 
