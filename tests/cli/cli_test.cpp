@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <system_error>
@@ -137,6 +138,44 @@ TEST_CASE("cli: inline --verbose enables event log for that command")
     auto ran = repl.run("run --verbose");
     CHECK(ran.ok);
     CHECK(ran.out.find("[摸牌]") != std::string::npos);
+}
+
+TEST_CASE("cli: verbose log renders card moved events")
+{
+    Repl repl;
+
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+
+    auto handles = tkw::cli::detail::subscribe_event_log(*repl.session.game, true);
+
+    auto ev = std::make_shared<tkw::CardMovedEvent>();
+    ev->from_entity = "P0";
+    ev->to_entity = "P1";
+    ev->instance_id = "x";
+    ev->def_id = "sha";
+    ev->from = tkw::Zone::Hand;
+    ev->to = tkw::Zone::Judge;
+    std::streambuf *old = std::cout.rdbuf(repl.captured_cout.rdbuf());
+    repl.session.game->bus.publish(ev);
+    std::cout.rdbuf(old);
+    CHECK(repl.captured_cout.str().find("[移牌] P0(手牌) -> P1(判定区) 杀") !=
+          std::string::npos);
+
+    // 亮牌等非玩家来源：空实体渲染 (无)，Limbo 显示临时区。
+    repl.captured_cout.str("");
+    repl.captured_cout.clear();
+    auto reveal = std::make_shared<tkw::CardMovedEvent>();
+    reveal->from_entity = "";
+    reveal->to_entity = "P0";
+    reveal->instance_id = "y";
+    reveal->def_id = "sha";
+    reveal->from = tkw::Zone::Limbo;
+    reveal->to = tkw::Zone::Hand;
+    old = std::cout.rdbuf(repl.captured_cout.rdbuf());
+    repl.session.game->bus.publish(reveal);
+    std::cout.rdbuf(old);
+    CHECK(repl.captured_cout.str().find("[移牌] (无)(临时区) -> P0(手牌) 杀") !=
+          std::string::npos);
 }
 
 TEST_CASE("cli: repeated --human accumulates across positions")

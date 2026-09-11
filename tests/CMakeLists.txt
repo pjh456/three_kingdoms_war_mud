@@ -304,6 +304,13 @@ add_test(NAME cli_verbose_log_zh
 set_tests_properties(cli_verbose_log_zh PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# verbose 移牌行覆盖区域转移：seed 固定，deal 4 42 含装备/顺手/借刀/延时/闪电/五谷。
+add_test(NAME cli_verbose_card_moved
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> --verbose deal 4 42 2>&1); printf '%s' \"$out\" | grep -q '\\[移牌\\]' && printf '%s' \"$out\" | grep -q '\\[移牌\\] (无)(临时区) -> P' && printf '%s' \"$out\" | grep -q '\\[移牌\\] P[0-9](装备区) -> P[0-9](手牌)'")
+set_tests_properties(cli_verbose_card_moved PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 裸 tkw 与 REPL 各打印一行引导文案。
 add_test(NAME cli_bare_root_banner
          COMMAND sh -c "$<TARGET_FILE:tkw> 2>&1 | grep -q '无子命令'")

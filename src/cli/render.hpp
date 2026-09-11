@@ -50,8 +50,28 @@ namespace tkw
                 }
             }
 
+            /** 卡牌区域 → 中文展示（事件日志移牌行用；Limbo 为正在转移）。 */
+            inline constexpr const char *zone_name_zh(const tkw::Zone z)
+            {
+                switch (z)
+                {
+                case tkw::Zone::Draw:
+                    return "摸牌堆";
+                case tkw::Zone::Discard:
+                    return "弃牌堆";
+                case tkw::Zone::Hand:
+                    return "手牌";
+                case tkw::Zone::Equip:
+                    return "装备区";
+                case tkw::Zone::Judge:
+                    return "判定区";
+                default:
+                    return "临时区";
+                }
+            }
+
             /**
-             * @brief 订阅本局事件日志：verbose 为真时打印摸牌/打牌/弃牌/伤害/体力/阵亡。
+             * @brief 订阅本局事件日志：verbose 为真时打印摸牌/打牌/弃牌/移牌/伤害/体力/阵亡。
              * @return 订阅句柄；verbose 为假时为空，句柄析构即退订。
              * @note 句柄只应活在需要日志的命令作用域内，不得存入 Session：会话被覆盖
              *       时会先析构旧 Game（含总线），遗留句柄将对已释放总线退订。
@@ -85,6 +105,24 @@ namespace tkw
                                   << tkw::card::display_name(catalog, c.event.def_id)
                                   << "\n";
                     })));
+                handles.push_back(
+                    game.bus.subscribe(tkw::Handler<tkw::CardMovedEvent>(
+                        [&catalog = game.catalog](
+                            tkw::HandlerContext<tkw::CardMovedEvent> &c) {
+                            // 空实体 = 亮牌等非玩家来源/去向，渲染为 (无) 避免空段。
+                            std::string_view from = c.event.from_entity;
+                            if (from.empty())
+                                from = "(无)";
+                            std::string_view to = c.event.to_entity;
+                            if (to.empty())
+                                to = "(无)";
+                            std::cout << "[移牌] " << from << "("
+                                      << zone_name_zh(c.event.from) << ") -> "
+                                      << to << "(" << zone_name_zh(c.event.to)
+                                      << ") "
+                                      << tkw::card::display_name(catalog, c.event.def_id)
+                                      << "\n";
+                        })));
                 handles.push_back(
                     game.bus.subscribe(tkw::Handler<tkw::EntityDamagedEvent>(
                         [](tkw::HandlerContext<tkw::EntityDamagedEvent> &c) {

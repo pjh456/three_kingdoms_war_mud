@@ -135,7 +135,7 @@ namespace tkw
                     .min(0);
                 cmd.option<fixed_string("verbose")>(
                        "--verbose", 'v',
-                       "打印事件日志（摸牌/打出/弃置/伤害/体力/阵亡）")
+                       "打印事件日志（摸牌/打出/弃置/移牌/伤害/体力/阵亡）")
                     .boolean();
                 cmd.option<fixed_string("autosave")>(
                        "--autosave",
