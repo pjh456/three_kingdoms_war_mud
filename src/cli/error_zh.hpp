@@ -293,10 +293,46 @@ namespace tkw
         }
 
         /**
+         * @brief 回合根因 → 中文标签。
+         * @param e 回合流程返回的失败类别。
+         * @return 十个枚举值各自的中文标签；未命中回落「未知错误」。
+         * @note 穷举 `TurnError`，新增枚举值时编译器以 `-Wswitch` 提示补充。
+         *       仅用于 step/run 经根因出参透出的失败，一次性跑局不消费。
+         */
+        inline std::string_view turn_error_label_zh(game::TurnError e)
+        {
+            switch (e)
+            {
+            case game::TurnError::UnknownPlayer:
+                return "角色不存在";
+            case game::TurnError::UnknownCard:
+                return "卡牌定义缺失";
+            case game::TurnError::CardNotInHand:
+                return "手牌中没有该牌";
+            case game::TurnError::InvalidTarget:
+                return "目标非法";
+            case game::TurnError::ShaLimitExceeded:
+                return "本回合杀已达上限";
+            case game::TurnError::NotEquipment:
+                return "该牌不是装备";
+            case game::TurnError::DelayedDuplicate:
+                return "判定区已有同名延时锦囊";
+            case game::TurnError::PlayRejected:
+                return "出牌被拒绝";
+            case game::TurnError::DiscardInsufficient:
+                return "弃牌数量不足";
+            case game::TurnError::JudgeEmptyDeck:
+                return "判定时牌堆已空";
+            }
+            return "未知错误";
+        }
+
+        /**
          * @brief 对局失败文案：`对局失败（<标签>）`。
          * @param code 非 MaxRounds 的流程错误；达回合上限由调用方映射为平局。
          * @return 固定前缀 + 中文根因标签；对局错误无 detail 字段。
-         * @note 仅一次性跑局与批量模拟使用；step/run 的运行期错误不带 code。
+         * @note 仅一次性跑局与批量模拟使用；step/run 的运行期错误经
+         *       `step_session` 根因出参单独渲染，不走本函数。
          */
         inline std::string loop_error_zh(game::LoopError code)
         {

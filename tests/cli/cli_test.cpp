@@ -830,6 +830,7 @@ TEST_CASE("cli: resource and loop failures render Chinese reason labels")
 {
     using tkw::config::ConfigErrorKind;
     using tkw::game::LoopError;
+    using tkw::game::TurnError;
 
     // 配置加载失败：六类根因各自的中文标签（穷举，防数值 kind 回归）。
     CHECK(tkw::cli::config_error_kind_zh(ConfigErrorKind::FileNotFound) ==
@@ -851,6 +852,36 @@ TEST_CASE("cli: resource and loop failures render Chinese reason labels")
     CHECK(tkw::cli::loop_error_label_zh(LoopError::MaxRounds) == "达到最大回合数");
     CHECK(tkw::cli::loop_error_zh(LoopError::NoPlayers) ==
           "对局失败（无可用玩家）");
+
+    // 回合根因：十类各自的中文标签（穷举，防漏/防回退）。
+    CHECK(tkw::cli::turn_error_label_zh(TurnError::UnknownPlayer) ==
+          "角色不存在");
+    CHECK(tkw::cli::turn_error_label_zh(TurnError::UnknownCard) ==
+          "卡牌定义缺失");
+    CHECK(tkw::cli::turn_error_label_zh(TurnError::CardNotInHand) ==
+          "手牌中没有该牌");
+    CHECK(tkw::cli::turn_error_label_zh(TurnError::InvalidTarget) ==
+          "目标非法");
+    CHECK(tkw::cli::turn_error_label_zh(TurnError::ShaLimitExceeded) ==
+          "本回合杀已达上限");
+    CHECK(tkw::cli::turn_error_label_zh(TurnError::NotEquipment) ==
+          "该牌不是装备");
+    CHECK(tkw::cli::turn_error_label_zh(TurnError::DelayedDuplicate) ==
+          "判定区已有同名延时锦囊");
+    CHECK(tkw::cli::turn_error_label_zh(TurnError::PlayRejected) ==
+          "出牌被拒绝");
+    CHECK(tkw::cli::turn_error_label_zh(TurnError::DiscardInsufficient) ==
+          "弃牌数量不足");
+    CHECK(tkw::cli::turn_error_label_zh(TurnError::JudgeEmptyDeck) ==
+          "判定时牌堆已空");
+
+    // 合成文案：根因经出参渲染进「回合执行失败」；NoPlayers 回落角色不存在。
+    CHECK(tkw::cli::detail::format_turn_failure(
+              LoopError::TurnFailed, TurnError::DiscardInsufficient, "P0") ==
+          "回合执行失败（角色 P0，弃牌数量不足）");
+    CHECK(tkw::cli::detail::format_turn_failure(
+              LoopError::NoPlayers, TurnError::PlayRejected, "P1") ==
+          "回合执行失败（角色 P1，角色不存在）");
 }
 
 TEST_CASE("cli: status reports a finished session and its winner")

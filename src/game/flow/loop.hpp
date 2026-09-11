@@ -127,10 +127,13 @@ namespace tkw
 
         /**
          * @brief 执行会话的下一个回合并推进进度。
+         * @param root 非空时仅在 `TurnFailed` 分支写入回合根因；成功、`NoPlayers`
+         *             与 `MaxRounds` 路径不写，由调用方按 code 分流。
          * @note 存档恢复后直接调用即可续跑；回合失败/超上限返回 Err。
          */
         inline LoopResult<void> step_session(
-            GameContext &ctx, DecisionSource &ai, GameSession &session)
+            GameContext &ctx, DecisionSource &ai, GameSession &session,
+            TurnError *root = nullptr)
         {
             const auto actor = ctx.entities->find(session.current);
             if (actor.is_none())
@@ -139,7 +142,11 @@ namespace tkw
 
             auto r = execute_turn(ctx, ai, session.current);
             if (r.is_err())
+            {
+                if (root)
+                    *root = r.unwrap_err();
                 return LoopResult<void>::Err(LoopError::TurnFailed);
+            }
 
             if (ctx.entities->find(session.current).is_some())
                 session.current = next_player(ctx, session.current);

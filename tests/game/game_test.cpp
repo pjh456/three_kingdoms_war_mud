@@ -2083,6 +2083,43 @@ TEST_CASE("game: step_session advances past a player who died in their turn")
     CHECK(session.current == "b");  // 下一位 = 座位 1
 }
 
+TEST_CASE("game: step_session writes the turn root cause to the optional out param")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"s#missing", {"b"}}};  // 不在手牌 → CardNotInHand
+
+    GameSession session;
+    session.current = "a";
+    session.started = true;
+    TurnError root = TurnError::PlayRejected;
+    auto r = step_session(g.ctx, decider, session, &root);
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == LoopError::TurnFailed);
+    CHECK(root == TurnError::CardNotInHand);
+    CHECK(session.current == "a");  // 失败回合不推进
+}
+
+TEST_CASE("game: step_session leaves the root out param untouched on success")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+
+    TestDecider decider;  // 无人出牌，成功空过
+    GameSession session;
+    session.current = "a";
+    session.started = true;
+    TurnError root = TurnError::PlayRejected;
+    auto r = step_session(g.ctx, decider, session, &root);
+    REQUIRE(r.is_ok());
+    CHECK(root == TurnError::PlayRejected);  // 成功路径零写入
+}
+
 // ── 合法动作生成 ─────────────────────────────────────────────────────
 
 TEST_CASE("game: legal_actions are all accepted by the engine")
