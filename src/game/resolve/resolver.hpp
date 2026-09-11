@@ -513,12 +513,12 @@ namespace tkw
                     if (nullified(targets))
                         return GameResult<void>::Ok();
 
-                    // 亮出等同存活人数的牌
+                    // 亮出等同存活人数的牌（摸牌堆空则弃牌堆洗回，口径同摸牌/判定）
                     std::vector<card::Card> revealed;
                     const int n = static_cast<int>(ctx.entities->size());
                     for (int i = 0; i < n; ++i)
                     {
-                        auto c = ctx.cards->draw();
+                        auto c = draw_with_refill(ctx);
                         if (c.is_none())
                             break;
                         revealed.push_back(std::move(c).unwrap());

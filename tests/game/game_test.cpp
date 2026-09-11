@@ -466,6 +466,30 @@ TEST_CASE("game: wugu reveals one card per player and deals one each")
     CHECK(g.cards.draw_size() == 108 - 2);
 }
 
+TEST_CASE("game: wugu reveal refills from the discard pile when the draw pile runs out")
+{
+    // 亮牌口径与摸牌一致：亮牌途中摸牌堆耗尽且弃牌堆有牌时，经 rng 洗回后继续亮，
+    // 亮牌数仍达存活人数，后位角色有牌可选。
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "wugu", "w#0");
+    g.cards.add_to_draw(Card{"draw#0", "sha", Suit::Spade, 7});
+    g.cards.discard(Card{"d#0", "shan", Suit::Heart, 2});
+    g.cards.discard(Card{"d#1", "sha", Suit::Club, 3});
+    CHECK(g.cards.draw_size() == 1);  // 亮 2 张必在第二张触发洗回
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"a", "b"});
+    REQUIRE(r.is_ok());
+
+    CHECK(g.cards.hand_size("a") == 1);  // 打出 wugu -1，选得 1
+    CHECK(g.cards.hand_size("b") == 1);  // 后位 b 也有牌可选
+    CHECK(g.cards.draw_size() == 2);     // 3 张洗回、亮 2 张后余 2
+    CHECK(g.cards.discard_size() == 0);  // 洗回后无牌滞留弃牌堆
+}
+
 TEST_CASE("game: guohe discards target card")
 {
     TestGame g("deck");

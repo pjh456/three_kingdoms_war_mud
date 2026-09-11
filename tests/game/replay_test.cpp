@@ -193,6 +193,9 @@ TEST_CASE("replay: golden fingerprints pin the rule semantics")
     // - 4 人 seed 42：逐字节不变——两个固定种子对局均未进入「多目标锦囊结算
     //   时非当前目标的玩家持无懈」的状态；已发生的无懈窗口均为单窗口效果
     //   （过河拆桥/五谷丰登）或目标集合仅含当事人，新旧携带集合一致，故不重钉。
+    //
+    // 五谷亮牌洗回口径统一后的核对（新旧日志逐行 diff 核对过）：两组固定种子
+    // 对局均未在五谷亮牌途中遇摸牌堆空，洗回分支未触发，故行数与指纹不变。
     const auto two = run_game(1, 2);
     CHECK(two.size() == 79);
     CHECK(fingerprint(two) == 12977149775915994001ULL);
