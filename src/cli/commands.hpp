@@ -174,14 +174,35 @@ namespace tkw
                 return tkw::game::BuildOptions{opt.deck, opt.players, opt.seed};
             }
 
+            /**
+             * @brief 牌堆加载失败 → 用户可见文案（kind + detail）。
+             * @param e 目录加载错误；detail 为文件路径或字段路径。
+             * @return 固定前缀「加载牌堆失败」+ kind 数值 + detail 的文案。
+             */
+            inline std::string format_load_error(const tkw::config::ConfigError &e)
+            {
+                return "加载牌堆失败 (kind=" +
+                       std::to_string(static_cast<int>(e.kind)) + "): " + e.detail;
+            }
+
+            /**
+             * @brief 对局失败 → 带 LoopError code 的用户可见文案。
+             * @param code 非 MaxRounds 的流程错误；达回合上限由调用方映射为平局。
+             * @return 固定前缀「对局失败」+ LoopError 数值的文案。
+             * @note 仅一次性跑局与批量模拟使用；step/run 的运行期错误不带 code。
+             */
+            inline std::string format_loop_error(tkw::game::LoopError code)
+            {
+                return "对局失败 (LoopError=" +
+                       std::to_string(static_cast<int>(code)) + ")";
+            }
+
             /** 建局错误 → 用户可见文案（目录加载与玩家创建两类错误面）。 */
             inline std::string format_build_error(const tkw::game::BuildError &e)
             {
                 if (e.kind == tkw::game::BuildError::Kind::CreatePlayer)
                     return "创建玩家失败: P" + std::to_string(e.player_index);
-                return "加载牌堆失败 (kind=" +
-                       std::to_string(static_cast<int>(e.config.kind)) + "): " +
-                       e.config.detail;
+                return format_load_error(e.config);
             }
 
             /** 校验真人座位：必须是对局中存在的实体且互不重复；空串表示通过。 */
@@ -246,6 +267,39 @@ namespace tkw
                     humans, std::cin, std::cout, make_ai(ai));
             }
 
+            /** @brief 跑到底结果：正常结束或达回合上限平局。 */
+            enum class RunOutcome : std::uint8_t
+            {
+                Finished,  /**< 会话结束（存活 ≤ 1） */
+                MaxRounds, /**< 达回合上限且无唯一存活者 */
+            };
+
+            /**
+             * @brief 重复 step_session 直到会话结束或达回合上限。
+             * @param ctx     对局运行时；结束判定与逐步推进都作用于其容器。
+             * @param ai      决策源，由调用方按真人/AI 档构造。
+             * @param session 会话进度，原地推进。
+             * @return Ok(Finished) 会话结束；Ok(MaxRounds) 达回合上限平局；
+             *         Err 其它 LoopError 原样上抛。
+             * @note 只驱动循环，不订阅事件、不打印；会话状态与统计由调用方持有。
+             */
+            inline tkw::game::LoopResult<RunOutcome> run_to_completion(
+                tkw::game::GameContext &ctx, tkw::game::DecisionSource &ai,
+                tkw::game::GameSession &session)
+            {
+                while (!tkw::game::session_over(ctx))
+                {
+                    auto r = tkw::game::step_session(ctx, ai, session);
+                    if (r.is_ok())
+                        continue;
+                    if (r.unwrap_err() == tkw::game::LoopError::MaxRounds)
+                        return tkw::game::LoopResult<RunOutcome>::Ok(
+                            RunOutcome::MaxRounds);
+                    return tkw::game::LoopResult<RunOutcome>::Err(r.unwrap_err());
+                }
+                return tkw::game::LoopResult<RunOutcome>::Ok(RunOutcome::Finished);
+            }
+
             inline void print_status(const Session &s)
             {
                 std::cout << "会话: " << (s.active ? "进行中" : "无") << "\n";
@@ -270,6 +324,21 @@ namespace tkw
                               << ctx.cards->hand_size(e->get_id()) << " 装备 "
                               << ctx.cards->equip_size(e->get_id()) << " 判定 "
                               << ctx.cards->judge_size(e->get_id()) << "\n";
+            }
+
+            /**
+             * @brief 打印回合上限平局行与统计块（循环尾同构两连）。
+             * @param stats 本局统计聚合。
+             * @param game  本局运行时；统计块读取实体体力。
+             * @param turns 已执行回合数。
+             * @note 平局无胜者，统计块 winner 传空串（显示「无」）。
+             */
+            inline void print_max_rounds_draw(
+                const tkw::save::BattleStats &stats, const tkw::game::Game &game,
+                int turns)
+            {
+                std::cout << "平局（达到最大回合数）\n";
+                print_battle_stats(stats, game, {}, turns);
             }
 
             inline CliResult<void> cmd_new(const Options &opt, Session &s)
@@ -318,8 +387,7 @@ namespace tkw
                 {
                     if (r.unwrap_err() == tkw::game::LoopError::MaxRounds)
                     {
-                        std::cout << "平局（达到最大回合数）\n";
-                        print_battle_stats(s.stats, *s.game, {}, s.state.turns);
+                        print_max_rounds_draw(s.stats, *s.game, s.state.turns);
                         return CliResult<void>::Ok();
                     }
                     return CliFailure{CliError("回合执行失败")};
@@ -344,21 +412,15 @@ namespace tkw
                 auto stats_handles = subscribe_stats(*s.game, s.stats);
                 auto ai = make_decision_source(s.humans, s.ai);
                 auto ctx = s.game->context();
-                bool advanced = false;
-                while (!tkw::game::session_over(ctx))
+                // 进入循环前判定：true 表示本次命令至少会推进（用于末尾统计门控）。
+                const bool advanced = !tkw::game::session_over(ctx);
+                auto rr = run_to_completion(ctx, *ai, s.state);
+                if (rr.is_err())
+                    return CliFailure{CliError("回合执行失败")};
+                if (rr.unwrap() == RunOutcome::MaxRounds)
                 {
-                    auto r = tkw::game::step_session(ctx, *ai, s.state);
-                    if (r.is_err())
-                    {
-                        if (r.unwrap_err() == tkw::game::LoopError::MaxRounds)
-                        {
-                            std::cout << "平局（达到最大回合数）\n";
-                            print_battle_stats(s.stats, *s.game, {}, s.state.turns);
-                            return CliResult<void>::Ok();
-                        }
-                        return CliFailure{CliError("回合执行失败")};
-                    }
-                    advanced = true;
+                    print_max_rounds_draw(s.stats, *s.game, s.state.turns);
+                    return CliResult<void>::Ok();
                 }
                 std::cout << "胜者: "
                           << winner_label(tkw::game::session_winner(ctx))
@@ -474,22 +536,13 @@ namespace tkw
                 tkw::game::GameSession session;
                 if (tkw::game::start_session(ctx, session, "P0", opt.hand).is_err())
                     return CliFailure{CliError("开局失败")};
-                while (!tkw::game::session_over(ctx))
+                auto rr = run_to_completion(ctx, *ai, session);
+                if (rr.is_err())
+                    return CliFailure{CliError(format_loop_error(rr.unwrap_err()))};
+                if (rr.unwrap() == RunOutcome::MaxRounds)
                 {
-                    auto r = tkw::game::step_session(ctx, *ai, session);
-                    if (r.is_err())
-                    {
-                        const auto code = r.unwrap_err();
-                        if (code == tkw::game::LoopError::MaxRounds)
-                        {
-                            std::cout << "平局（达到最大回合数）\n";
-                            print_battle_stats(stats, *game, {}, session.turns);
-                            return CliResult<void>::Ok();
-                        }
-                        return CliFailure{CliError(
-                            "对局失败 (LoopError=" +
-                            std::to_string(static_cast<int>(code)) + ")")};
-                    }
+                    print_max_rounds_draw(stats, *game, session.turns);
+                    return CliResult<void>::Ok();
                 }
                 const std::string winner = tkw::game::session_winner(ctx);
                 std::cout << "胜者: " << winner_label(winner)
@@ -511,9 +564,7 @@ namespace tkw
                 if (unsupported.is_err())
                 {
                     const auto &e = unsupported.unwrap_err();
-                    return CliFailure{CliError(
-                        "加载牌堆失败 (kind=" +
-                        std::to_string(static_cast<int>(e.kind)) + "): " + e.detail)};
+                    return CliFailure{CliError(format_load_error(e))};
                 }
                 const auto &cards = unsupported.unwrap();
                 if (cards.empty())
@@ -546,9 +597,7 @@ namespace tkw
                 if (catalog.is_err())
                 {
                     const auto &e = catalog.unwrap_err();
-                    return CliFailure{CliError(
-                        "加载牌堆失败 (kind=" +
-                        std::to_string(static_cast<int>(e.kind)) + "): " + e.detail)};
+                    return CliFailure{CliError(format_load_error(e))};
                 }
                 const auto &cat = catalog.unwrap();
 
@@ -606,9 +655,7 @@ namespace tkw
                 if (catalog.is_err())
                 {
                     const auto &e = catalog.unwrap_err();
-                    return CliFailure{CliError(
-                        "加载牌堆失败 (kind=" +
-                        std::to_string(static_cast<int>(e.kind)) + "): " + e.detail)};
+                    return CliFailure{CliError(format_load_error(e))};
                 }
                 const auto &cat = catalog.unwrap();
                 // 同 run_game：未知机制名到不了这里，非空只在未来枚举实现未补时出现。
@@ -641,19 +688,9 @@ namespace tkw
                     if (tkw::game::start_session(ctx, session, "P0",
                                                   opt.hand).is_err())
                         return CliFailure{CliError("开局失败")};
-                    while (!tkw::game::session_over(ctx))
-                    {
-                        auto r = tkw::game::step_session(ctx, *ai, session);
-                        if (r.is_err())
-                        {
-                            const auto code = r.unwrap_err();
-                            if (code == tkw::game::LoopError::MaxRounds)
-                                break;  // 达回合上限按平局计
-                            return CliFailure{CliError(
-                                "对局失败 (LoopError=" +
-                                std::to_string(static_cast<int>(code)) + ")")};
-                        }
-                    }
+                    auto rr = run_to_completion(ctx, *ai, session);
+                    if (rr.is_err())
+                        return CliFailure{CliError(format_loop_error(rr.unwrap_err()))};
 
                     // 胜者空串 = 平局（达回合上限或同归于尽）。
                     const std::string winner = tkw::game::session_winner(ctx);
