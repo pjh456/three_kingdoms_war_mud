@@ -222,6 +222,32 @@ TEST_CASE("card: effect field invariants and subtype are enforced")
     CHECK(sub.unwrap_err() == ConfigError{ConfigErrorKind::InvalidValue, "a.subtype"});
 }
 
+TEST_CASE("card: judge damage action requires a positive amount")
+{
+    // 成功动作为伤害但缺 amount（opt 回落 0）→ 不静默按 0 结算，加载期拒载
+    auto miss = parse_card_def(
+        doc(R"({"id": "x", "name": "x", "type": "trick", "subtype": "delayed",
+                 "copies": [ {"suit": "spade", "number": 1} ],
+                 "judge": {"trigger": "spade_2_9", "success": "damage"}})")
+            .root(),
+        "x");
+    REQUIRE(miss.is_err());
+    CHECK(miss.unwrap_err() ==
+          ConfigError{ConfigErrorKind::InvalidValue, "x.judge.amount"});
+
+    // amount 显式负数同样拒载
+    auto neg = parse_card_def(
+        doc(R"({"id": "x", "name": "x", "type": "trick", "subtype": "delayed",
+                 "copies": [ {"suit": "spade", "number": 1} ],
+                 "judge": {"trigger": "spade_2_9", "success": "damage",
+                           "amount": -1}})")
+            .root(),
+        "x");
+    REQUIRE(neg.is_err());
+    CHECK(neg.unwrap_err() ==
+          ConfigError{ConfigErrorKind::InvalidValue, "x.judge.amount"});
+}
+
 TEST_CASE("card: catalog loads deck + card files")
 {
     const auto dir = temp_dir("tkw_card_catalog");
@@ -307,6 +333,40 @@ TEST_CASE("card: catalog load error paths")
         REQUIRE(r.is_err());
         CHECK(r.unwrap_err().kind == ConfigErrorKind::InvalidValue);
         CHECK(r.unwrap_err().detail.find("重复引用") != std::string::npos);
+    }
+}
+
+TEST_CASE("card: catalog rejects an empty deck at load time")
+{
+    const auto dir = temp_dir("tkw_card_catalog_empty");
+    REQUIRE(pjh::platform::Fs::create_directories(dir / "cards").is_ok());
+
+    // 空引用列表：牌堆无张，不得建成可跑局的空目录
+    CHECK(tkw::io::write_text(dir / "deck.json",
+                               R"({"name": "mini", "cards": []})")
+        .is_ok());
+    {
+        tkw::config::ResourceStore store(dir);
+        auto r = CardDefCatalog::load(store, "deck");
+        REQUIRE(r.is_err());
+        CHECK(r.unwrap_err().kind == ConfigErrorKind::InvalidValue);
+        CHECK(r.unwrap_err().detail.find("牌堆为空") != std::string::npos);
+    }
+
+    // 引用了卡但该卡副本数为 0：总张数仍为 0，同型拒载
+    CHECK(tkw::io::write_text(dir / "deck.json",
+                               R"({"name": "mini", "cards": ["sha"]})")
+        .is_ok());
+    CHECK(tkw::io::write_text(
+              dir / "cards" / "sha.json",
+              R"({"id": "sha", "name": "杀", "type": "basic", "copies": []})")
+        .is_ok());
+    {
+        tkw::config::ResourceStore store(dir);
+        auto r = CardDefCatalog::load(store, "deck");
+        REQUIRE(r.is_err());
+        CHECK(r.unwrap_err().kind == ConfigErrorKind::InvalidValue);
+        CHECK(r.unwrap_err().detail.find("牌堆为空") != std::string::npos);
     }
 }
 

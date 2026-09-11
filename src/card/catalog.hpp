@@ -291,6 +291,15 @@ namespace tkw
                     return cfg::ConfigResult<JudgeEffect>::Err(scope.unwrap_err());
                 j.scope = scope.unwrap();
 
+                // Damage 动作的 amount 不变量同 effect 路径：非正一律加载失败
+                // （不静默按 0 结算，避免判定卡整局 0 伤无告警运行）
+                if ((j.success == JudgeAction::Damage ||
+                     j.failure == JudgeAction::Damage) &&
+                    j.amount <= 0)
+                    return cfg::fail<JudgeEffect>(
+                        cfg::ConfigErrorKind::InvalidValue,
+                        cfg::field_path(path, "amount"));
+
                 return cfg::ConfigResult<JudgeEffect>::Ok(std::move(j));
             }
 
@@ -514,6 +523,13 @@ namespace tkw
                 });
                 if (er.is_err())
                     return cfg::ConfigResult<CardDefCatalog>::Err(er.unwrap_err());
+
+                // 牌堆不变量：总张数为 0（空引用或全 0 副本）不得建成目录——
+                // 空牌堆只会空转到最大回合数产出误导性平局，加载期即拒
+                if (catalog.total_copies() == 0)
+                    return cfg::fail<CardDefCatalog>(
+                        cfg::ConfigErrorKind::InvalidValue,
+                        std::string(deck_name) + ".json.cards: 牌堆为空（无张数 > 0 的卡）");
                 return cfg::ConfigResult<CardDefCatalog>::Ok(std::move(catalog));
             }
 
