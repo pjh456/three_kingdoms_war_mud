@@ -45,7 +45,7 @@ namespace tkw
              * @brief 按命令名列表渲染「命令名（含别名）+ 描述」两列。
              * @param root  根命令，用于按名查子命令的别名与描述。
              * @param names 命令名列表（查询结果为规范名，别名从命令树取）。
-             * @return 两列文本；无别名命令与既有输出逐字一致，描述缺失留空。
+             * @return 两列文本；无别名命令按命令名单列渲染，描述缺失留空。
              * @note 列宽按带别名后缀的名字计算，保证行对齐。
              */
             inline std::string command_lines_zh(

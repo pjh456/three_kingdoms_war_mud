@@ -742,7 +742,7 @@ namespace tkw
             detail::declare_common_options(app, rules);
             detail::declare_human_option(app);
 
-            // 根命令：无子命令直接跑一局（兼容旧用法），先打印一行引导。
+            // 根命令：无子命令时直接跑一局 AI 对局，先打印一行引导。
             app.action(
                 [](ParseContext &ctx) -> CliResult<void>
                 {

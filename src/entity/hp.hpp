@@ -82,6 +82,7 @@ namespace tkw
                 return true;
             }
 
+            /** @brief 增加体力（受上限钳制）；返回实际增加量。 */
             int add(int det)
             {
                 const int old = cur_;
@@ -89,6 +90,7 @@ namespace tkw
                 return cur_ - old;
             }
 
+            /** @brief 减少体力（可为非正 = 濒死值状态）；返回实际减少量。 */
             int sub(int det)
             {
                 const int old = cur_;

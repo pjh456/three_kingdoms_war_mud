@@ -5,7 +5,7 @@
  *       - hp 扣到非正 → 进入濒死：从濒死角色起按座位序轮询打桃；
  *       - 一轮无人可救/不救 → 死亡：区域牌弃置、发布 EntityDiedEvent、移除实体；
  *       - 击杀者（伤害来源为存活玩家）摸 3 张。
- * @note 无武将技能：能救人的只有「桃」（def_id == "tao"）。
+ * @note 无武将技能：能作濒死救场牌的只有资源标记 rescue 的牌。
  */
 
 #ifndef INCLUDE_TKW_GAME_COMBAT_HPP

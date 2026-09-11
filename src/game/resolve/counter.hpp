@@ -30,6 +30,7 @@ namespace tkw
 {
     namespace game
     {
+        /** @brief 手牌中是否有可作无懈的牌（数据标记 counter）。 */
         inline bool has_counter_card(const GameContext &ctx, const std::string &player)
         {
             return any_hand_card_matching(
@@ -37,6 +38,7 @@ namespace tkw
                 [](const card::CardDef &def) { return is_counter_def(def); });
         }
 
+        /** @brief 消费一张无懈牌：非法选择退回手牌返 false；成功后弃置并发 CardDiscarded。 */
         inline bool consume_counter(
             GameContext &ctx, const std::string &player,
             const std::string &instance_id)

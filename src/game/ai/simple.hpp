@@ -123,7 +123,7 @@ namespace tkw
             };
         }
 
-        /** @brief 兼容既有调用点：SimpleAI 保留在 game 命名空间。 */
+        /** @brief SimpleAI 在 game 命名空间的别名。 */
         using ai::SimpleAI;
     }
 }

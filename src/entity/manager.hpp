@@ -206,7 +206,8 @@ namespace tkw
         }
 
         /**
-         * @brief 按创建序迭代（即座位回合序），仅供写层使用。
+         * @brief 按创建序迭代（与座位序解耦；座位序用 ordered_ids()/next()/order_from()），
+         *        仅供写层使用。
          * @note 有意不提供 const 重载：const 管理器经 unique_ptr 迭代仍会得到
          *       可变 Entity*，故只读路径一律走 const_view()，从类型上封住出口。
          */

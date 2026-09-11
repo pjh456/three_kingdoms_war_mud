@@ -227,7 +227,7 @@ namespace tkw
             };
         }
 
-        /** @brief 兼容 CLI 调用点：AggressiveAI 提升到 game 命名空间。 */
+        /** @brief AggressiveAI 在 game 命名空间的别名。 */
         using ai::AggressiveAI;
     }
 }

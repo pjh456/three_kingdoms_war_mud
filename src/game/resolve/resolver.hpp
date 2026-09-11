@@ -519,7 +519,7 @@ namespace tkw
                 return true;
             }
 
-            // 真杀：单牌消费（与既有响应窗口行为一致）
+            // 真杀：单牌消费
             auto removed = ctx.cards->remove_from_hand(entity, act.instance_id);
             if (removed.is_none())
                 return false;
