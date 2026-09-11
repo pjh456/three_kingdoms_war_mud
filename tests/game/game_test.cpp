@@ -590,6 +590,30 @@ TEST_CASE("game: nanman hits all others without sha")
     CHECK(c->get_hp() == 2);
 }
 
+TEST_CASE("game: wanjian hits only targets without jink")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    auto *d = g.add_player("d", 3, 4);
+    g.give("a", "wanjian", "wj#0");
+    g.give("b", "shan", "j#1");
+    g.give("d", "shan", "j#3");
+
+    TestDecider decider;
+    decider.respond = true;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c", "d"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 4);             // 出闪免伤
+    CHECK(d->get_hp() == 4);             // 出闪免伤
+    CHECK(c->get_hp() == 3);             // 无闪受 1 点
+    CHECK(g.cards.hand_size("b") == 0);  // 闪已消费
+    CHECK(g.cards.hand_size("d") == 0);  // 闪已消费
+    CHECK(g.cards.discard_size() == 3);  // 万箭 + 两张闪
+}
+
 TEST_CASE("game: juedou target without sha takes damage")
 {
     TestGame g("deck");
@@ -1398,6 +1422,70 @@ TEST_CASE("game: wuxie aoe window carries only its own target")
     REQUIRE(decider.counter_windows.size() == 2);
     CHECK(decider.counter_windows[0] == std::vector<std::string>{"b"});
     CHECK(decider.counter_windows[1] == std::vector<std::string>{"c"});
+}
+
+TEST_CASE("game: wanjian wuxie windows bind per target and skip jink when nullified")
+{
+    // 子块 1：唯一无懈持有者 c 拒绝出牌，三窗各只带当前目标
+    {
+        TestGame g("deck");
+        g.add_player("a", 0, 4);
+        auto *b = g.add_player("b", 1, 4);
+        auto *c = g.add_player("c", 2, 4);
+        auto *d = g.add_player("d", 3, 4);
+        g.give("a", "wanjian", "wj#0");
+        g.give("b", "shan", "j#1");
+        g.give("c", "wuxie", "wx#2");  // 唯一无懈持有者
+        g.give("d", "shan", "j#3");
+
+        TestDecider decider;  // counter=false：c 拒绝，仅记录窗口
+        decider.respond = true;
+        const auto played = g.cards.hand("a")[0];
+        auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c", "d"});
+        REQUIRE(r.is_ok());
+
+        // 每窗只携带当前受影响目标，且只有持无懈的 c 被询问
+        REQUIRE(decider.counter_windows.size() == 3);
+        CHECK(decider.counter_windows[0] == std::vector<std::string>{"b"});
+        CHECK(decider.counter_windows[1] == std::vector<std::string>{"c"});
+        CHECK(decider.counter_windows[2] == std::vector<std::string>{"d"});
+        CHECK(b->get_hp() == 4);             // 出闪
+        CHECK(c->get_hp() == 3);             // 无闪受 1 点（无懈未出）
+        CHECK(d->get_hp() == 4);             // 出闪
+        CHECK(g.cards.hand_size("c") == 1);  // 无懈未出
+        CHECK(g.cards.discard_size() == 3);  // 万箭 + b闪 + d闪
+    }
+
+    // 子块 2：b 出无懈抵消自己这一窗，不再开响应窗，闪保留
+    {
+        TestGame g("deck");
+        g.add_player("a", 0, 4);
+        auto *b = g.add_player("b", 1, 4);
+        auto *c = g.add_player("c", 2, 4);
+        auto *d = g.add_player("d", 3, 4);
+        g.give("a", "wanjian", "wj#0");
+        g.give("b", "shan", "j#1");
+        g.give("b", "wuxie", "wx#1");
+        g.give("d", "shan", "j#3");
+
+        TestDecider decider;
+        decider.respond = true;
+        decider.counter = true;
+        const auto played = g.cards.hand("a")[0];
+        auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c", "d"});
+        REQUIRE(r.is_ok());
+        CHECK(b->get_hp() == 4);             // 被无懈免伤
+        CHECK(c->get_hp() == 3);             // 无闪无无懈 → 受伤
+        CHECK(d->get_hp() == 4);             // 出闪免伤
+        CHECK(g.cards.hand_size("b") == 1);  // 闪保留：被无懈则不再开响应窗
+        CHECK(g.cards.hand("b")[0].def_id == "shan");
+
+        // b 唯一无懈被消费后全场无持无懈者，后两窗不再询问、不记录
+        REQUIRE(decider.counter_windows.size() == 1);
+        CHECK(decider.counter_windows[0] == std::vector<std::string>{"b"});
+        CHECK(g.cards.hand_size("d") == 0);  // d 闪被消费
+        CHECK(g.cards.discard_size() == 3);  // 万箭 + b无懈 + d闪
+    }
 }
 
 TEST_CASE("game: simple ai spends wuxie on its own aoe window only")
