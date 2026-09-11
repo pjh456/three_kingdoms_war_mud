@@ -12,6 +12,7 @@
 
 #include "cli/commands.hpp"
 #include "cli/help_zh.hpp"
+#include "cli/render.hpp"
 
 namespace
 {
