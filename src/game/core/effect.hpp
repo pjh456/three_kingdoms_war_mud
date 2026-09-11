@@ -1,7 +1,8 @@
 /**
  * @file effect.hpp
- * @brief 效果类别与装备能力的属性表：CardEffectKind 的「能否结算 / 可否主动打出 /
- *        是否杀 / 是否需选目标牌」、Ability 的实现状态集中一处，消除散落的 switch。
+ * @brief 效果类别与装备能力的属性表及卡牌响应分类谓词：CardEffectKind 的「能否结算 /
+ *        可否主动打出 / 是否杀 / 是否需选目标牌」、Ability 的实现状态集中一处，
+ *        消除散落的 switch。
  * @note 新增效果/能力只需在对应表加一行（效果另需补 resolve_play 结算分支）。
  */
 
@@ -109,6 +110,34 @@ namespace tkw
         {
             return def.type == card::CardType::Trick && def.effect.is_none() &&
                    def.judge.is_some();
+        }
+
+        /** @brief 该定义是否可作为指定响应牌（杀=effect.kind==Damage，闪==Jink）。 */
+        inline bool is_response_def(const card::CardDef &def, card::ResponseKind kind)
+        {
+            if (def.effect.is_none())
+                return false;
+            const auto k = def.effect.unwrap().kind;
+            switch (kind)
+            {
+            case card::ResponseKind::Sha:
+                return is_sha_kind(k);
+            case card::ResponseKind::Jink:
+                return k == card::CardEffectKind::Jink;
+            }
+            return false;
+        }
+
+        /** @brief 该定义是否可作濒死救场牌（数据标记 rescue，不再认 id）。 */
+        inline bool is_rescue_def(const card::CardDef &def)
+        {
+            return def.rescue;
+        }
+
+        /** @brief 该定义是否可作无懈响应牌（数据标记 counter，不再认 id）。 */
+        inline bool is_counter_def(const card::CardDef &def)
+        {
+            return def.counter;
         }
 
         /** @brief 出牌阶段的打出路径分类（回合流程/动作枚举共用同一分派）。 */

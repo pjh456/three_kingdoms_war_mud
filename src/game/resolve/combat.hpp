@@ -24,6 +24,7 @@
 #include "event/event_bus.hpp"
 #include "game/core/context.hpp"
 #include "game/core/decision.hpp"
+#include "game/core/effect.hpp"
 #include "game/core/state.hpp"
 #include "util/types.hpp"
 
@@ -31,12 +32,6 @@ namespace tkw
 {
     namespace game
     {
-        /** @brief 该定义是否可作濒死救场牌（数据标记 rescue，不再认 id）。 */
-        inline bool is_rescue_def(const card::CardDef &def)
-        {
-            return def.rescue;
-        }
-
         /** @brief 玩家手牌中是否有桃。 */
         inline bool has_peach(const GameContext &ctx, const std::string &player)
         {

@@ -26,22 +26,6 @@ namespace tkw
 {
     namespace game
     {
-        /** @brief 该定义是否可作为指定响应牌（杀=effect.kind==Damage，闪==Jink）。 */
-        inline bool is_response_def(const card::CardDef &def, card::ResponseKind kind)
-        {
-            if (def.effect.is_none())
-                return false;
-            const auto k = def.effect.unwrap().kind;
-            switch (kind)
-            {
-            case card::ResponseKind::Sha:
-                return is_sha_kind(k);
-            case card::ResponseKind::Jink:
-                return k == card::CardEffectKind::Jink;
-            }
-            return false;
-        }
-
         /**
          * @brief 实体手牌中是否存在指定响应牌。
          * @note 杀响应额外计入「装备两张当杀能力且手牌 ≥2」（丈八蛇矛打出侧）。

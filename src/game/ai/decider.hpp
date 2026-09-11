@@ -21,9 +21,7 @@
 #include "game/ai/legal.hpp"
 #include "game/ai/view.hpp"
 #include "game/core/decision.hpp"
-#include "game/resolve/combat.hpp"
-#include "game/resolve/counter.hpp"
-#include "game/resolve/response.hpp"
+#include "game/core/effect.hpp"
 #include "util/types.hpp"
 
 namespace tkw

@@ -23,18 +23,13 @@
 #include "game/core/card_event.hpp"
 #include "game/core/context.hpp"
 #include "game/core/decision.hpp"
+#include "game/core/effect.hpp"
 #include "util/types.hpp"
 
 namespace tkw
 {
     namespace game
     {
-        /** @brief 该定义是否可作无懈响应牌（数据标记 counter，不再认 id）。 */
-        inline bool is_counter_def(const card::CardDef &def)
-        {
-            return def.counter;
-        }
-
         inline bool has_counter_card(const GameContext &ctx, const std::string &player)
         {
             for (const auto &c : ctx.cards->hand(player))
