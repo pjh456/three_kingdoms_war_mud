@@ -1145,6 +1145,64 @@ TEST_CASE("game: lightning passes to next player")
     CHECK(g.cards.judge("b")[0].def_id == "shandian");
 }
 
+TEST_CASE("game: passed lightning skips a player who already has one")
+{
+    // 判定区不可叠加同名延时锦囊：闪电未劈中移送时须跳过判定区已有闪电者
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.cards.add_to_judge("a", Card{"L#0", "shandian", Suit::Heart, 5});
+    g.cards.add_to_judge("b", Card{"L#1", "shandian", Suit::Spade, 1});
+    g.cards.add_to_draw(Card{"j#0", "shan", Suit::Heart, 5});  // 非黑桃2~9 → 失败
+
+    TestDecider decider;
+    const Card sd = g.cards.judge("a")[0];
+    auto r = resolve_delayed(g.ctx, decider, "a", sd);
+    REQUIRE(r.is_ok());
+    CHECK(r.unwrap() == DelayedOutcome::PassedToNext);
+    CHECK(g.cards.judge_size("a") == 0);
+    CHECK(g.cards.judge_size("b") == 1);  // b 原闪电不动
+    CHECK(g.cards.judge_size("c") == 1);  // 跳到 c
+    CHECK(g.cards.judge("c")[0].def_id == "shandian");
+}
+
+TEST_CASE("game: passed lightning wraps back when only the other player has one")
+{
+    // 跳过已有同名牌后当前角色判定区已清空，是 2 人局唯一的空位
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.cards.add_to_judge("a", Card{"L#0", "shandian", Suit::Heart, 5});
+    g.cards.add_to_judge("b", Card{"L#1", "shandian", Suit::Spade, 1});
+    g.cards.add_to_draw(Card{"j#0", "shan", Suit::Heart, 5});
+
+    TestDecider decider;
+    const Card sd = g.cards.judge("a")[0];
+    auto r = resolve_delayed(g.ctx, decider, "a", sd);
+    REQUIRE(r.is_ok());
+    CHECK(r.unwrap() == DelayedOutcome::PassedToNext);
+    CHECK(g.cards.judge_size("a") == 1);  // 跳过 b → 回到 a
+    CHECK(g.cards.judge_size("b") == 1);
+}
+
+TEST_CASE("game: delayed trick is discarded when judgement deck is empty")
+{
+    // 判定不可得时延时牌已移出判定区，须先弃置再上报，避免牌凭空消失
+    TestGame g("deck");
+    g.add_player("a", 0, 4);  // 不建牌堆：摸牌堆/弃牌堆皆空
+    g.cards.add_to_judge("a", Card{"L#0", "shandian", Suit::Spade, 1});
+
+    TestDecider decider;
+    const Card sd = g.cards.judge("a")[0];
+    auto r = resolve_delayed(g.ctx, decider, "a", sd);
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == TurnError::JudgeEmptyDeck);
+    CHECK(g.cards.judge_size("a") == 0);  // 已移出
+    CHECK(g.cards.discard_size() == 1);   // 弃置而非消失
+    CHECK(g.cards.draw_size() == 0);
+}
+
 // ── 濒死与死亡 ──────────────────────────────────────────────────────
 
 TEST_CASE("game: dying rescued by self peach")

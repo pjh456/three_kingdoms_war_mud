@@ -3,7 +3,7 @@
  * @brief 回合流程：判定 → 摸牌 → 出牌（含杀次数限制/装备）→ 弃牌。
  * @note 规则约定：
  *       - 判定阶段按判定区顺序结算延时锦囊；乐不思蜀判定非红桃跳过出牌，
- *         闪电判定黑桃2~9 则造成雷伤、否则移入下家判定区；
+ *         闪电判定黑桃2~9 则造成雷伤、否则移入判定区无同名闪电的下家；
  *       - 杀每回合限一次，装备诸葛连弩后不限制；
  *       - 弃牌阶段手牌上限 = 体力上限。
  * @note 死亡/濒死救场不在本模块（hp 可被扣到非正，死亡声明归后续流程）。
@@ -102,7 +102,12 @@ namespace tkw
 
             auto judge = perform_judgement(ctx);
             if (judge.is_none())
+            {
+                // 判定牌不可得：延时牌已移出判定区，弃置以免凭空消失
+                ctx.cards->discard(delayed_card);
+                emit_card_discarded(ctx, player, delayed_card);
                 return TurnResult<DelayedOutcome>::Err(TurnError::JudgeEmptyDeck);
+            }
             const card::Card judge_card = std::move(judge).unwrap();
             ctx.cards->discard(judge_card);  // 判定牌进弃牌堆
             emit_card_discarded(ctx, player, judge_card);
@@ -130,7 +135,15 @@ namespace tkw
 
             case card::JudgeAction::PassToNext:
             {
-                const std::string next = next_player(ctx, player);
+                const std::string next =
+                    next_delayed_target(ctx, player, delayed_card.def_id);
+                if (next.empty())
+                {
+                    // 异常残留态下无空位：弃置而非丢牌
+                    ctx.cards->discard(delayed_card);
+                    emit_card_discarded(ctx, player, delayed_card);
+                    return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::Normal);
+                }
                 ctx.cards->add_to_judge(next, delayed_card);
                 emit_card_moved(
                     ctx, player, next, delayed_card, Zone::Judge, Zone::Judge);

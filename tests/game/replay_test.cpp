@@ -196,6 +196,10 @@ TEST_CASE("replay: golden fingerprints pin the rule semantics")
     //
     // 五谷亮牌洗回口径统一后的核对（新旧日志逐行 diff 核对过）：两组固定种子
     // 对局均未在五谷亮牌途中遇摸牌堆空，洗回分支未触发，故行数与指纹不变。
+    //
+    // 闪电移送跳过判定区同名者后的核对（新旧日志逐行 diff 核对过）：两组固定
+    // 种子对局均未进入「闪电判定失败且下家判定区已有闪电」的触发态，移送目标
+    // 与修复前相同，故行数与指纹不变。
     const auto two = run_game(1, 2);
     CHECK(two.size() == 79);
     CHECK(fingerprint(two) == 12977149775915994001ULL);

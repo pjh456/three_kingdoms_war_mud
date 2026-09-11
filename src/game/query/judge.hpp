@@ -29,6 +29,23 @@ namespace tkw
         }
 
         /**
+         * @brief 失败闪电类延时锦囊的移送目标：从下家起按座位序找判定区无同名
+         *        延时锦囊的存活者（环绕，当前角色排最后）。
+         * @return 找不到时为空串（调用方须弃置该牌）。
+         * @note 判定区不可叠加同名延时锦囊；死亡者已从容器移除故天然跳过。
+         */
+        inline std::string next_delayed_target(
+            const GameContext &ctx, const std::string &player,
+            const std::string &def_id)
+        {
+            const auto order = ctx.entities->order_from(ctx.entities->next(player));
+            for (const auto &id : order)
+                if (!has_same_delayed(ctx, id, def_id))
+                    return id;
+            return {};
+        }
+
+        /**
          * @brief 目标是否在该延时锦囊 judge.scope 的合法集合内（纯谓词）。
          * @note scope=Self → 目标须为 player 本人；否则 → 目标须为他人。
          */
