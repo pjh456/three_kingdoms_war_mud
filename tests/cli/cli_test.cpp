@@ -201,15 +201,15 @@ TEST_CASE("cli: session commands report missing session")
 
     auto step = repl.run("step");
     CHECK_FALSE(step.ok);
-    CHECK(step.error == "没有进行中的对局");
+    CHECK(step.error == "没有进行中的对局（先运行 new 开局，或进入 tkw repl）");
 
     auto run = repl.run("run");
     CHECK_FALSE(run.ok);
-    CHECK(run.error == "没有进行中的对局");
+    CHECK(run.error == "没有进行中的对局（先运行 new 开局，或进入 tkw repl）");
 
     auto save = repl.run("save /tmp/tkw-cli-missing-session.json");
     CHECK_FALSE(save.ok);
-    CHECK(save.error == "没有进行中的对局");
+    CHECK(save.error == "没有进行中的对局（先运行 new 开局，或进入 tkw repl）");
 
     auto status = repl.run("status");
     CHECK(status.ok);

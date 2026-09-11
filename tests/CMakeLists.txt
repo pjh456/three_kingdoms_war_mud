@@ -125,7 +125,7 @@ set_tests_properties(cli_deal_option_after_positional PROPERTIES
 # 执行错误（无会话）应只打印纯中文消息并退出 1，不得带解析错误前缀（中文或英文）。
 add_test(NAME cli_step_without_session_plain_error
          COMMAND sh -c
-                 "out=$($<TARGET_FILE:tkw> step 2>&1); rc=$?; [ \"$out\" = 没有进行中的对局 ] && [ $rc -eq 1 ]")
+                 "out=$($<TARGET_FILE:tkw> step 2>&1); rc=$?; [ \"$out\" = \"没有进行中的对局（先运行 new 开局，或进入 tkw repl）\" ] && [ $rc -eq 1 ]")
 set_tests_properties(cli_step_without_session_plain_error PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 

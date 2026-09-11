@@ -235,6 +235,17 @@ namespace tkw
             }
 
             /**
+             * @brief 无进行中会话 → 用户可见错误文案（step/run/save 共用单点）。
+             * @return 「没有进行中的对局（先运行 new 开局，或进入 tkw repl）」。
+             * @note new/load 会建立会话，故引导指向新开局与 repl 两条入口；
+             *       退出码由调用方维持 1。
+             */
+            inline const char *no_active_game_error()
+            {
+                return "没有进行中的对局（先运行 new 开局，或进入 tkw repl）";
+            }
+
+            /**
              * @brief 校验真人座位：必须是对局中存在的实体且互不重复；空串表示通过。
              * @return 查无此 id 时返回「真人座位不存在: <id>（可用座位: ...）」；
              *         重复时返回「真人座位重复: <id>（每个座位只能指定一次）」；
@@ -430,7 +441,7 @@ namespace tkw
             inline CliResult<void> cmd_step(Session &s, bool verbose)
             {
                 if (!s.active || !s.game)
-                    return CliFailure{CliError("没有进行中的对局")};
+                    return CliFailure{CliError(no_active_game_error())};
                 auto log = subscribe_event_log(*s.game, verbose);
                 auto stats_handles = subscribe_stats(*s.game, s.stats);
                 auto ai = make_decision_source(s.humans, s.ai);
@@ -468,7 +479,7 @@ namespace tkw
             inline CliResult<void> cmd_run(Session &s, bool verbose)
             {
                 if (!s.active || !s.game)
-                    return CliFailure{CliError("没有进行中的对局")};
+                    return CliFailure{CliError(no_active_game_error())};
                 auto log = subscribe_event_log(*s.game, verbose);
                 auto stats_handles = subscribe_stats(*s.game, s.stats);
                 auto ai = make_decision_source(s.humans, s.ai);
@@ -501,7 +512,7 @@ namespace tkw
                 const std::filesystem::path &file, Session &s)
             {
                 if (!s.active || !s.game)
-                    return CliFailure{CliError("没有进行中的对局")};
+                    return CliFailure{CliError(no_active_game_error())};
                 tkw::save::SessionMeta meta;
                 meta.ai = ai_level_name(s.ai);
                 meta.stats = s.stats;
