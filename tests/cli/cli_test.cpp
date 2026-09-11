@@ -120,6 +120,36 @@ TEST_CASE("cli: new/step/status/run advance the session")
     CHECK(repl.session.state.turns >= 2);
 }
 
+TEST_CASE("cli: repl history option wires FileHistory and warns on missing dir")
+{
+    std::ostringstream err;
+
+    // 空路径：交回框架默认（内存），不产生告警。
+    CHECK(tkw::cli::detail::make_repl_history("", err) == nullptr);
+    CHECK(err.str().empty());
+
+    // 可写路径：构造 FileHistory，连续重复折叠，析构落盘。
+    const std::filesystem::path file = temp_save("tkw-cli-history.txt");
+    std::error_code ec;
+    std::filesystem::remove(file, ec);
+    {
+        auto hist = tkw::cli::detail::make_repl_history(file, err);
+        REQUIRE(hist != nullptr);
+        hist->push("alpha");
+        hist->push("alpha");
+        CHECK(hist->size() == 1);
+    }
+    CHECK(err.str().empty());
+    CHECK(tkw::io::exists(file));
+    std::filesystem::remove(file, ec);
+
+    // 父目录缺失：显式告警并回落内存。
+    std::ostringstream missing;
+    CHECK(tkw::cli::detail::make_repl_history("/nonexistent-dir/x", missing) ==
+          nullptr);
+    CHECK(missing.str().find("命令历史目录不存在") != std::string::npos);
+}
+
 TEST_CASE("cli: inline --verbose enables event log for that command")
 {
     Repl repl;

@@ -21,6 +21,7 @@
 #include <vector>
 
 #include <pjh_cli.hpp>
+#include <pjh_cli/console/file_history.hpp>
 #include <pjh_cli/console/help_navigator.hpp>
 #include <pjh_cli/console/query_result.hpp>
 
@@ -86,6 +87,9 @@ namespace tkw
                 opt.autosave =
                     ctx.get_or<std::filesystem::path, fixed_string("autosave")>(
                         base.autosave);
+                opt.history =
+                    ctx.get_or<std::filesystem::path, fixed_string("history")>(
+                        base.history);
                 if (ctx.get_or<bool, fixed_string("no-human")>(false))
                     opt.humans.clear();
                 else if (ctx.has<fixed_string("human")>())
@@ -100,7 +104,34 @@ namespace tkw
             }
 
             /**
-             * @brief 在命令上声明标量公共选项（牌堆/人数/手牌/种子/日志/存档/AI 难度）。
+             * @brief 按选项构造 REPL 历史后端：空路径交回框架默认（内存）。
+             * @param path 历史文件路径；空 = 不持久化。
+             * @param err  告警输出流；父目录缺失时写一行中文告警。
+             * @return FileHistory（父目录存在）或 nullptr（交 InteractiveConsole
+             *         回落 InMemoryHistory）。
+             * @note FileHistory 路径逐字使用、不建父目录，父目录缺失时写入会
+             *       静默失败，故此处预检并显式告警，避免用户误以为已持久化。
+             */
+            inline std::unique_ptr<pjh::cli::IHistory> make_repl_history(
+                const std::filesystem::path &path, std::ostream &err)
+            {
+                if (path.empty())
+                    return nullptr;
+
+                // 相对路径按进程 CWD 解析；裸文件名无父路径，跳过预检（CWD 必然存在）。
+                if (path.has_parent_path() &&
+                    !tkw::io::exists(path.parent_path()))
+                {
+                    err << "命令历史目录不存在，本次仅内存记录: " << path.string()
+                        << "\n";
+                    return nullptr;
+                }
+
+                return std::make_unique<pjh::cli::FileHistory>(path);
+            }
+
+            /**
+             * @brief 在命令上声明标量公共选项（牌堆/人数/手牌/种子/日志/存档/历史/AI 难度）。
              * @param cmd   目标命令：根命令或会读取这些选项的 leaf。
              * @param rules 玩家数上下限来源。
              * @note pjh_cli 的选项查找沿父链（名与值都取最近声明处），故 leaf 不重
@@ -140,6 +171,10 @@ namespace tkw
                 cmd.option<fixed_string("autosave")>(
                        "--autosave",
                        "REPL 退出时自动存档路径（默认 tkw-autosave.json，空串关闭）")
+                    .path();
+                cmd.option<fixed_string("history")>(
+                       "--history",
+                       "REPL 命令历史文件路径（默认不持久化，仅本次会话；父目录须已存在）")
                     .path();
                 cmd.option<fixed_string("ai")>(
                        "--ai",
@@ -986,6 +1021,7 @@ namespace tkw
                 [&app, &session](ParseContext &ctx) -> CliResult<void>
                 {
                     session.base = detail::options_from(ctx);
+                    const Options &opt = session.base;
                     // 进入 REPL 前打印引导：命令列表与退出方式在提示符处不可见。
                     std::cout << "输入 ? 查看命令，help <命令> 看用法，quit 退出\n";
                     InteractiveConsole console(
@@ -993,10 +1029,10 @@ namespace tkw
                         [&app](const pjh::cli::QueryResult &r)
                         { return render_query_zh(app, r); },
                         [](const pjh::cli::HelpNavigationResult &r)
-                        { return render_help_nav_zh(r); });
+                        { return render_help_nav_zh(r); },
+                        detail::make_repl_history(opt.history, std::cerr));
                     console.set_error_formatter(render_error_zh);
                     console.run();
-                    const Options &opt = session.base;
                     if (session.active && session.game && !opt.autosave.empty())
                     {
                         tkw::save::SessionMeta meta;

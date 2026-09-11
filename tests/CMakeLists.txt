@@ -236,7 +236,7 @@ set_tests_properties(cli_help_subcommand_zh PROPERTIES
 # 帮助选项描述标注默认值（纯文字，零解析行为）。断言取描述子串，避开全/半角括号差异。
 add_test(NAME cli_help_option_defaults_zh
          COMMAND sh -c
-                 "out=$($<TARGET_FILE:tkw> new --help); printf '%s' \"$out\" | grep -q '默认 4' && printf '%s' \"$out\" | grep -q '默认 42' && printf '%s' \"$out\" | grep -q '默认 resources' && printf '%s' \"$out\" | grep -q '默认 simple' && printf '%s' \"$out\" | grep -q 'tkw-autosave.json'")
+                 "out=$($<TARGET_FILE:tkw> new --help); printf '%s' \"$out\" | grep -q '默认 4' && printf '%s' \"$out\" | grep -q '默认 42' && printf '%s' \"$out\" | grep -q '默认 resources' && printf '%s' \"$out\" | grep -q '默认 simple' && printf '%s' \"$out\" | grep -q 'tkw-autosave.json' && printf '%s' \"$out\" | grep -q -- '--history'")
 set_tests_properties(cli_help_option_defaults_zh PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
@@ -345,6 +345,24 @@ add_test(NAME cli_autosave_failure_message
          COMMAND sh -c
                  "out=$(printf 'new --players 2 --seed 1\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave /nonexistent-dir/x.json 2>&1); printf '%s' \"$out\" | grep -q '自动存档失败'")
 set_tests_properties(cli_autosave_failure_message PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# --history 跨进程持久化：第二进程载入首进程写入的 st，因与末条重复被折叠，
+# 文件仍只有一行 st（未载入则追加为两行）。--autosave '' 隔离源码树。
+add_test(NAME cli_repl_history_persist
+         COMMAND sh -c
+                 "f=${CMAKE_CURRENT_BINARY_DIR}/tkw-history-e2e.txt; rm -f $f; \
+                  printf 'st\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' --history $f >/dev/null 2>&1; \
+                  printf 'st\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' --history $f >/dev/null 2>&1; \
+                  n=$(grep -c '^st$' $f); rm -f $f; [ \"$n\" -eq 1 ]")
+set_tests_properties(cli_repl_history_persist PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# --history 父目录缺失：显式告警并回落内存，不崩。
+add_test(NAME cli_repl_history_missing_dir_warns
+         COMMAND sh -c
+                 "out=$(printf 'quit\\n' | $<TARGET_FILE:tkw> repl --autosave '' --history /nonexistent-dir/x 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '命令历史目录不存在' && [ $rc -eq 0 ]")
+set_tests_properties(cli_repl_history_missing_dir_warns PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # 解析错误保留中文统一前缀并退出 2（执行错误走另一路径，退出 1）。

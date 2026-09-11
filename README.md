@@ -63,6 +63,7 @@ tkw --human P0 repl   # P0 真人参与，REPL 交互模式
 | `-s, --seed <n>` | 随机种子（默认 42） |
 | `-v, --verbose` | 打印事件日志（摸/打/弃牌、移牌、伤害、体力、阵亡） |
 | `--autosave <path>` | REPL 退出时自动存档路径（空串关闭，默认 `tkw-autosave.json`） |
+| `--history <path>` | REPL 命令历史文件（默认不持久化，仅本次会话；父目录须已存在） |
 | `--human <seat>` | 真人座位（可重复：`--human P0 --human P2`；存档不保存，读档后需重新指定） |
 | `--no-human` | 清空真人座位（REPL 内覆盖启动/会话带入的 `--human`；与 `--human` 同给时清空优先） |
 | `--ai <simple\|aggressive>` | AI 难度（默认 `simple` 贪心；`aggressive` 伤害/多目标先行） |
@@ -71,7 +72,7 @@ tkw --human P0 repl   # P0 真人参与，REPL 交互模式
 只对建局/载入类命令（裸 `tkw`/`deal`/`new`/`load`/`repl`/`simulate`）实际生效；`cards`/`audit`
 只读 `--deck`；`step`/`run`/`status`/`save` 只读取其中的 `--verbose`（`step`/`run`）
 或全不读取（`status`/`save`）。`--human` 只在运行真人参与对局的命令生效，`audit`/`cards`/
-`simulate` 会明确拒绝。
+`simulate` 会明确拒绝；`--autosave`/`--history` 只在 `repl` 生效。
 
 会话命令（`new`/`step`/`run`/`status`/`save`/`load`）共享同一进程内的会话，通常在
 `tkw repl` 内逐条输入使用；在 REPL 外单独执行不会保留会话（单独 `tkw new` 只开一局
@@ -97,6 +98,9 @@ tkw repl
 - REPL 退出时若有进行中的会话，自动存档到当前目录的 `tkw-autosave.json`
   （`--autosave <path>` 可改路径，空串关闭）；`--human` 设置不存入存档，
   读档后需重新指定。
+- 命令历史默认仅本次会话；`--history <path>` 指定文件后跨进程保留，重启后
+  可用上下方向键召回。文件为 UTF-8 一行一条，相对路径按当前工作目录解析、`~` 不展开，
+  父目录须已存在（缺失时打印告警并回落内存）；写失败不阻塞 REPL。
 
 ## 自定义牌表
 

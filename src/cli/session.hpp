@@ -41,6 +41,7 @@ namespace tkw
             std::uint32_t seed = 42;
             bool verbose = false;
             std::filesystem::path autosave = "tkw-autosave.json";
+            std::filesystem::path history; /**< REPL 命令历史文件；空 = 仅内存（opt-in） */
             std::vector<std::string> humans; /**< 真人座位 id（可重复选项累积） */
             AiLevel ai = AiLevel::Simple;    /**< AI 难度档（默认 simple，零行为变化） */
         };
