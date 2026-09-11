@@ -64,7 +64,14 @@ tkw --human P0 repl   # P0 真人参与，REPL 交互模式
 | `-v, --verbose` | 打印事件日志（摸/打/弃牌、伤害、体力、阵亡） |
 | `--autosave <path>` | REPL 退出时自动存档路径（空串关闭，默认 `tkw-autosave.json`） |
 | `--human <seat>` | 真人座位（可重复：`--human P0 --human P2`；存档不保存，读档后需重新指定） |
+| `--no-human` | 清空真人座位（REPL 内覆盖启动/会话带入的 `--human`；与 `--human` 同给时清空优先） |
 | `--ai <simple\|aggressive>` | AI 难度（默认 `simple` 贪心；`aggressive` 伤害/多目标先行） |
+
+上表的选项各命令都声明并接受，但生效面不同：`--deck`/`--players`/`--hand`/`--seed`/`--ai`
+只对建局/载入类命令（裸 `tkw`/`deal`/`new`/`load`/`repl`/`audit`/`simulate`，`cards` 只读
+`--deck`）实际生效；`step`/`run`/`status`/`save` 只读取其中的 `--verbose`（`step`/`run`）
+或全不读取（`status`/`save`）。`--human` 只在运行真人参与对局的命令生效，`audit`/`cards`/
+`simulate` 会明确拒绝。
 
 会话命令（`new`/`step`/`run`/`status`/`save`/`load`）共享同一进程内的会话，通常在
 `tkw repl` 内逐条输入使用；在 REPL 外单独执行不会保留会话（单独 `tkw new` 只开一局
@@ -84,7 +91,9 @@ tkw repl
   `run` 跑到结束 → `status` 看状态 → `save s.json` 存档 / `load s.json` 续玩 →
   `quit` 退出；
 - 真人参与：`tkw --human P0 repl`，轮到你时按提示输入 `play <序号>`（出牌）或
-  `pass`（不出），弃牌阶段输入 `discard <序号> ...`；
+  `pass`（不出），弃牌阶段输入 `discard <序号> ...`；REPL 内可用
+  `new --no-human` 清空启动选项带入的真人座位（同命令给 `--human` 时清空优先）。
+  `--human` 只对运行对局的命令有效，`audit`/`cards`/`simulate` 会拒绝并提示；
 - REPL 退出时若有进行中的会话，自动存档到当前目录的 `tkw-autosave.json`
   （`--autosave <path>` 可改路径，空串关闭）；`--human` 设置不存入存档，
   读档后需重新指定。
@@ -132,6 +141,10 @@ tkw repl
 - **牌表指纹校验**：存档记录保存时牌表语义字段的 FNV-1a 指纹；加载时与当前
   `--deck` 牌表比对，牌表已改动则拒绝加载：
   `存档加载失败 (kind=2): deck.hash`（DeckMismatch）。
+- **AI 档与统计入档**：存档记录会话的 AI 档与对局统计（伤害/治疗/击杀/最近伤害
+  来源/阵亡），读档后自动恢复；`load <file> --ai <档>` 显式覆盖存档 AI 档。旧档
+  无这些字段时回落命令行取值与空统计，仍可加载。`--human` 与 `--verbose` 仍不
+  入档（读档命令行的 `--verbose` 自行控制日志）。
 - **自动存档**：REPL 退出时若有进行中的会话，自动存档到当前目录
   `tkw-autosave.json`；`--autosave <path>` 改路径，空串关闭。
 

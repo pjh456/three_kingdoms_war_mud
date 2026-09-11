@@ -362,3 +362,37 @@ add_test(NAME cli_simulate_bad_deck
 set_tests_properties(cli_simulate_bad_deck PROPERTIES
     WILL_FAIL TRUE
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# audit/simulate 不支持真人：--human 硬拒绝为纯中文错误并退出 1。
+add_test(NAME cli_audit_rejects_human
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> --human P0 audit 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '不支持 --human' && [ $rc -eq 1 ]")
+set_tests_properties(cli_audit_rejects_human PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_test(NAME cli_simulate_rejects_human
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> simulate 1 2 --human P0 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '不支持 --human' && [ $rc -eq 1 ]")
+set_tests_properties(cli_simulate_rejects_human PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# --no-human 清空启动 --human 带入的真人座位（status 行显示「真人座位: 无」）。
+add_test(NAME cli_new_no_human_clears
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> --human P0 new --no-human --players 2 --seed 1 2>&1); printf '%s' \"$out\" | grep -q '真人座位: 无'")
+set_tests_properties(cli_new_no_human_clears PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# step 自身声明公共选项：本命令「选项」段（在「公共选项」之前）应含 --players。
+add_test(NAME cli_help_step_common_options
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> step --help 2>&1); printf '%s' \"$out\" | awk '/^选项:/{f=1} /^公共选项:/{f=0} f && /--players/{x=1} END{exit !x}'")
+set_tests_properties(cli_help_step_common_options PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 存档保留 AI 档与统计：load 后 status 显示存档 AI 档（此处 aggressive）。
+add_test(NAME cli_save_load_ai_roundtrip
+         COMMAND sh -c
+                 "out=$(printf 'new --players 2 --seed 1 --ai aggressive\\nstep\\nsave ${CMAKE_CURRENT_BINARY_DIR}/tkw-ai-roundtrip.json\\nnew --players 2 --seed 1\\nload ${CMAKE_CURRENT_BINARY_DIR}/tkw-ai-roundtrip.json\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); rc=$?; rm -f ${CMAKE_CURRENT_BINARY_DIR}/tkw-ai-roundtrip.json; printf '%s' \"$out\" | grep -q 'AI 难度: aggressive' && [ $rc -eq 0 ]")
+set_tests_properties(cli_save_load_ai_roundtrip PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

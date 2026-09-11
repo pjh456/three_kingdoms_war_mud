@@ -14,6 +14,7 @@
 #include "io/file.hpp"
 #include "save/error.hpp"
 #include "save/reader.hpp"
+#include "save/session_meta.hpp"
 #include "save/writer.hpp"
 #include "util/rng.hpp"
 
@@ -158,6 +159,87 @@ TEST_CASE("save: version mismatch is rejected")
     auto r = save::read(bad, *b, sb);
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err().kind == save::SaveErrorKind::VersionMismatch);
+}
+
+TEST_CASE("save: session meta round-trips ai and stats")
+{
+    auto a = make_game(42);
+    auto ctxa = a->context();
+    GameSession sa;
+    SimpleAI ai;
+    REQUIRE(start_session(ctxa, sa, "P0").is_ok());
+    for (int i = 0; i < 4 && !session_over(ctxa); ++i)
+        REQUIRE(step_session(ctxa, ai, sa).is_ok());
+
+    save::SessionMeta meta;
+    meta.ai = "aggressive";
+    meta.stats.damage_dealt["P0"] = 5;
+    meta.stats.healing["P1"] = 2;
+    meta.stats.kills["P0"] = 1;
+    meta.stats.last_hit_source["P1"] = "P0";
+    meta.stats.died.insert("P1");
+
+    const std::string text = save::write(*a, sa, "deck", meta);
+    CHECK(text.find("\"ai\":\"aggressive\"") != std::string::npos);
+    CHECK(text.find("\"stats\":") != std::string::npos);
+    // 规范化：同状态 + 同 meta 二次写出逐字节一致（std::map/set 有序）
+    CHECK(save::write(*a, sa, "deck", meta) == text);
+
+    auto b = make_game(999);
+    GameSession sb;
+    save::SessionMeta back;
+    REQUIRE(save::read(text, *b, sb, &back).is_ok());
+    CHECK(back.ai == "aggressive");
+    CHECK(back.stats.damage_dealt == meta.stats.damage_dealt);
+    CHECK(back.stats.healing == meta.stats.healing);
+    CHECK(back.stats.kills == meta.stats.kills);
+    CHECK(back.stats.last_hit_source == meta.stats.last_hit_source);
+    CHECK(back.stats.died == meta.stats.died);
+    // 读档后再存（无 meta 参数）不残留元数据，与默认 meta 原文一致
+    CHECK(save::write(*b, sb, "deck") == save::write(*a, sa, "deck"));
+}
+
+TEST_CASE("save: legacy save without session meta loads defaults")
+{
+    auto a = make_game(42);
+    GameSession sa;
+    const std::string text = save::write(*a, sa, "deck");
+    // 默认元数据不写 ai/stats，等价于旧档
+    REQUIRE(text.find("\"ai\"") == std::string::npos);
+    REQUIRE(text.find("\"stats\"") == std::string::npos);
+
+    auto b = make_game(999);
+    GameSession sb;
+    save::SessionMeta meta;
+    meta.ai = "placeholder";
+    meta.stats.kills["P9"] = 3;
+    REQUIRE(save::read(text, *b, sb, &meta).is_ok());
+    // 旧档缺失字段回落默认；出参被重置而非保留调用前数值
+    CHECK(meta.ai.empty());
+    CHECK(meta.stats.kills.empty());
+    CHECK(meta.stats.damage_dealt.empty());
+    // 旧档无元数据读回后仍规范化为原文
+    save::SessionMeta empty;
+    CHECK(save::write(*b, sb, "deck", empty) == text);
+}
+
+TEST_CASE("save: session ai wrong type is a structure error")
+{
+    auto a = make_game(42);
+    GameSession sa;
+    save::SessionMeta meta;
+    meta.ai = "simple";
+    std::string text = save::write(*a, sa, "deck", meta);
+    const auto pos = text.find("\"ai\":\"simple\"");
+    REQUIRE(pos != std::string::npos);
+    text.replace(pos, 13, "\"ai\":12345");
+
+    auto b = make_game(1);
+    GameSession sb;
+    auto r = save::read(text, *b, sb);
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err().kind == save::SaveErrorKind::StructureError);
+    CHECK(r.unwrap_err().detail.find("session.ai") != std::string::npos);
 }
 
 TEST_CASE("save: malformed JSON is rejected")

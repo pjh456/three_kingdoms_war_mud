@@ -9,6 +9,8 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -23,6 +25,7 @@
 #include "game/core/rules.hpp"
 #include "game/flow/table.hpp"
 #include "save/format.hpp"
+#include "save/session_meta.hpp"
 
 namespace tkw
 {
@@ -166,10 +169,74 @@ namespace tkw
             return out;
         }
 
-        /** @brief 序列化整局（含会话进度）到 JSON 文本。 */
+        namespace detail
+        {
+            /** 序列化 string→int 映射；std::map 迭代有序，输出确定。 */
+            inline std::string int_map_json(const std::map<std::string, int> &m)
+            {
+                std::string out = "{";
+                bool first = true;
+                for (const auto &[k, v] : m)
+                {
+                    if (!first)
+                        out += ",";
+                    first = false;
+                    out += jstr(k) + ":" + std::to_string(v);
+                }
+                out += "}";
+                return out;
+            }
+
+            /** 序列化 string→string 映射；std::map 迭代有序，输出确定。 */
+            inline std::string str_map_json(
+                const std::map<std::string, std::string> &m)
+            {
+                std::string out = "{";
+                bool first = true;
+                for (const auto &[k, v] : m)
+                {
+                    if (!first)
+                        out += ",";
+                    first = false;
+                    out += jstr(k) + ":" + jstr(v);
+                }
+                out += "}";
+                return out;
+            }
+
+            /** 序列化 string 集合为数组；std::set 迭代有序，输出确定。 */
+            inline std::string str_set_json(const std::set<std::string> &s)
+            {
+                std::string out = "[";
+                bool first = true;
+                for (const auto &v : s)
+                {
+                    if (!first)
+                        out += ",";
+                    first = false;
+                    out += jstr(v);
+                }
+                out += "]";
+                return out;
+            }
+
+            /** 统计是否有任一非空字段：全空表示未写，序列化时省略以保持规范往返。 */
+            inline bool has_any_stats(const BattleStats &stats)
+            {
+                return !stats.damage_dealt.empty() || !stats.healing.empty() ||
+                       !stats.kills.empty() || !stats.last_hit_source.empty() ||
+                       !stats.died.empty();
+            }
+        }
+
+        /**
+         * @brief 序列化整局（含会话进度与可选元数据）到 JSON 文本。
+         * @param meta 会话元数据；ai 空、stats 全空时不写对应字段，保证默认
+         *             元数据的规范化往返结果不因新增字段而变化。
+         */
         inline std::string write(
             const game::Game &g, const game::GameSession &session,
-            const std::string &deck_name)
+            const std::string &deck_name, const SessionMeta &meta = {})
         {
             const auto &r = g.rules;
             const auto snap = g.cards.snapshot();
@@ -194,7 +261,19 @@ namespace tkw
                << "}";
             os << ",\"session\":{\"current\":" << jstr(session.current)
                << ",\"turns\":" << session.turns
-               << ",\"started\":" << (session.started ? "true" : "false") << "}";
+               << ",\"started\":" << (session.started ? "true" : "false");
+            if (!meta.ai.empty())
+                os << ",\"ai\":" << jstr(meta.ai);
+            if (detail::has_any_stats(meta.stats))
+                os << ",\"stats\":{"
+                   << "\"damage_dealt\":"
+                   << detail::int_map_json(meta.stats.damage_dealt)
+                   << ",\"healing\":" << detail::int_map_json(meta.stats.healing)
+                   << ",\"kills\":" << detail::int_map_json(meta.stats.kills)
+                   << ",\"last_hit_source\":"
+                   << detail::str_map_json(meta.stats.last_hit_source)
+                   << ",\"died\":" << detail::str_set_json(meta.stats.died) << "}";
+            os << "}";
             os << ",\"cards\":{\"instance_seq\":" << snap.instance_seq
                << ",\"draw\":" << cards_json(snap.draw)
                << ",\"discard\":" << cards_json(snap.discard);

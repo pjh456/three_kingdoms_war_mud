@@ -399,3 +399,116 @@ TEST_CASE("cli: all-dead session reports the mutual destruction draw label")
     CHECK(ran.out.find("胜者: 平局（同归于尽），回合数: 0") != std::string::npos);
     CHECK(ran.out.find("胜者: ，") == std::string::npos);
 }
+
+TEST_CASE("cli: audit/cards/simulate reject --human")
+{
+    Repl repl;
+
+    // 三命令都不运行真人参与的对局：给出 --human 即硬拒绝（纯中文错误）。
+    for (const std::string &line :
+         {"audit --human P0", "cards --human P0", "simulate 1 --human P0"})
+    {
+        auto r = repl.run(line);
+        CHECK_FALSE(r.ok);
+        CHECK(r.error.find("不支持 --human") != std::string::npos);
+    }
+
+    // 不带 --human 时行为不变（一次性命令不继承 session.base，显式给牌表目录）
+    const std::string deck = TKW_TEST_RESOURCE_DIR;
+    CHECK(repl.run("audit --deck " + deck).ok);
+    CHECK(repl.run("cards --deck " + deck).ok);
+    CHECK(repl.run("simulate 1 2 --deck " + deck).ok);
+}
+
+TEST_CASE("cli: step/run/status/save help lists common options")
+{
+    Repl repl;
+
+    for (const std::string &cmd : {"step", "run", "status", "save"})
+    {
+        auto help = repl.run(cmd + " --help");
+        CHECK(help.ok);
+        // 本命令「选项」段（位于继承段「公共选项」之前）应含 --players：
+        // 用法行也列选项，故从「选项:」处起找，确保命中本命令选项段。
+        const auto opt_at = help.console.find("选项:");
+        const auto players_at =
+            opt_at == std::string::npos
+                ? std::string::npos
+                : help.console.find("--players", opt_at);
+        const auto inherited_at = help.console.find("公共选项:");
+        CHECK(opt_at != std::string::npos);
+        CHECK(players_at != std::string::npos);
+        CHECK(inherited_at != std::string::npos);
+        CHECK(players_at < inherited_at);
+    }
+}
+
+TEST_CASE("cli: --no-human clears human seats")
+{
+    Repl repl;
+
+    auto with_human = repl.run("new --human P0 --players 2 --seed 1");
+    CHECK(with_human.ok);
+    REQUIRE(repl.session.humans.size() == 1);
+    CHECK(repl.session.humans[0] == "P0");
+
+    // 启动选项带入的座位（REPL session.base）也能被行内 --no-human 清空
+    repl.session.base.humans = {"P0"};
+    auto cleared = repl.run("new --no-human --players 2 --seed 1");
+    CHECK(cleared.ok);
+    CHECK(repl.session.humans.empty());
+
+    // 同一命令 --human 与 --no-human 并存：清空优先
+    auto both = repl.run("new --human P0 --no-human --players 2 --seed 1");
+    CHECK(both.ok);
+    CHECK(repl.session.humans.empty());
+}
+
+TEST_CASE("cli: status shows ai level")
+{
+    Repl repl;
+
+    auto created = repl.run("new --players 2 --seed 1 --ai aggressive");
+    CHECK(created.ok);
+    CHECK(created.out.find("AI 难度: aggressive") != std::string::npos);
+}
+
+TEST_CASE("cli: load restores ai and stats")
+{
+    Repl repl;
+    const std::filesystem::path file = temp_save("tkw-cli-meta.json");
+    std::error_code ec;
+    std::filesystem::remove(file, ec);
+
+    REQUIRE(repl.run("new --players 2 --seed 1 --ai aggressive").ok);
+    REQUIRE(repl.run("run").ok);
+    const tkw::cli::BattleStats saved_stats = repl.session.stats;
+    // 完整跑局至少产生击杀/伤害/阵亡之一，否则该用例观测不到恢复效果
+    const bool stats_present =
+        !saved_stats.damage_dealt.empty() || !saved_stats.healing.empty() ||
+        !saved_stats.kills.empty() || !saved_stats.last_hit_source.empty() ||
+        !saved_stats.died.empty();
+    REQUIRE(stats_present);
+    REQUIRE(repl.run("save " + file.string()).ok);
+
+    // 重置为 simple 且统计清空
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+    CHECK(repl.session.ai == tkw::cli::AiLevel::Simple);
+    CHECK(repl.session.stats.damage_dealt.empty());
+
+    auto loaded = repl.run("load " + file.string());
+    CHECK(loaded.ok);
+    CHECK(repl.session.ai == tkw::cli::AiLevel::Aggressive);
+    CHECK(repl.session.stats.damage_dealt == saved_stats.damage_dealt);
+    CHECK(repl.session.stats.healing == saved_stats.healing);
+    CHECK(repl.session.stats.kills == saved_stats.kills);
+    CHECK(repl.session.stats.last_hit_source == saved_stats.last_hit_source);
+    CHECK(repl.session.stats.died == saved_stats.died);
+
+    // 显式 --ai 覆盖存档 AI 档
+    auto overridden = repl.run("load " + file.string() + " --ai simple");
+    CHECK(overridden.ok);
+    CHECK(repl.session.ai == tkw::cli::AiLevel::Simple);
+
+    std::filesystem::remove(file, ec);
+}

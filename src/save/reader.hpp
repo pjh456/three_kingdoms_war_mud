@@ -8,9 +8,11 @@
 #define INCLUDE_TKW_SAVE_READER_HPP
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <pjh_json/document.hpp>
 #include <pjh_json/json.hpp>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -24,6 +26,7 @@
 #include "game/flow/table.hpp"
 #include "save/error.hpp"
 #include "save/format.hpp"
+#include "save/session_meta.hpp"
 #include "save/writer.hpp"
 #include "util/rng.hpp"
 
@@ -126,15 +129,67 @@ namespace tkw
                 }
                 return true;
             }
+
+            inline bool read_int_map(
+                const json::Json &j, std::map<std::string, int> &out)
+            {
+                const auto *o = j.try_as_object();
+                if (!o)
+                    return false;
+                for (std::string_view k : o->keys())
+                {
+                    auto v = (*o)[k].try_as_int();
+                    if (!v)
+                        return false;
+                    out[std::string(k)] = static_cast<int>(*v);
+                }
+                return true;
+            }
+
+            inline bool read_str_map(
+                const json::Json &j, std::map<std::string, std::string> &out)
+            {
+                const auto *o = j.try_as_object();
+                if (!o)
+                    return false;
+                for (std::string_view k : o->keys())
+                {
+                    auto v = (*o)[k].try_as_string();
+                    if (!v)
+                        return false;
+                    out[std::string(k)] = std::string(*v);
+                }
+                return true;
+            }
+
+            inline bool read_str_set(const json::Json &j, std::set<std::string> &out)
+            {
+                const auto *arr = j.try_as_array();
+                if (!arr)
+                    return false;
+                for (std::size_t i = 0; i < arr->size(); ++i)
+                {
+                    auto v = (*arr)[i].try_as_string();
+                    if (!v)
+                        return false;
+                    out.insert(std::string(*v));
+                }
+                return true;
+            }
         }
 
         /**
          * @brief 从存档文本恢复：填充 g 的 cards/entities/rules/rng 与 session。
-         * @param g 已加载好 catalog 的对局运行时（catalog 不参与序列化）。
+         * @param g        已加载好 catalog 的对局运行时（catalog 不参与序列化）。
+         * @param session  接收会话进度。
+         * @param meta     非空时接收可选会话元数据；解析失败不写入。
          * @return Ok 或 Err(SaveError)；牌表指纹不符时拒绝。
+         * @note 旧档缺失 ai/stats 字段时回落默认，不拒绝；全部校验通过后才落子，
+         *       出参 meta 与目标状态同批赋值，早退不污染。
          */
         inline SaveResult<void> read(
-            std::string_view text, game::Game &g, game::GameSession &session)
+            std::string_view text, game::Game &g, game::GameSession &session,
+            SessionMeta *meta = nullptr)
         {
             namespace json = pjh::json;
 
@@ -192,14 +247,44 @@ namespace tkw
             if (!detail::read_str((*obj)["rng"].as_object(), "data", rng_data))
                 return detail::fail(SaveErrorKind::StructureError, "rng.data");
 
-            // session
+            // session（进度 + 可选元数据：ai / stats）
             if (!obj->contains("session") || !(*obj)["session"].try_as_object())
                 return detail::fail(SaveErrorKind::StructureError, "session");
+            const auto &sess = (*obj)["session"].as_object();
             game::GameSession s;
-            if (!detail::read_str((*obj)["session"].as_object(), "current", s.current) ||
-                !detail::read_int((*obj)["session"].as_object(), "turns", s.turns) ||
-                !detail::read_bool((*obj)["session"].as_object(), "started", s.started))
+            if (!detail::read_str(sess, "current", s.current) ||
+                !detail::read_int(sess, "turns", s.turns) ||
+                !detail::read_bool(sess, "started", s.started))
                 return detail::fail(SaveErrorKind::StructureError, "session");
+            SessionMeta parsed;
+            if (sess.contains("ai"))
+            {
+                auto ai = sess["ai"].try_as_string();
+                if (!ai)
+                    return detail::fail(SaveErrorKind::StructureError, "session.ai");
+                parsed.ai = std::string(*ai);
+            }
+            if (sess.contains("stats"))
+            {
+                const auto *st = sess["stats"].try_as_object();
+                if (!st)
+                    return detail::fail(
+                        SaveErrorKind::StructureError, "session.stats");
+                if ((st->contains("damage_dealt") &&
+                     !detail::read_int_map(
+                         (*st)["damage_dealt"], parsed.stats.damage_dealt)) ||
+                    (st->contains("healing") &&
+                     !detail::read_int_map((*st)["healing"], parsed.stats.healing)) ||
+                    (st->contains("kills") &&
+                     !detail::read_int_map((*st)["kills"], parsed.stats.kills)) ||
+                    (st->contains("last_hit_source") &&
+                     !detail::read_str_map((*st)["last_hit_source"],
+                                           parsed.stats.last_hit_source)) ||
+                    (st->contains("died") &&
+                     !detail::read_str_set((*st)["died"], parsed.stats.died)))
+                    return detail::fail(
+                        SaveErrorKind::StructureError, "session.stats");
+            }
 
             // cards
             if (!obj->contains("cards") || !(*obj)["cards"].try_as_object())
@@ -260,6 +345,8 @@ namespace tkw
             session = std::move(s);
             g.cards.restore(snap);
             g.entities.restore(ents);
+            if (meta)
+                *meta = std::move(parsed);
             return SaveResult<void>::Ok();
         }
     }

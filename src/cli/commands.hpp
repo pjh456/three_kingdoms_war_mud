@@ -40,8 +40,10 @@
 #include "game/flow/table.hpp"
 #include "io/file.hpp"
 #include "save/reader.hpp"
+#include "save/session_meta.hpp"
 #include "save/writer.hpp"
 #include "util/rng.hpp"
+#include "util/types.hpp"
 
 namespace tkw
 {
@@ -56,6 +58,9 @@ namespace tkw
         using pjh::cli::InteractiveConsole;
         using pjh::cli::ParseContext;
         using pjh::cli::Visibility;
+
+        /** 对局统计聚合：复用存档层的可持久化结构，会话与存档共用同一字段。 */
+        using BattleStats = tkw::save::BattleStats;
 
         /** AI 难度档（CLI 值域；引擎侧实现为 SimpleDecider / AggressiveDecider）。 */
         enum class AiLevel : std::uint8_t
@@ -77,16 +82,6 @@ namespace tkw
             AiLevel ai = AiLevel::Simple;    /**< AI 难度档（默认 simple，零行为变化） */
         };
 
-        /** 对局统计聚合：按已发布事件累计伤害/治疗与击杀归属，供对局结束复盘打印。 */
-        struct BattleStats
-        {
-            std::map<std::string, int> damage_dealt;             /**< 来源 → 造成伤害总量 */
-            std::map<std::string, int> healing;                  /**< 目标 → 恢复总量 */
-            std::map<std::string, int> kills;                    /**< 击杀者 → 击杀数 */
-            std::map<std::string, std::string> last_hit_source;  /**< 受害者 → 最近一次伤害来源 */
-            std::set<std::string> died;                          /**< 本局阵亡实体 id */
-        };
-
         /** 跨命令持有的对局会话（new/step/run/save/load 共享）。 */
         struct Session
         {
@@ -105,7 +100,8 @@ namespace tkw
             /**
              * @brief 从解析上下文读参数；未出现的选项回落 base。
              * @note REPL 每行命令独立解析，根选项不会自动继承启动命令行的取值，
-             *       故 REPL 内建局以启动选项为 base 合并，行内显式选项优先。
+             *       故 REPL 内建局以启动选项为 base 合并，行内显式选项优先；真人
+             *       座位是唯一可清空的累积项，--no-human 显式清空并优先于 --human。
              */
             inline Options options_from(ParseContext &ctx, const Options &base)
             {
@@ -121,7 +117,9 @@ namespace tkw
                 opt.autosave =
                     ctx.get_or<std::filesystem::path, fixed_string("autosave")>(
                         base.autosave);
-                if (ctx.has<fixed_string("human")>())
+                if (ctx.get_or<bool, fixed_string("no-human")>(false))
+                    opt.humans.clear();
+                else if (ctx.has<fixed_string("human")>())
                     opt.humans = ctx.get_all<std::string, fixed_string("human")>();
                 return opt;
             }
@@ -174,12 +172,14 @@ namespace tkw
             }
 
             /**
-             * @brief 在根命令上声明可重复的真人座位选项。
+             * @brief 在根命令上声明可重复的真人座位选项与清空开关。
              * @param cmd 目标命令；只应传根命令，使父/叶混写累积进同一上下文。
              * @note repeatable 选项的值按「最近声明」写入单一上下文，若根与 leaf 各
              *       声明一份，`--human P0 new --human P1` 会分落两处，而读取只取最近
              *       节点，导致 P0 静默丢弃；故仅根声明。leaf 处仍可解析（祖先链查找）。
-             *       值补全候选取自规则允许的座位上限，防止越界座位号到运行期才报错。
+             *       值补全候选取自规则允许的座位上限，防止越界座位号到运行期才报错；
+             *       --no-human 是单独的布尔开关（非 --human 的取反），使 REPL 内能
+             *       清空由启动选项带入的座位。
              */
             inline void declare_human_option(pjh::cli::BaseCommand &cmd)
             {
@@ -195,6 +195,9 @@ namespace tkw
                             seats.push_back("P" + std::to_string(i));
                         return seats;
                     });
+                cmd.option<fixed_string("no-human")>(
+                       "--no-human", "清空真人座位（覆盖启动/会话 --human）")
+                    .boolean();
             }
 
             /** 性别占位：无玩家数据源，按座位奇偶交替（P0 男 / P1 女 / …）。 */
@@ -428,6 +431,31 @@ namespace tkw
                 return {};
             }
 
+            /** 不支持真人的命令统一拒绝非空 humans；返回空串表示通过。 */
+            inline std::string reject_humans(
+                const std::vector<std::string> &humans, const std::string &cmd)
+            {
+                if (humans.empty())
+                    return {};
+                return cmd + " 不支持 --human（该命令不运行真人参与的对局）";
+            }
+
+            /** AI 难度档 → 命令行/存档值域字符串。 */
+            inline const char *ai_level_name(AiLevel ai)
+            {
+                return ai == AiLevel::Aggressive ? "aggressive" : "simple";
+            }
+
+            /** 值域字符串 → AI 难度档；未知或空串返回 None，由调用方回落默认档。 */
+            inline tkw::Option<AiLevel> ai_level_from(std::string_view name)
+            {
+                if (name == "simple")
+                    return tkw::Option<AiLevel>::Some(AiLevel::Simple);
+                if (name == "aggressive")
+                    return tkw::Option<AiLevel>::Some(AiLevel::Aggressive);
+                return tkw::Option<AiLevel>::None();
+            }
+
             /**
              * @brief 构造决策源：无真人按难度档取 AI，否则按 actor 路由到交互输入
              *        （真人座位外的回落与全 AI 局同一难度档）。
@@ -458,6 +486,7 @@ namespace tkw
                 std::cout << "  下一回合: " << s.state.current
                           << "，已执行回合: " << s.state.turns
                           << "，存活: " << ctx.entities->size() << "\n";
+                std::cout << "  AI 难度: " << ai_level_name(s.ai) << "\n";
                 std::cout << "  真人座位: ";
                 if (s.humans.empty())
                     std::cout << "无";
@@ -572,20 +601,36 @@ namespace tkw
                 return CliResult<void>::Ok();
             }
 
+            /**
+             * @brief 序列化当前会话（含 AI 档与对局统计）并原子写入文件。
+             * @return Err 无进行中会话 / 写文件失败；成功返回 Ok。
+             */
             inline CliResult<void> cmd_save(
                 const std::filesystem::path &file, Session &s)
             {
                 if (!s.active || !s.game)
                     return CliFailure{CliError("没有进行中的对局")};
-                const std::string text = tkw::save::write(*s.game, s.state, "deck");
+                tkw::save::SessionMeta meta;
+                meta.ai = ai_level_name(s.ai);
+                meta.stats = s.stats;
+                const std::string text =
+                    tkw::save::write(*s.game, s.state, "deck", meta);
                 if (tkw::io::write_text_atomic(file, text).is_err())
                     return CliFailure{CliError("写入存档失败: " + file.string())};
                 std::cout << "已保存: " << file.string() << "\n";
                 return CliResult<void>::Ok();
             }
 
+            /**
+             * @brief 读档并落子到会话：恢复存档 AI 档与统计，verbose 不持久化。
+             * @param ai_explicit 命令行是否显式给了 --ai；显式值覆盖存档 AI 档。
+             * @return Err 读文件 / 存档解析 / 真人座位校验失败；成功返回 Ok。
+             * @note 旧档无元数据时 AI 档回落命令行取值、统计为空；未知 AI 文本
+             *       亦回落命令行，不拒绝存档。
+             */
             inline CliResult<void> cmd_load(
-                const Options &opt, const std::filesystem::path &file, Session &s)
+                const Options &opt, const std::filesystem::path &file, Session &s,
+                bool ai_explicit)
             {
                 auto text = tkw::io::read_text(file);
                 if (text.is_err())
@@ -595,7 +640,8 @@ namespace tkw
                 if (!game)
                     return CliFailure{CliError(err)};
                 tkw::game::GameSession state;
-                auto r = tkw::save::read(text.unwrap(), *game, state);
+                tkw::save::SessionMeta meta;
+                auto r = tkw::save::read(text.unwrap(), *game, state, &meta);
                 if (r.is_err())
                 {
                     const auto &e = r.unwrap_err();
@@ -609,10 +655,18 @@ namespace tkw
                 s.game = std::move(game);
                 s.state = std::move(state);
                 s.humans = opt.humans;
-                s.ai = opt.ai;
+                if (!meta.ai.empty() && !ai_explicit)
+                {
+                    if (auto lvl = ai_level_from(meta.ai); lvl.is_some())
+                        s.ai = lvl.unwrap();
+                    else
+                        s.ai = opt.ai;
+                }
+                else
+                    s.ai = opt.ai;
+                s.stats = std::move(meta.stats);
                 s.verbose = opt.verbose;
                 s.active = true;
-                s.stats = BattleStats{};
                 std::cout << "已加载: " << file.string() << "\n";
                 print_status(s);
                 return CliResult<void>::Ok();
@@ -675,6 +729,9 @@ namespace tkw
 
             inline CliResult<void> audit_deck(const Options &opt)
             {
+                const std::string herr = reject_humans(opt.humans, "audit");
+                if (!herr.empty())
+                    return CliFailure{CliError(herr)};
                 std::string err;
                 auto game = build_game(opt, err);
                 if (!game)
@@ -699,11 +756,15 @@ namespace tkw
              *        deck 序逐卡打印「中文名(id) 大类 张数」。
              * @return Ok；Err 为牌堆加载失败（kind + detail，与建局错误面一致）。
              * @note 只读牌堆查询，不建局、不消耗随机源；公共选项中仅 --deck
-             *       生效，其余被接受但不读取（与 audit 声明面一致）。deck.json
+             *       生效，其余被接受但不读取（与 audit 声明面一致），--human
+             *       因该命令不运行对局而被拒绝。deck.json
              *       的 name 缺失或类型不符时头行退化为无牌堆名，不阻断列出。
              */
             inline CliResult<void> cards_list(const Options &opt)
             {
+                const std::string herr = reject_humans(opt.humans, "cards");
+                if (!herr.empty())
+                    return CliFailure{CliError(herr)};
                 tkw::config::ResourceStore store(opt.deck);
                 auto catalog = tkw::card::CardDefCatalog::load(store, "deck");
                 if (catalog.is_err())
@@ -735,12 +796,6 @@ namespace tkw
                 return CliResult<void>::Ok();
             }
 
-            /** AI 难度档 → CLI 值域字符串（模拟汇总头行展示用）。 */
-            inline const char *ai_level_name(AiLevel ai)
-            {
-                return ai == AiLevel::Aggressive ? "aggressive" : "simple";
-            }
-
             /** 跨局模拟聚合：各座位胜场、平局局数与回合总和（单局展示统计不可跨局累加）。 */
             struct SimAggregate
             {
@@ -759,12 +814,16 @@ namespace tkw
              *         run_game 一致）。
              * @note 基种子缺省 1（局种子 1..N，跨档对比口径可比），与
              *       Options.seed 缺省 42 不同；--verbose/--autosave 接受但不读
-             *       （逐局不打事件日志、无会话）。胜者空串 = 平局；平均回合为
+             *       （逐局不打事件日志、无会话），--human 因全 AI 批量模拟而拒绝。
+             *       胜者空串 = 平局；平均回合为
              *       回合总和除以局数（向下取整）。每局不打印胜者行与统计块，
              *       未实现卡警告在循环前打印一次。
              */
             inline CliResult<void> simulate_games(const Options &opt, int n)
             {
+                const std::string herr = reject_humans(opt.humans, "simulate");
+                if (!herr.empty())
+                    return CliFailure{CliError(herr)};
                 // 预载牌表：未实现卡警告循环前打一次，不逐局重复。
                 tkw::config::ResourceStore store(opt.deck);
                 auto catalog = tkw::card::CardDefCatalog::load(store, "deck");
@@ -1061,9 +1120,9 @@ namespace tkw
 
             const tkw::game::RulesConfig rules{};
 
-            // 根命令选项（无子命令时直接跑一局，兼容旧用法）；读取这些选项的 leaf
-            // 各自声明一份标量选项，使子命令名之后的选项也可解析；--human 是
-            // repeatable，仅根声明以避免父/叶混写时值分落两处。
+            // 根命令选项（无子命令时直接跑一局）；各 leaf 各自声明一份标量选项，
+            // 使帮助/用法面与本命令选项段一致，且子命令名之后的选项也可解析；
+            // --human 是 repeatable，仅根声明以避免父/叶混写时值分落两处。
             detail::declare_common_options(app, rules);
             detail::declare_human_option(app);
 
@@ -1144,6 +1203,7 @@ namespace tkw
 
             // step：执行一个回合
             auto &step_cmd = app.add_leaf("step", "执行当前会话的一个回合");
+            detail::declare_common_options(step_cmd, rules);
             step_cmd.action(
                 [&session](ParseContext &ctx) -> CliResult<void>
                 {
@@ -1156,6 +1216,7 @@ namespace tkw
             // run：跑到对局结束（别名 r，REPL 会话流高频命令）
             auto &run_cmd = app.add_leaf("run", "跑到当前会话结束");
             run_cmd.alias("r");
+            detail::declare_common_options(run_cmd, rules);
             run_cmd.action(
                 [&session](ParseContext &ctx) -> CliResult<void>
                 {
@@ -1168,6 +1229,7 @@ namespace tkw
             // status：查看会话状态（别名 st）
             auto &status_cmd = app.add_leaf("status", "查看当前会话状态");
             status_cmd.alias("st");
+            detail::declare_common_options(status_cmd, rules);
             status_cmd.action(
                 [&session](ParseContext &) -> CliResult<void>
                 {
@@ -1178,6 +1240,7 @@ namespace tkw
             // save：保存当前对局（别名 w）
             auto &save_cmd = app.add_leaf("save", "保存当前对局：save <file>");
             save_cmd.alias("w");
+            detail::declare_common_options(save_cmd, rules);
             save_cmd.arg<std::string, 0>("file", "存档路径").required();
             save_cmd.action(
                 [&session](ParseContext &ctx) -> CliResult<void>
@@ -1195,7 +1258,8 @@ namespace tkw
                 {
                     return detail::cmd_load(
                         detail::options_from(ctx, session.base),
-                        ctx.get<std::string, 0>(), session);
+                        ctx.get<std::string, 0>(), session,
+                        ctx.has<fixed_string("ai")>());
                 });
 
             // repl：交互模式（对局即 MUD 方向）
@@ -1219,8 +1283,11 @@ namespace tkw
                     const Options &opt = session.base;
                     if (session.active && session.game && !opt.autosave.empty())
                     {
-                        const std::string text =
-                            tkw::save::write(*session.game, session.state, "deck");
+                        tkw::save::SessionMeta meta;
+                        meta.ai = detail::ai_level_name(session.ai);
+                        meta.stats = session.stats;
+                        const std::string text = tkw::save::write(
+                            *session.game, session.state, "deck", meta);
                         if (tkw::io::write_text_atomic(opt.autosave, text).is_ok())
                             std::cout << "已自动存档: " << opt.autosave.string()
                                       << "\n";
