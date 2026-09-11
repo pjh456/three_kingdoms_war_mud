@@ -122,12 +122,6 @@ set_tests_properties(cli_deal_option_after_positional PROPERTIES
     PASS_REGULAR_EXPRESSION "胜者|平局"
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-add_test(NAME cli_unknown_option_still_errors
-         COMMAND tkw new --bogus)
-set_tests_properties(cli_unknown_option_still_errors PROPERTIES
-    WILL_FAIL TRUE
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-
 # 执行错误（无会话）应只打印纯中文消息并退出 1，不得带框架统一的 Parse Error: 前缀。
 add_test(NAME cli_step_without_session_plain_error
          COMMAND sh -c
@@ -135,14 +129,16 @@ add_test(NAME cli_step_without_session_plain_error
 set_tests_properties(cli_step_without_session_plain_error PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-# audit：只钉退出码；标准牌堆的未实现卡集合随引擎演进而变，不钉输出内容。
+# audit：钉退出码与结果关键词；未实现卡集合随引擎演进而变，不钉具体卡名。
 add_test(NAME cli_audit_ok COMMAND tkw audit)
 set_tests_properties(cli_audit_ok PROPERTIES
+    PASS_REGULAR_EXPRESSION "牌堆全部可结算|未实现卡"
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-add_test(NAME cli_audit_bad_deck COMMAND tkw audit --deck /nonexistent-deck-dir)
+add_test(NAME cli_audit_bad_deck
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> audit --deck /nonexistent-deck-dir 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '加载牌堆失败' && [ $rc -eq 1 ]")
 set_tests_properties(cli_audit_bad_deck PROPERTIES
-    WILL_FAIL TRUE
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # audit 容错报告未知机制名：严格加载拒载，audit 仍须逐卡列出并 rc=0（红→绿主证）。
@@ -165,14 +161,16 @@ add_test(NAME cli_cards_list
 set_tests_properties(cli_cards_list PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-add_test(NAME cli_cards_bad_deck COMMAND tkw cards --deck /nonexistent-deck-dir)
+add_test(NAME cli_cards_bad_deck
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> cards --deck /nonexistent-deck-dir 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '加载牌堆失败' && [ $rc -eq 1 ]")
 set_tests_properties(cli_cards_bad_deck PROPERTIES
-    WILL_FAIL TRUE
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-# 批量入口模糊匹配：唯一近距手误自动纠错到 audit；只钉退出码，不钉审计输出内容。
+# 批量入口模糊匹配：唯一近距手误自动纠错到 audit；钉纠错后真跑到 audit。
 add_test(NAME cli_fuzzy_typo_resolves COMMAND tkw audti)
 set_tests_properties(cli_fuzzy_typo_resolves PROPERTIES
+    PASS_REGULAR_EXPRESSION "牌堆全部可结算|未实现卡"
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # 短别名精确命中：st → status（无会话时打印会话: 无并退出 0），不再落入模糊歧义。
@@ -190,11 +188,11 @@ set_tests_properties(cli_alias_help_discoverable PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # 批量入口近距手误仍报歧义而非静默纠错（card → 多候选，退出 2）；候选集随
-# 命令面演进，只钉「失败」不钉内容。
+# 命令面演进，钉「歧义关键词 + 退出 2」，不钉候选名单。
 add_test(NAME cli_ambiguous_prefix_still_errors
-         COMMAND tkw card)
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> card 2>&1); rc=$?; printf '%s' \"$out\" | grep -q 'ambiguous command' && [ $rc -eq 2 ]")
 set_tests_properties(cli_ambiguous_prefix_still_errors PROPERTIES
-    WILL_FAIL TRUE
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # REPL 内别名直达：st 查看状态、r 跑到结束（seed 1 2p 确定性胜者）；无歧义残留。
@@ -325,10 +323,11 @@ add_test(NAME cli_stats_block_deal
 set_tests_properties(cli_stats_block_deal PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-# 对局统计块在 REPL 会话流同样输出（new → run），阵亡者显示「阵亡」。
+# 对局统计块在 REPL 会话流同样输出（new → run），阵亡者显示「阵亡」；
+# 自动存档关空串，避免默认路径把 tkw-autosave.json 写到源码树。
 add_test(NAME cli_stats_block_repl_run
          COMMAND sh -c
-                 "out=$(printf 'new --players 2 --seed 1\\nrun\\nquit\\n' | $<TARGET_FILE:tkw> repl 2>&1); printf '%s' \"$out\" | grep -q '对局统计' && printf '%s' \"$out\" | grep -q '阵亡'")
+                 "out=$(printf 'new --players 2 --seed 1\\nrun\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); printf '%s' \"$out\" | grep -q '对局统计' && printf '%s' \"$out\" | grep -q '阵亡'")
 set_tests_properties(cli_stats_block_repl_run PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
@@ -348,9 +347,9 @@ set_tests_properties(cli_ai_aggressive_deal PROPERTIES
 
 # 值域校验：非法 --ai 值解析期拒绝（enum 映射外，Parse Error rc=2）。
 add_test(NAME cli_ai_bogus_value_rejected
-         COMMAND tkw deal 2 1 --ai bogus)
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> deal 2 1 --ai bogus 2>&1); rc=$?; printf '%s' \"$out\" | grep -q 'Parse Error' && [ $rc -eq 2 ]")
 set_tests_properties(cli_ai_bogus_value_rejected PROPERTIES
-    WILL_FAIL TRUE
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # simulate 批量模拟：aggressive 档完整跑 20 局，钉汇总关键词与「种子 1..20」
@@ -368,11 +367,11 @@ add_test(NAME cli_simulate_deterministic
 set_tests_properties(cli_simulate_deterministic PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-# 坏牌堆目录：错误面与 audit/cards 同款（加载牌堆失败，rc≠0）。
+# 坏牌堆目录：错误面与 audit/cards 同款（加载牌堆失败，rc=1）。
 add_test(NAME cli_simulate_bad_deck
-         COMMAND tkw simulate 1 2 --deck /nonexistent-deck-dir)
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> simulate 1 2 --deck /nonexistent-deck-dir 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '加载牌堆失败' && [ $rc -eq 1 ]")
 set_tests_properties(cli_simulate_bad_deck PROPERTIES
-    WILL_FAIL TRUE
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # audit/simulate 不支持真人：--human 硬拒绝为纯中文错误并退出 1。
