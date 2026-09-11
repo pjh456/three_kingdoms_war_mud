@@ -92,6 +92,8 @@ namespace tkw
             bool respond = false;
             bool save = false;
             bool counter = false;
+            std::vector<std::vector<std::string>>
+                counter_windows;  /**< 各无懈窗口携带的目标集合（按询问顺序） */
             bool bogus_pick = false;  /**< 选牌返回一张不存在的牌（校验测试用） */
             std::string response_id;  /**< 非空时响应窗口固定打出该牌 */
             std::string response_second_id; /**< 非空时与 response_id 成对（两张当杀） */
@@ -150,8 +152,10 @@ namespace tkw
 
             Option<std::string> play_counter(
                 const GameContext &ctx, const std::string &player,
-                const std::string &, const std::vector<std::string> &) override
+                const std::string &,
+                const std::vector<std::string> &trick_targets) override
             {
+                counter_windows.push_back(trick_targets);
                 if (!counter)
                     return Option<std::string>::None();
                 for (const auto &c : ctx.cards->hand(player))

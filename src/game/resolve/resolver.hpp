@@ -382,11 +382,12 @@ namespace tkw
             emit_card_played(ctx, player, played);
 
             // 无懈可击只抵消锦囊牌；基本牌（杀/闪/桃）不可无懈
+            // 窗口粒度 = 每个受影响目标一窗，窗内只携带该目标（卡面「对一名角色」）
             const bool is_trick = def.type == card::CardType::Trick;
-            const auto nullified = [&]()
+            const auto nullified = [&](const std::vector<std::string> &window_targets)
             {
                 return is_trick &&
-                       resolve_nullification(ctx, ai, def, player, targets);
+                       resolve_nullification(ctx, ai, def, player, window_targets);
             };
 
             const auto apply = [&]() -> GameResult<void>
@@ -403,7 +404,7 @@ namespace tkw
                 case card::CardEffectKind::AoeDamage:
                     for (const auto &t : targets)
                     {
-                        if (nullified())
+                        if (nullified({t}))
                             continue;
                         bool responded = false;
                         if (eff.response.is_some())
@@ -421,14 +422,14 @@ namespace tkw
                 case card::CardEffectKind::Heal:
                     for (const auto &t : targets)
                     {
-                        if (nullified())
+                        if (nullified({t}))
                             continue;
                         apply_heal(ctx, t, eff.amount);
                     }
                     return GameResult<void>::Ok();
 
                 case card::CardEffectKind::Draw:
-                    if (nullified())
+                    if (nullified(targets))
                         return GameResult<void>::Ok();
                     apply_draw(ctx, player, eff.count);
                     return GameResult<void>::Ok();
@@ -439,7 +440,7 @@ namespace tkw
                     std::vector<std::pair<std::string, card::Card>> picks;
                     for (const auto &t : targets)
                     {
-                        if (nullified())
+                        if (nullified({t}))
                             continue;
                         const auto picked = ai.pick_card_from_target(ctx, player, t);
                         if (picked.is_none() ||
@@ -465,7 +466,7 @@ namespace tkw
                     std::vector<std::pair<std::string, card::Card>> picks;
                     for (const auto &t : targets)
                     {
-                        if (nullified())
+                        if (nullified({t}))
                             continue;
                         const auto picked = ai.pick_card_from_target(ctx, player, t);
                         if (picked.is_none() ||
@@ -487,7 +488,7 @@ namespace tkw
                 }
 
                 case card::CardEffectKind::Duel:
-                    if (nullified())
+                    if (nullified(targets))
                         return GameResult<void>::Ok();
                     {
                         // 目标先开始，轮流打出杀；先不出的受对方 1 点伤害；
@@ -509,7 +510,7 @@ namespace tkw
 
                 case card::CardEffectKind::RevealPick:
                 {
-                    if (nullified())
+                    if (nullified(targets))
                         return GameResult<void>::Ok();
 
                     // 亮出等同存活人数的牌
@@ -554,7 +555,7 @@ namespace tkw
 
                 case card::CardEffectKind::BorrowedSword:
                 {
-                    if (nullified())
+                    if (nullified(targets))
                         return GameResult<void>::Ok();
                     const std::string &holder = targets[0];
                     const std::string &victim = targets[1];

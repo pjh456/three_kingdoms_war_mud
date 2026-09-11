@@ -1262,6 +1262,44 @@ TEST_CASE("game: wuxie cancels aoe effect on one target only")
     CHECK(g.cards.hand_size("b") == 0);  // 无懈已消耗
 }
 
+TEST_CASE("game: wuxie aoe window carries only its own target")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.give("a", "nanman", "n#0");
+    g.give("c", "wuxie", "w#0");  // 仅 c 持无懈，每窗只在其被询问时记录
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c"});
+    REQUIRE(r.is_ok());
+
+    // 逐目标一窗，每窗只携带当前受影响目标
+    REQUIRE(decider.counter_windows.size() == 2);
+    CHECK(decider.counter_windows[0] == std::vector<std::string>{"b"});
+    CHECK(decider.counter_windows[1] == std::vector<std::string>{"c"});
+}
+
+TEST_CASE("game: simple ai spends wuxie on its own aoe window only")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    g.give("a", "nanman", "n#0");
+    g.give("c", "wuxie", "w#0");  // c 是南蛮目标且持无懈
+
+    SimpleAI ai;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, ai, "a", played, {"b", "c"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);             // b 无杀无无懈 → 掉血
+    CHECK(c->get_hp() == 4);             // c 的无懈只抵消自己这一窗
+    CHECK(g.cards.hand_size("c") == 0);  // 无懈已消费
+}
+
 TEST_CASE("game: wuxie cancels guohe so target keeps cards")
 {
     TestGame g("deck");
