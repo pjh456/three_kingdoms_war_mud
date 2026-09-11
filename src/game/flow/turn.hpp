@@ -5,7 +5,7 @@
  *       - 判定阶段按判定区顺序结算延时锦囊；乐不思蜀判定非红桃跳过出牌，
  *         闪电判定黑桃2~9 则造成雷伤、否则移入判定区无同名闪电的下家；
  *       - 杀每回合限一次，装备诸葛连弩后不限制；
- *       - 弃牌阶段手牌上限 = 体力上限。
+ *       - 弃牌阶段手牌上限 = 当前体力值。
  * @note 死亡/濒死救场不在本模块（hp 可被扣到非正，死亡声明归后续流程）。
  */
 
@@ -391,12 +391,12 @@ namespace tkw
             return TurnResult<void>::Ok();
         }
 
-        /** @brief 弃牌阶段：手牌上限 = 体力上限。 */
+        /** @brief 弃牌阶段：手牌上限 = 当前体力值。 */
         inline TurnResult<void> run_discard_phase(
             GameContext &ctx, DecisionSource &ai, const std::string &player)
         {
             const int hand_limit =
-                ctx.entities->find(player).unwrap()->get_hp_bar().get_max();
+                ctx.entities->find(player).unwrap()->get_hp_bar().get_cur();
             const int over =
                 static_cast<int>(ctx.cards->hand_size(player)) - hand_limit;
             if (over > 0)

@@ -23,10 +23,10 @@ namespace
     using tkw::test::TestGame;
 
     // 攻击优先档自钉值（2p seed 1 / 4p seed 42，实跑钉入，见对应用例注释）
-    constexpr std::size_t AGGRESSIVE_2P_LINES = 227;
-    constexpr std::uint64_t AGGRESSIVE_2P_FP = 5211696238794449955ULL;
-    constexpr std::size_t AGGRESSIVE_4P_LINES = 336;
-    constexpr std::uint64_t AGGRESSIVE_4P_FP = 13493724924669352056ULL;
+    constexpr std::size_t AGGRESSIVE_2P_LINES = 229;
+    constexpr std::uint64_t AGGRESSIVE_2P_FP = 7749661946685608400ULL;
+    constexpr std::size_t AGGRESSIVE_4P_LINES = 391;
+    constexpr std::uint64_t AGGRESSIVE_4P_FP = 5816388611200269218ULL;
 
     /** 跑一局并返回完整事件日志（Ok 或 MaxRounds 都算完整对局）。 */
     std::vector<std::string> run_game(std::uint32_t seed, int players)
@@ -206,13 +206,29 @@ TEST_CASE("replay: golden fingerprints pin the rule semantics")
     // 的受害者均未打出杀，取武器结果与旧的自目标选择同构（目标身份不进事件
     // 日志，仅响应结果决定事件），故不重钉。4 人 seed 42 的 aggressive 线确有
     // 漂移，口径见 aggressive 4 人用例。
+    //
+    // 弃牌手牌上限由「体力上限」改「当前体力值」后的漂移（新旧日志逐行 diff
+    // 核对过）：四人/两线首分叉均落在某名已受伤角色的弃牌阶段，因上限等于其
+    // 当前体力（低于上限）而多弃若干张，此后手牌/响应/装备/死亡序列级联改变。
+    // - 2 人 seed 1：79 → 69 行。首个分叉在 P1 弃牌阶段：P1 被万箭打到 4→3，
+    //   旧上限 4 只弃赤兔，新上限 3 再弃连弩；P1 失去连弩后无限出杀链消失，
+    //   后续伤害/摸牌级联，行数减少。
+    // - 4 人 seed 42：508 → 404 行。首个分叉在 P1 弃牌阶段：P1 当前体力 1
+    //   （先前 2→1），旧上限 4 不弃牌，新上限 1 弃闪；P1 失去闪后其后的杀
+    //   命中而非被闪掉，濒死救援与死亡序列随之改变。
+    // - aggressive 2 人 seed 1：227 → 229 行。首个分叉在 P1 弃牌阶段：P1 被
+    //   万箭打到 4→3，旧上限 4 只弃赤兔，新上限 3 再弃青釭剑；P1 无法再装
+    //   青釭剑，后续装备/伤害链改变。
+    // - aggressive 4 人 seed 42：336 → 391 行。首个分叉在 P1 弃牌阶段：P1
+    //   当前体力 1（被 P0 的杀 2→1），旧上限 4 不弃牌，新上限 1 弃八卦阵；
+    //   后续防御/死亡顺序级联，行数增加。
     const auto two = run_game(1, 2);
-    CHECK(two.size() == 79);
-    CHECK(fingerprint(two) == 12977149775915994001ULL);
+    CHECK(two.size() == 69);
+    CHECK(fingerprint(two) == 9283070076194552029ULL);
 
     const auto four = run_game(42, 4);
-    CHECK(four.size() == 508);
-    CHECK(fingerprint(four) == 14208062105892487506ULL);
+    CHECK(four.size() == 404);
+    CHECK(fingerprint(four) == 8258587827075898135ULL);
 }
 
 TEST_CASE("replay: four-player seed 42 reaches a decisive result")
@@ -285,7 +301,12 @@ TEST_CASE("replay: aggressive ai is deterministic and pins its golden fingerprin
     // 钉死当前行为（AI 调参漂移时此处变红，先解释再改）。首分叉（对 simple
     // 线）在 P0 首回合出牌阶段：simple 按手牌序打五谷丰登，aggressive
     // 按卡类优先级先打杀，后续顺手牵羊抢高价值牌并立刻打出万箭，事件流
-    // 自第 10 行起分岔（227 行 vs 79 行）。
+    // 自第 10 行起分岔（229 行 vs 69 行）。
+    //
+    // 弃牌手牌上限改「当前体力值」后的漂移（新旧日志逐行 diff 核对过）：
+    // 227 → 229 行。首个分叉在 P1 弃牌阶段：P1 被万箭打到 4→3，旧上限 4
+    // 只弃赤兔，新上限 3 再弃青釭剑；P1 失去青釭剑后无法再装备，后续装备/
+    // 伤害链级联，行数增加 2。
     tkw::game::AggressiveAI aggr;
     const auto a = run_game_ai(aggr, 1, 2);
     const auto b = run_game_ai(aggr, 1, 2);
@@ -311,6 +332,11 @@ TEST_CASE("replay: aggressive 4-player seed 42 is deterministic and pinned")
     // 改变。2 人 seed 1 的 simple/aggressive 两线均未进入借刀自目标态，逐字节
     // 不变；4 人 seed 42 simple 线的借刀落子被指定者均未响应，事件流同构，亦
     // 逐字节不变（故黄金指纹用例不重钉）。
+    //
+    // 弃牌手牌上限改「当前体力值」后的漂移（新旧日志逐行 diff 核对过）：
+    // 336 → 391 行。首个分叉在 P1 弃牌阶段：P1 当前体力 1（被 P0 的杀 2→1），
+    // 旧上限 4 不弃牌，新上限 1 弃八卦阵；此后防御/濒死/死亡顺序级联，行数
+    // 增加 55。
     tkw::game::AggressiveAI aggr;
     const auto a = run_game_ai(aggr, 42, 4);
     const auto b = run_game_ai(aggr, 42, 4);

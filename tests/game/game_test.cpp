@@ -890,6 +890,24 @@ TEST_CASE("game: turn draws two and trims to hand limit")
     CHECK(g.cards.discard_size() == 2);   // 弃了 2 张
 }
 
+TEST_CASE("game: turn trims to current hp rather than max hp")
+{
+    TestGame g("deck");
+    auto *a = g.add_player("a", 0, 4);  // 上限 4
+    g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    a->take_damage("b", 2, false);      // 当前体力 4 → 2，上限仍 4
+    g.give("a", "sha", "s#1");
+    g.give("a", "sha", "s#2");
+    g.give("a", "shan", "s#3");
+
+    TestDecider decider;  // 不出牌
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.hand_size("a") == 2);   // 3 + 摸2 = 5，弃到当前体力 2
+    CHECK(g.cards.discard_size() == 3);   // 弃了 3 张
+}
+
 TEST_CASE("game: sha limit one per turn")
 {
     TestGame g("deck");
