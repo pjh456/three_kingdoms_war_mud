@@ -11,6 +11,7 @@
 #include <pjh_cli.hpp>
 
 #include "cli/commands.hpp"
+#include "cli/help_zh.hpp"
 
 namespace
 {
