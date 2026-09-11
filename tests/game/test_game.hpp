@@ -95,6 +95,7 @@ namespace tkw
             std::vector<std::vector<std::string>>
                 counter_windows;  /**< 各无懈窗口携带的目标集合（按询问顺序） */
             bool bogus_pick = false;  /**< 选牌返回一张不存在的牌（校验测试用） */
+            bool decline_discards = false; /**< 弃牌选择返回空（雌雄二选一的放弃分支） */
             std::string response_id;  /**< 非空时响应窗口固定打出该牌 */
             std::string response_second_id; /**< 非空时与 response_id 成对（两张当杀） */
             std::vector<Ability> triggers;
@@ -210,6 +211,8 @@ namespace tkw
                 const GameContext &ctx, const std::string &player, int count,
                 DiscardReason) override
             {
+                if (decline_discards)
+                    return {};
                 const auto &hand = ctx.cards->hand(player);
                 std::vector<std::string> out;
                 for (int i = 0; i < count && i < static_cast<int>(hand.size()); ++i)

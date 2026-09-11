@@ -2349,6 +2349,7 @@ TEST_CASE("game: cixiong makes the opposite gender target discard")
     g.give("b", "wuzhong", "b#1");  // 目标一张手牌（非闪）
 
     TestDecider decider;
+    decider.triggers = {Ability::Cixiong};
     const auto played = g.cards.hand("a")[0];
     auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
     REQUIRE(r.is_ok());
@@ -2367,12 +2368,53 @@ TEST_CASE("game: cixiong draws when the target cannot discard")
     g.cards.build_deck(g.catalog);  // 摸牌堆有牌可摸
 
     TestDecider decider;
+    decider.triggers = {Ability::Cixiong};
     const auto played = g.cards.hand("a")[0];
     auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 3);
     CHECK(g.cards.hand_size("a") == 1);  // 使用者摸一张
     CHECK(g.cards.hand_size("b") == 0);
+}
+
+TEST_CASE("game: cixiong does nothing when the attacker declines")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4, Gender::Female);
+    g.equip("a", "cixiong", "e#0");
+    g.give("a", "sha", "s#1");
+    g.give("b", "wuzhong", "b#1");
+    g.cards.build_deck(g.catalog);
+
+    TestDecider decider;  // 未登记 Cixiong：攻击方拒绝发动
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);
+    CHECK(g.cards.hand_size("b") == 1);  // 不弃牌
+    CHECK(g.cards.hand_size("a") == 0);  // 不摸牌（杀已打出）
+}
+
+TEST_CASE("game: cixiong makes the attacker draw when the target declines")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4, Gender::Female);
+    g.equip("a", "cixiong", "e#0");
+    g.give("a", "sha", "s#1");
+    g.give("b", "wuzhong", "b#1");
+    g.cards.build_deck(g.catalog);  // 摸牌堆有牌可摸
+
+    TestDecider decider;
+    decider.triggers = {Ability::Cixiong};
+    decider.decline_discards = true;  // 目标选择令使用者摸一张
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);
+    CHECK(g.cards.hand_size("b") == 1);  // 目标不弃牌
+    CHECK(g.cards.hand_size("a") == 1);  // 使用者摸一张
 }
 
 TEST_CASE("game: cixiong does not trigger against the same gender")
@@ -2697,6 +2739,7 @@ TEST_CASE("game: cixiong fires for the zhangba response virtual sha")
 
     TestDecider decider;
     decider.respond = true;
+    decider.triggers = {Ability::Cixiong};
     const auto played = g.cards.hand("a")[0];
     auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c"});
     REQUIRE(r.is_ok());

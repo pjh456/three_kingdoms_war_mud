@@ -29,8 +29,9 @@ namespace tkw
         /** @brief 弃牌的原因（同一接口在不同规则语境下的区分）。 */
         enum class DiscardReason : std::uint8_t
         {
-            TurnLimit,   /**< 弃牌阶段：手牌超上限 */
-            AbilityCost, /**< 装备能力代价（如贯石斧弃两张） */
+            TurnLimit,     /**< 弃牌阶段：手牌超上限 */
+            AbilityCost,   /**< 装备能力代价（如贯石斧弃两张） */
+            CixiongChoice, /**< 雌雄双股剑二选一：空选择 = 令使用者摸一张 */
         };
 
         /**

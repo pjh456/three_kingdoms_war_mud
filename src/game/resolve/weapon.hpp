@@ -4,8 +4,8 @@
  * @note 7 件装备的效果不再写成 if 链，而是注册到 sha_hook_table()：
  *       每项声明「能力 / 插桩点 / 挂在哪一方 / 回调」，新增武器只加一行。
  * @note 规则约定（简单版）：
- *       - 雌雄双股剑：杀指定唯一目标且目标为异性时，令目标弃置一张
- *         手牌，目标弃不起时使用者摸一张牌；
+ *       - 雌雄双股剑：杀指定唯一目标且目标为异性时可发动，目标二选一：
+ *         弃置一张手牌，或令使用者摸一张牌；
  *       - 仁王盾：黑杀无效（青釭剑无视防具可穿透）；
  *       - 八卦阵：需出闪时可判定，判定描述来自装备数据（当前为红色=闪）；
  *       - 青龙偃月刀：被闪后可再对同一目标使用一张杀；
@@ -148,11 +148,12 @@ namespace tkw
         }
 
         /**
-         * @brief 雌雄双股剑：杀指定唯一目标后，目标为异性时令其弃置一张
-         *        手牌；目标弃不起（无手牌）时使用者摸一张牌。
-         * @note 强制触发（卡面无「可以」）：无决策接缝，引擎自动结算；
-         *       目标弃哪张牌走既有 choose_discards 路径，选不中不产生
-         *       效果（与贯石斧/寒冰剑对非法选择的处理一致）。
+         * @brief 雌雄双股剑：杀指定唯一目标且目标为异性时，使用者可发动，
+         *        由目标二选一：弃置一张手牌，或令使用者摸一张牌。
+         * @note 可发动（卡面「你可以」）：使用者拒绝则无效果；目标无手牌时
+         *       只能令使用者摸牌。目标的选择走 choose_discards：返回空（或
+         *       引用无效）即视为选择令使用者摸一张，非空且牌存在则弃置该牌；
+         *       目标实际弃哪张牌由决策源决定（人可 pass）。
          */
         inline void hook_cixiong(ShaContext &sc)
         {
@@ -167,11 +168,15 @@ namespace tkw
             if (attacker.unwrap()->get_gender() == target.unwrap()->get_gender())
                 return;
 
-            // 目标有手牌：令其弃置一张
+            // 使用者可选：拒绝则不弃不摸
+            if (!sc.ai.trigger_effect(sc.ctx, sc.attacker, card::Ability::Cixiong))
+                return;
+
+            // 目标有手牌：弃一张，或（空/无效选择）令使用者摸一张
             if (sc.ctx.cards->hand_size(sc.target) > 0)
             {
                 const auto discards = sc.ai.choose_discards(
-                    sc.ctx, sc.target, 1, DiscardReason::AbilityCost);
+                    sc.ctx, sc.target, 1, DiscardReason::CixiongChoice);
                 for (const auto &id : discards)
                 {
                     auto removed = sc.ctx.cards->remove_from_hand(sc.target, id);
@@ -180,13 +185,13 @@ namespace tkw
                         card::Card card = std::move(removed).unwrap();
                         sc.ctx.cards->discard(card);
                         emit_card_discarded(sc.ctx, sc.target, card);
+                        return;
                     }
                     break;
                 }
-                return;
             }
 
-            // 弃不起：使用者摸一张牌
+            // 无手牌或目标选择放弃弃牌：使用者摸一张牌
             apply_draw(sc.ctx, sc.attacker, 1);
         }
 

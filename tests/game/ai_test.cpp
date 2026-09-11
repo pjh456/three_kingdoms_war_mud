@@ -464,6 +464,38 @@ TEST_CASE("ai: human decider picks discards by indices")
     CHECK(out.str().find("序号不能重复") != std::string::npos);
 }
 
+TEST_CASE("ai: human decider may pass the cixiong discard choice")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+
+    {
+        std::istringstream in("pass\n");
+        std::ostringstream out;
+        HumanDecider dec(in, out);
+        RequestDecisionSource src(dec);
+        const auto chosen = src.choose_discards(
+            g.ctx, "a", 1, tkw::game::DiscardReason::CixiongChoice);
+        CHECK(chosen.empty());
+        CHECK(out.str().find("雌雄双股剑（可放弃）") != std::string::npos);
+        CHECK(out.str().find("pass") != std::string::npos);
+    }
+    {
+        // 其他弃牌原因不接受 pass：重提示后按序号弃牌
+        std::istringstream in("pass\ndiscard 1\n");
+        std::ostringstream out;
+        HumanDecider dec(in, out);
+        RequestDecisionSource src(dec);
+        const auto chosen = src.choose_discards(
+            g.ctx, "a", 1, tkw::game::DiscardReason::TurnLimit);
+        REQUIRE(chosen.size() == 1);
+        CHECK(chosen[0] == "s#1");
+        CHECK(out.str().find("输入无效") != std::string::npos);
+    }
+}
+
 TEST_CASE("ai: human decider reprompts on invalid input")
 {
     TestGame g("deck");

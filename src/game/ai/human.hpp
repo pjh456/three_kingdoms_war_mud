@@ -259,6 +259,8 @@ namespace tkw
                         return "手牌超上限";
                     case DiscardReason::AbilityCost:
                         return "装备能力代价";
+                    case DiscardReason::CixiongChoice:
+                        return "雌雄双股剑（可放弃）";
                     }
                     return "弃牌";
                 }
@@ -505,6 +507,10 @@ namespace tkw
                     if (req.count <= 0)
                         return out;
 
+                    // 雌雄双股剑二选一：放弃弃牌即令使用者摸一张
+                    const bool can_pass =
+                        req.discard_reason == DiscardReason::CixiongChoice;
+
                     for (;;)
                     {
                         out_ << "[" << req.actor << "] 弃牌（"
@@ -512,7 +518,11 @@ namespace tkw
                              << req.count << " 张）：\n";
                         print_view(req);
                         print_options(req, req.options);
-                        out_ << "输入 discard <序号> ...：" << std::flush;
+                        if (can_pass)
+                            out_ << "输入 discard <序号> ... 或 pass（放弃弃牌）："
+                                 << std::flush;
+                        else
+                            out_ << "输入 discard <序号> ...：" << std::flush;
 
                         std::string line;
                         if (!read_line(line))
@@ -524,6 +534,8 @@ namespace tkw
                             out_ << "\n";
                             continue;
                         }
+                        if (can_pass && tokens.size() == 1 && tokens[0] == "pass")
+                            return out;
                         if (tokens[0] != "discard")
                         {
                             print_invalid("请输入 discard <序号> ...。");
