@@ -118,7 +118,7 @@ namespace tkw
                     std::stable_sort(
                         order.begin(), order.end(),
                         [&req](const card::Card *a, const card::Card *b)
-                        { return discard_value(req, *a) < discard_value(req, *b); });
+                        { return card_value_of(req, *a) < card_value_of(req, *b); });
 
                     DecisionChoice out;
                     for (std::size_t i = 0;
@@ -201,8 +201,12 @@ namespace tkw
                     return d.is_some() ? d.unwrap() : nullptr;
                 }
 
-                /** @brief 弃牌排序用的单牌价值；目录缺失或 def 未命中时回 0。 */
-                static int discard_value(
+                /**
+                 * @brief 单牌价值：弃牌排序「先弃最低价值」与选牌「取最高价值」
+                 *        共用的估价。
+                 * @note 目录缺失或 def 未命中时回 0。
+                 */
+                static int card_value_of(
                     const DecisionRequest &req, const card::Card &c)
                 {
                     const card::CardDef *def = find_def(req, c.def_id);

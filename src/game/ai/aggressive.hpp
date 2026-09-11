@@ -23,7 +23,6 @@
 #include "card/def.hpp"
 #include "game/ai/decider.hpp"
 #include "game/ai/decider_base.hpp"
-#include "game/ai/evaluator.hpp"
 #include "util/types.hpp"
 
 namespace tkw
@@ -74,10 +73,10 @@ namespace tkw
                         return out;
 
                     const card::Card *best = &req.options.front();
-                    int best_value = pick_value(req, *best);
+                    int best_value = card_value_of(req, *best);
                     for (std::size_t i = 1; i < req.options.size(); ++i)
                     {
-                        const int v = pick_value(req, req.options[i]);
+                        const int v = card_value_of(req, req.options[i]);
                         if (v > best_value)
                         {
                             best_value = v;
@@ -257,13 +256,6 @@ namespace tkw
                         break;
                     }
                     return 10;
-                }
-
-                /** @brief 选牌候选的单牌价值；目录缺失或 def 未命中时回 0。 */
-                static int pick_value(const DecisionRequest &req, const card::Card &c)
-                {
-                    const card::CardDef *def = find_def(req, c.def_id);
-                    return def ? card_value(*def) : 0;
                 }
             };
 
