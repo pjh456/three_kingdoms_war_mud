@@ -25,8 +25,8 @@ namespace
     // 攻击优先档自钉值（2p seed 1 / 4p seed 42，实跑钉入，见对应用例注释）
     constexpr std::size_t AGGRESSIVE_2P_LINES = 227;
     constexpr std::uint64_t AGGRESSIVE_2P_FP = 5211696238794449955ULL;
-    constexpr std::size_t AGGRESSIVE_4P_LINES = 302;
-    constexpr std::uint64_t AGGRESSIVE_4P_FP = 9241265354738548331ULL;
+    constexpr std::size_t AGGRESSIVE_4P_LINES = 677;
+    constexpr std::uint64_t AGGRESSIVE_4P_FP = 12577236196096550670ULL;
 
     /** 跑一局并返回完整事件日志（Ok 或 MaxRounds 都算完整对局）。 */
     std::vector<std::string> run_game(std::uint32_t seed, int players)
@@ -174,15 +174,42 @@ TEST_CASE("replay: golden fingerprints pin the rule semantics")
     //   行无懈行）、P2 的无懈被丈八两张当杀消费（旧 248 行 play 行）；新线
     //   两牌均已在五谷窗口消耗，过河拆桥生效拆走 P1 的杀，手牌/装备/死亡
     //   级联：P0、P1 提前阵亡（旧 256/334 行 → 新 207/232 行），P2 不再
-    //   阵亡。P2/P3 双存活、摸牌堆与弃牌堆皆空、剩余手牌均不可主动打出，
+    //   阵亡。P2/P3 双存活、摸牌堆抽空后静默停摸、剩余手牌均不可主动打出，
     //   后续回合零事件行，主循环落到回合上限（1000）以 MaxRounds 平局结束。
+    //
+    // 摸牌堆耗尽洗回弃牌堆口径统一后的漂移（新旧日志逐行 diff 核对过）：
+    // - 2 人 seed 1：逐字节不变——整局摸牌堆从未抽空，不触发洗回。
+    // - 4 人 seed 42：311 → 508 行，结局由 MaxRounds 平局翻为 P2 胜（40
+    //   回合）。首个分叉在 P3 摸牌阶段：旧线摸牌堆只剩 1 张（无懈可击），
+    //   第二张静默摸空；新线摸牌堆空时将弃牌堆洗回，第二张摸到顺手牵羊。
+    //   此后 P3/P2 持续摸牌出牌，P3 阵亡、P2 成为唯一存活者；洗回消费 rng
+    //   使后续摸牌/判定序列整体重排，日志行数与指纹随之改变。
     const auto two = run_game(1, 2);
     CHECK(two.size() == 79);
     CHECK(fingerprint(two) == 12977149775915994001ULL);
 
     const auto four = run_game(42, 4);
-    CHECK(four.size() == 311);
-    CHECK(fingerprint(four) == 14868230118118502795ULL);
+    CHECK(four.size() == 508);
+    CHECK(fingerprint(four) == 14208062105892487506ULL);
+}
+
+TEST_CASE("replay: four-player seed 42 reaches a decisive result")
+{
+    // 旗舰默认对局（裸 tkw = deal 4 42）必须分出唯一胜者，而不是摸空僵持到
+    // 回合上限：摸牌洗回口径统一后，牌堆耗尽会从弃牌堆补牌，对局在 max_turns
+    // 之前结束。此用例直接钉住该结果，防止退回 1001 回合平局。
+    TestGame g("deck", 42);
+    for (int i = 0; i < 4; ++i)
+        g.add_player("P" + std::to_string(i), i, 4);
+
+    tkw::game::SimpleAI ai;
+    const auto r = tkw::game::play_game(g.ctx, ai, "P0");
+    REQUIRE(r.is_ok());
+    const auto outcome = r.unwrap();
+    CHECK(outcome.winner == "P2");
+    CHECK(!outcome.winner.empty());
+    CHECK(outcome.turns < 1000);
+    CHECK(g.ctx.entities->find(outcome.winner).is_some());
 }
 
 TEST_CASE("replay: two-player games stay consistent across seeds")
@@ -249,7 +276,8 @@ TEST_CASE("replay: aggressive ai is deterministic and pins its golden fingerprin
 
 TEST_CASE("replay: aggressive 4-player seed 42 is deterministic and pinned")
 {
-    // 双种子模式镜像贪心档：4 人 seed 42 攻击优先档自钉。
+    // 双种子模式镜像贪心档：4 人 seed 42 攻击优先档自钉。摸牌洗回口径统一后
+    // 该局由 MaxRounds 平局翻为分胜负，行数 302 → 677（漂移口径见黄金指纹用例）。
     tkw::game::AggressiveAI aggr;
     const auto a = run_game_ai(aggr, 42, 4);
     const auto b = run_game_ai(aggr, 42, 4);

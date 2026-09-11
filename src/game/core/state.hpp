@@ -68,13 +68,30 @@ namespace tkw
                 e.unwrap()->heal(amount);
         }
 
-        /** @brief 摸 count 张进手牌；牌堆摸空即停，返回实际摸到的张数。 */
+        /**
+         * @brief 从摸牌堆取一张；牌堆空且弃牌堆非空时经 rng 洗回后重试。
+         * @return None 表示摸牌堆与弃牌堆皆空（或无 rng 且摸牌堆空）。
+         * @note 依赖 ctx.rng 洗回；随机源为 null 时牌堆空则直接 None。
+         */
+        inline Option<card::Card> draw_with_refill(GameContext &ctx)
+        {
+            if (ctx.cards->draw_size() == 0)
+            {
+                if (ctx.cards->discard_size() == 0)
+                    return Option<card::Card>::None();
+                if (ctx.rng)
+                    ctx.cards->refill_draw(*ctx.rng);
+            }
+            return ctx.cards->draw();
+        }
+
+        /** @brief 摸 count 张进手牌；牌堆与弃牌堆皆空即停，返回实际摸到的张数。 */
         inline int apply_draw(GameContext &ctx, const std::string &player, int count)
         {
             int drew = 0;
             for (int i = 0; i < count; ++i)
             {
-                auto c = ctx.cards->draw();
+                auto c = draw_with_refill(ctx);
                 if (c.is_none())
                     break;
                 card::Card card = std::move(c).unwrap();
@@ -101,18 +118,11 @@ namespace tkw
         /**
          * @brief 判定：从摸牌堆顶揭示一张（牌堆空则弃牌堆洗回）。
          * @return None 表示摸牌堆与弃牌堆皆空（无法判定）。
-         * @note 依赖 ctx.rng 洗回；随机源为 null 时牌堆空则直接 None。
+         * @note 洗回口径与摸牌一致：同走 draw_with_refill。
          */
         inline Option<card::Card> perform_judgement(GameContext &ctx)
         {
-            if (ctx.cards->draw_size() == 0)
-            {
-                if (ctx.cards->discard_size() == 0)
-                    return Option<card::Card>::None();
-                if (ctx.rng)
-                    ctx.cards->refill_draw(*ctx.rng);
-            }
-            return ctx.cards->draw();
+            return draw_with_refill(ctx);
         }
     }
 }

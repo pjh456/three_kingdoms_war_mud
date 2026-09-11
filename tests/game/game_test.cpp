@@ -1116,6 +1116,7 @@ TEST_CASE("game: death discards equipment and judgement zones")
     TestGame g("deck");
     g.add_player("a", 0, 4);
     auto *b = g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);  // 真实对局摸牌堆非空，击杀奖励不从弃牌堆洗回
     b->take_damage("a", 3, false);  // b: 1
     g.equip("b", "qinglong", "e#0");
     g.cards.add_to_judge("b", Card{"L#0", "lesi", Suit::Spade, 6});
@@ -1402,6 +1403,33 @@ TEST_CASE("game: draw emits CardDrawn per card")
     apply_draw(g.ctx, "a", 3);
     CHECK(drawn == 3);
     CHECK(g.cards.hand_size("a") == 3);
+}
+
+TEST_CASE("game: draw refills from the discard pile when the draw pile is empty")
+{
+    // 摸牌口径与判定统一：摸牌堆空而弃牌堆有牌时，经 rng 洗回后再摸。
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.cards.discard(Card{"d#0", "sha", Suit::Spade, 7});
+    g.cards.discard(Card{"d#1", "shan", Suit::Heart, 2});
+    CHECK(g.cards.draw_size() == 0);
+
+    CHECK(apply_draw(g.ctx, "a", 2) == 2);
+    CHECK(g.cards.hand_size("a") == 2);
+    CHECK(g.cards.draw_size() == 0);
+    CHECK(g.cards.discard_size() == 0);  // 洗回后全部摸出，无牌丢失
+}
+
+TEST_CASE("game: draw stops when both draw and discard piles are empty")
+{
+    // 两堆皆空时无法补牌：摸 0 张且不产生非法空牌。
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    CHECK(g.cards.draw_size() == 0);
+    CHECK(g.cards.discard_size() == 0);
+
+    CHECK(apply_draw(g.ctx, "a", 2) == 0);
+    CHECK(g.cards.hand_size("a") == 0);
 }
 
 TEST_CASE("game: turn emits draw then discard events in order")
