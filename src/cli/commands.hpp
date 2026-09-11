@@ -130,7 +130,7 @@ namespace tkw
                     .min(0)
                     .max(20);
                 cmd.option<fixed_string("seed")>(
-                       "--seed", 's', "随机种子（默认 42）")
+                       "--seed", 's', "随机种子（默认 42；simulate 基种子默认 1）")
                     .integer()
                     .min(0);
                 cmd.option<fixed_string("verbose")>(
