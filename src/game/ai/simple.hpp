@@ -38,25 +38,7 @@ namespace tkw
             public:
                 DecisionChoice decide(const DecisionRequest &req) override
                 {
-                    switch (req.kind)
-                    {
-                    case DecisionKind::Play:
-                        return decide_play(req);
-                    case DecisionKind::Response:
-                        return decide_response(req);
-                    case DecisionKind::Peach:
-                        return decide_first_id(req);
-                    case DecisionKind::Counter:
-                        return decide_counter(req);
-                    case DecisionKind::Trigger:
-                        return decide_trigger(req);
-                    case DecisionKind::PickCard:
-                    case DecisionKind::PickRevealed:
-                        return decide_first_card(req);
-                    case DecisionKind::Discard:
-                        return decide_discard(req);
-                    }
-                    return DecisionChoice{};
+                    return dispatch(req, decide_play, decide_first_card);
                 }
 
             private:

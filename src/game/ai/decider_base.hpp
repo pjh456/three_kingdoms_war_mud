@@ -68,6 +68,40 @@ namespace tkw
                 }
 
                 /**
+                 * @brief 决策分派：按 DecisionKind 收敛八类决策的公共骨架。
+                 * @param play 派生的出牌选择（档位语义：手牌序首组 / 卡类优先级）。
+                 * @param pick 派生的选牌策略（档位语义：首张 / 最高价值）。
+                 * @return 对应分支的决策；未匹配值回落空 DecisionChoice。
+                 * @note 公共分支（响应/救桃/无懈/触发/弃牌）两档逐字相同，
+                 *       仅出牌与选牌按档位策略分流，故以函数指针注入。
+                 */
+                static DecisionChoice dispatch(
+                    const DecisionRequest &req,
+                    DecisionChoice (*play)(const DecisionRequest &),
+                    DecisionChoice (*pick)(const DecisionRequest &))
+                {
+                    switch (req.kind)
+                    {
+                    case DecisionKind::Play:
+                        return play(req);
+                    case DecisionKind::Response:
+                        return decide_response(req);
+                    case DecisionKind::Peach:
+                        return decide_first_id(req);
+                    case DecisionKind::Counter:
+                        return decide_counter(req);
+                    case DecisionKind::Trigger:
+                        return decide_trigger(req);
+                    case DecisionKind::PickCard:
+                    case DecisionKind::PickRevealed:
+                        return pick(req);
+                    case DecisionKind::Discard:
+                        return decide_discard(req);
+                    }
+                    return DecisionChoice{};
+                }
+
+                /**
                  * @brief 无懈窗口：自己的锦囊不自我抵消；锦囊目标含决策者
                  *        （敌人锦囊冲我 / 我判定区的延时锦囊）时出第一张无懈；
                  *        其余（敌人自益锦囊、第三方锦囊）不出。
