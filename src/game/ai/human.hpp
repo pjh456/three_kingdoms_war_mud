@@ -115,6 +115,26 @@ namespace tkw
                     return out;
                 }
 
+                /**
+                 * @brief 读取一行并切词：EOF/读失败返回 None；空行打印换行后
+                 *        返回 Some(空列表)。
+                 * @return None 表示输入结束，调用点返回默认选择；Some 表示
+                 *         一行的 token，空列表表示空行（本函数已打印 `\n`）。
+                 * @note 非法输入的重提示与序号解析留在调用点，各决策保留其
+                 *       特有返回语义。
+                 */
+                Option<std::vector<std::string>> read_tokens()
+                {
+                    std::string line;
+                    if (!read_line(line))
+                        return Option<std::vector<std::string>>::None();
+
+                    auto tokens = tokenize(line);
+                    if (tokens.empty())
+                        out_ << "\n";
+                    return Option<std::vector<std::string>>::Some(std::move(tokens));
+                }
+
                 /** @brief 解析 1 基序号并校验落在 [1, count]；失败返回 false。 */
                 static bool parse_index(
                     const std::string &token, std::size_t count, int &out)
@@ -304,16 +324,13 @@ namespace tkw
                         }
                         out_ << "输入 play <序号> 或 pass：" << std::flush;
 
-                        std::string line;
-                        if (!read_line(line))
+                        const auto input = read_tokens();
+                        if (input.is_none())
                             return out;
 
-                        const auto tokens = tokenize(line);
+                        const auto &tokens = input.unwrap();
                         if (tokens.empty())
-                        {
-                            out_ << "\n";
                             continue;
-                        }
                         if (tokens.size() == 1 && tokens[0] == "pass")
                             return out;
 
@@ -352,16 +369,13 @@ namespace tkw
                         print_options(req, req.options);
                         out_ << "输入 play <序号> 或 pass：" << std::flush;
 
-                        std::string line;
-                        if (!read_line(line))
+                        const auto input = read_tokens();
+                        if (input.is_none())
                             return out;
 
-                        const auto tokens = tokenize(line);
+                        const auto &tokens = input.unwrap();
                         if (tokens.empty())
-                        {
-                            out_ << "\n";
                             continue;
-                        }
                         if (tokens.size() == 1 && tokens[0] == "pass")
                             return out;
 
@@ -404,16 +418,13 @@ namespace tkw
                                  << " " << hand[i].instance_id << "\n";
                         out_ << "输入 play <序号> + <序号> 或 pass：" << std::flush;
 
-                        std::string line;
-                        if (!read_line(line))
+                        const auto input = read_tokens();
+                        if (input.is_none())
                             return out;
 
-                        const auto tokens = tokenize(line);
+                        const auto &tokens = input.unwrap();
                         if (tokens.empty())
-                        {
-                            out_ << "\n";
                             continue;
-                        }
                         if (tokens.size() == 1 && tokens[0] == "pass")
                             return out;
 
@@ -460,16 +471,13 @@ namespace tkw
                         print_options(req, req.options);
                         out_ << "输入 pick <序号> 或 pass：" << std::flush;
 
-                        std::string line;
-                        if (!read_line(line))
+                        const auto input = read_tokens();
+                        if (input.is_none())
                             return out;
 
-                        const auto tokens = tokenize(line);
+                        const auto &tokens = input.unwrap();
                         if (tokens.empty())
-                        {
-                            out_ << "\n";
                             continue;
-                        }
                         if (tokens.size() == 1 && tokens[0] == "pass")
                             return out;
 
@@ -512,16 +520,13 @@ namespace tkw
                         else
                             out_ << "输入 discard <序号> ...：" << std::flush;
 
-                        std::string line;
-                        if (!read_line(line))
+                        const auto input = read_tokens();
+                        if (input.is_none())
                             return out;  // EOF：空选择，交由引擎报数量不足
 
-                        const auto tokens = tokenize(line);
+                        const auto &tokens = input.unwrap();
                         if (tokens.empty())
-                        {
-                            out_ << "\n";
                             continue;
-                        }
                         if (can_pass && tokens.size() == 1 && tokens[0] == "pass")
                             return out;
                         if (tokens[0] != "discard")
@@ -578,16 +583,13 @@ namespace tkw
                         out_ << "[" << req.actor << "] 发动 " << ability_name(req)
                              << "？(y/n)：" << std::flush;
 
-                        std::string line;
-                        if (!read_line(line))
+                        const auto input = read_tokens();
+                        if (input.is_none())
                             return out;  // EOF：不发动
 
-                        const auto tokens = tokenize(line);
+                        const auto &tokens = input.unwrap();
                         if (tokens.empty())
-                        {
-                            out_ << "\n";
                             continue;
-                        }
                         if (tokens.size() == 1 &&
                             (tokens[0] == "y" || tokens[0] == "yes"))
                         {
