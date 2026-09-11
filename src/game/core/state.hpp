@@ -124,6 +124,39 @@ namespace tkw
         }
 
         /**
+         * @brief 从手牌移除指定牌并无条件弃置，发布弃置事件。
+         * @param instance_id 待移除的手牌实例；不在手牌时直接失败。
+         * @return Some(被弃置的牌)；None = 该牌不在 owner 手牌（无副作用）。
+         * @note 弃置按值拷贝、事件读原牌后再整体移动返回，返回值保持完整。
+         */
+        inline Option<card::Card> remove_and_discard(
+            GameContext &ctx, const std::string &owner, const std::string &instance_id)
+        {
+            auto removed = ctx.cards->remove_from_hand(owner, instance_id);
+            if (removed.is_none())
+                return Option<card::Card>::None();
+            card::Card card = std::move(removed).unwrap();
+            discard_and_emit(ctx, owner, card);
+            return Option<card::Card>::Some(std::move(card));
+        }
+
+        /**
+         * @brief 从任一区域移除指定牌并无条件弃置，发布弃置事件。
+         * @param instance_id 待移除的牌实例（按手牌 → 装备 → 判定顺序查找）。
+         * @return Some(被弃置的牌)；None = 该牌不在 owner 任一区域（无副作用）。
+         * @note 弃置按值拷贝、事件读原牌后再整体移动返回，返回值保持完整。
+         */
+        inline Option<card::Card> remove_any_and_discard(
+            GameContext &ctx, const std::string &owner, const std::string &instance_id)
+        {
+            card::Card card;
+            if (!remove_card_from_zones(ctx, owner, instance_id, card))
+                return Option<card::Card>::None();
+            discard_and_emit(ctx, owner, card);
+            return Option<card::Card>::Some(std::move(card));
+        }
+
+        /**
          * @brief 从手牌移除指定牌并按谓词校验；合法则弃置并发布弃置事件。
          * @tparam Accept 谓词类型：接受 `const card::CardDef &`、返回 bool。
          * @param instance_id 待消费的手牌实例；不在手牌时直接失败。

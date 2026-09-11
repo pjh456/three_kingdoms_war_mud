@@ -92,14 +92,9 @@ namespace tkw
                 const auto picked = ai.pick_card_from_target(ctx, attacker, target);
                 if (picked.is_none())
                     break;
-                card::Card removed;
-                if (remove_card_from_zones(
-                        ctx, target, picked.unwrap().instance_id, removed))
-                {
+                if (remove_any_and_discard(ctx, target, picked.unwrap().instance_id)
+                        .is_some())
                     ++discarded;
-                    ctx.cards->discard(removed);
-                    emit_card_discarded(ctx, target, removed);
-                }
             }
             return discarded;
         }
@@ -138,8 +133,7 @@ namespace tkw
                     if (removed.is_some())
                     {
                         card::Card card = std::move(removed).unwrap();
-                        ctx.cards->discard(card);
-                        emit_card_discarded(ctx, target, card);
+                        discard_and_emit(ctx, target, card);
                     }
                     return true;
                 }
@@ -179,14 +173,8 @@ namespace tkw
                     sc.ctx, sc.target, 1, DiscardReason::CixiongChoice);
                 for (const auto &id : discards)
                 {
-                    auto removed = sc.ctx.cards->remove_from_hand(sc.target, id);
-                    if (removed.is_some())
-                    {
-                        card::Card card = std::move(removed).unwrap();
-                        sc.ctx.cards->discard(card);
-                        emit_card_discarded(sc.ctx, sc.target, card);
+                    if (remove_and_discard(sc.ctx, sc.target, id).is_some())
                         return;
-                    }
                     break;
                 }
             }
@@ -222,8 +210,7 @@ namespace tkw
             if (judge.is_none())
                 return;
             const card::Card judge_card = std::move(judge).unwrap();
-            sc.ctx.cards->discard(judge_card);
-            emit_card_discarded(sc.ctx, sc.target, judge_card);
+            discard_and_emit(sc.ctx, sc.target, judge_card);
             if (judge_result(armor->judge.unwrap(), judge_card) ==
                 card::JudgeAction::Jink)
                 sc.responded = true;
@@ -275,14 +262,8 @@ namespace tkw
             {
                 if (discarded == 2)
                     break;
-                auto removed = sc.ctx.cards->remove_from_hand(sc.attacker, id);
-                if (removed.is_some())
-                {
+                if (remove_and_discard(sc.ctx, sc.attacker, id).is_some())
                     ++discarded;
-                    card::Card card = std::move(removed).unwrap();
-                    sc.ctx.cards->discard(card);
-                    emit_card_discarded(sc.ctx, sc.attacker, card);
-                }
             }
 
             // 弃满两张才强制命中，否则杀仍视为被闪

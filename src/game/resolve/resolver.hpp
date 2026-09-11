@@ -160,12 +160,10 @@ namespace tkw
                     }
                     for (const auto &[owner, picked_card] : picks)
                     {
-                        card::Card removed;
-                        if (!remove_card_from_zones(
-                                ctx, owner, picked_card.instance_id, removed))
+                        if (remove_any_and_discard(
+                                ctx, owner, picked_card.instance_id)
+                                .is_none())
                             return GameResult<void>::Err(EffectError::InvalidChoice);
-                        ctx.cards->discard(removed);
-                        emit_card_discarded(ctx, owner, removed);
                     }
                     return GameResult<void>::Ok();
                 }
@@ -256,10 +254,7 @@ namespace tkw
                     }
                     // 剩余置入弃牌堆
                     for (const auto &c : revealed)
-                    {
-                        ctx.cards->discard(c);
-                        emit_card_discarded(ctx, "", c);
-                    }
+                        discard_and_emit(ctx, "", c);
                     return GameResult<void>::Ok();
                 }
 

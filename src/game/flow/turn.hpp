@@ -95,8 +95,7 @@ namespace tkw
             // （判定窗口使用者不可考 → 空串哨兵，目标 = 被判定玩家）
             if (resolve_nullification(ctx, ai, def, "", {player}))
             {
-                ctx.cards->discard(delayed_card);
-                emit_card_discarded(ctx, player, delayed_card);
+                discard_and_emit(ctx, player, delayed_card);
                 return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::Normal);
             }
 
@@ -104,31 +103,26 @@ namespace tkw
             if (judge.is_none())
             {
                 // 判定牌不可得：延时牌已移出判定区，弃置以免凭空消失
-                ctx.cards->discard(delayed_card);
-                emit_card_discarded(ctx, player, delayed_card);
+                discard_and_emit(ctx, player, delayed_card);
                 return TurnResult<DelayedOutcome>::Err(TurnError::JudgeEmptyDeck);
             }
             const card::Card judge_card = std::move(judge).unwrap();
-            ctx.cards->discard(judge_card);  // 判定牌进弃牌堆
-            emit_card_discarded(ctx, player, judge_card);
+            discard_and_emit(ctx, player, judge_card);  // 判定牌进弃牌堆
 
             if (def.judge.is_none())
             {
-                ctx.cards->discard(delayed_card);
-                emit_card_discarded(ctx, player, delayed_card);
+                discard_and_emit(ctx, player, delayed_card);
                 return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::Normal);
             }
 
             switch (judge_result(def.judge.unwrap(), judge_card))
             {
             case card::JudgeAction::SkipPlay:
-                ctx.cards->discard(delayed_card);
-                emit_card_discarded(ctx, player, delayed_card);
+                discard_and_emit(ctx, player, delayed_card);
                 return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::SkipPlay);
 
             case card::JudgeAction::Damage:
-                ctx.cards->discard(delayed_card);
-                emit_card_discarded(ctx, player, delayed_card);
+                discard_and_emit(ctx, player, delayed_card);
                 deal_damage(ctx, ai, "", player, def.judge.unwrap().amount);
                 return TurnResult<DelayedOutcome>::Ok(
                     DelayedOutcome::LightningStruck);
@@ -140,8 +134,7 @@ namespace tkw
                 if (next.empty())
                 {
                     // 异常残留态下无空位：弃置而非丢牌
-                    ctx.cards->discard(delayed_card);
-                    emit_card_discarded(ctx, player, delayed_card);
+                    discard_and_emit(ctx, player, delayed_card);
                     return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::Normal);
                 }
                 ctx.cards->add_to_judge(next, delayed_card);
@@ -153,8 +146,7 @@ namespace tkw
             case card::JudgeAction::Nothing:
             case card::JudgeAction::Jink:
             default:
-                ctx.cards->discard(delayed_card);
-                emit_card_discarded(ctx, player, delayed_card);
+                discard_and_emit(ctx, player, delayed_card);
                 return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::Normal);
             }
         }
@@ -202,8 +194,7 @@ namespace tkw
                     if (old.is_some())
                     {
                         card::Card old_card = std::move(old).unwrap();
-                        ctx.cards->discard(old_card);
-                        emit_card_discarded(ctx, player, old_card);
+                        discard_and_emit(ctx, player, old_card);
                     }
                 }
             }
@@ -246,8 +237,7 @@ namespace tkw
 
             if (resolve_nullification(ctx, ai, def, player, {target}))
             {
-                ctx.cards->discard(std::move(removed).unwrap());
-                emit_card_discarded(ctx, player, card);
+                discard_and_emit(ctx, player, card);
                 return TurnResult<void>::Ok();
             }
 
@@ -417,12 +407,8 @@ namespace tkw
                     return TurnResult<void>::Err(TurnError::DiscardInsufficient);
                 for (const auto &id : discards)
                 {
-                    auto removed = ctx.cards->remove_from_hand(player, id);
-                    if (removed.is_none())
+                    if (remove_and_discard(ctx, player, id).is_none())
                         return TurnResult<void>::Err(TurnError::DiscardInsufficient);
-                    card::Card card = std::move(removed).unwrap();
-                    ctx.cards->discard(card);
-                    emit_card_discarded(ctx, player, card);
                 }
             }
             return TurnResult<void>::Ok();
