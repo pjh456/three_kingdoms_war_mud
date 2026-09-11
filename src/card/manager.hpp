@@ -6,8 +6,8 @@
  * @note 哑状态持有者（对齐 entity/manager.hpp 的定位）：
  *       - 不校验规则：装备槽位占用、手牌上限、摸空补牌等归 gameplay；
  *       - 不发布事件：摸/弃/打出由 gameplay 观察返回值并自行发布；
- *       - 不持有 CardDefCatalog：需要 type/effect/equip 时由 gameplay 经
- *         catalog 解析，保持本模块无目录依赖。
+ *       - 不持有目录类型：build_deck 接收 def 范围，具体目录由 game 层传入，
+ *         保持本模块无目录依赖。
  */
 
 #ifndef INCLUDE_TKW_CARD_MANAGER_HPP
@@ -22,7 +22,6 @@
 #include <vector>
 
 #include "card/card.hpp"
-#include "card/catalog.hpp"
 #include "card/def.hpp"
 #include "util/rng.hpp"
 #include "util/types.hpp"
@@ -89,14 +88,17 @@ namespace tkw
             CardManager &operator=(CardManager &&) noexcept = default;
 
             /**
-             * @brief 按目录构建摸牌堆：每份副本生成一张实体牌并分配唯一 instance_id。
-             * @note 卡牌顺序 = 目录迭代序（deck.json 引用顺序），同 seed 下确定。
+             * @brief 按 def 范围构建摸牌堆：每份副本生成一张实体牌并分配唯一 instance_id。
+             * @tparam DefRange `CardDef` 范围；迭代序即牌序，调用方保证其为 deck 引用序。
+             * @param defs def 范围，逐一定义、逐副本展开。
+             * @note 卡牌顺序 = 传入范围迭代序（deck.json 引用顺序），同 seed 下确定。
              * @note 幂等：先清空摸牌堆，重复调用不会叠加重复牌。
              */
-            void build_deck(const CardDefCatalog &catalog)
+            template <typename DefRange>
+            void build_deck(const DefRange &defs)
             {
                 draw_pile = CardStack{};
-                for (const auto &def : catalog)
+                for (const auto &def : defs)
                 {
                     for (const auto &copy : def.copies)
                         draw_pile.push(make_card(def.id, copy));
