@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "event_log.hpp"
+#include "game/ai/aggressive.hpp"
 #include "game/ai/simple.hpp"
 #include "game/flow/loop.hpp"
 #include "test_game.hpp"
@@ -20,6 +21,12 @@ namespace
 {
     using tkw::test::EventLog;
     using tkw::test::TestGame;
+
+    // 攻击优先档自钉值（2p seed 1 / 4p seed 42，实跑钉入，见对应用例注释）
+    constexpr std::size_t AGGRESSIVE_2P_LINES = 227;
+    constexpr std::uint64_t AGGRESSIVE_2P_FP = 5211696238794449955ULL;
+    constexpr std::size_t AGGRESSIVE_4P_LINES = 302;
+    constexpr std::uint64_t AGGRESSIVE_4P_FP = 9241265354738548331ULL;
 
     /** 跑一局并返回完整事件日志（Ok 或 MaxRounds 都算完整对局）。 */
     std::vector<std::string> run_game(std::uint32_t seed, int players)
@@ -30,6 +37,21 @@ namespace
 
         EventLog log(g.bus);
         tkw::game::SimpleAI ai;
+        auto r = tkw::game::play_game(g.ctx, ai, "P0");
+        if (r.is_err())
+            REQUIRE(r.unwrap_err() == tkw::game::LoopError::MaxRounds);
+        return log.lines();
+    }
+
+    /** 用指定决策源跑一局，返回完整事件日志（Ok 或 MaxRounds 都算完整对局）。 */
+    std::vector<std::string> run_game_ai(
+        tkw::game::DecisionSource &ai, std::uint32_t seed, int players)
+    {
+        TestGame g("deck", seed);
+        for (int i = 0; i < players; ++i)
+            g.add_player("P" + std::to_string(i), i, 4);
+
+        EventLog log(g.bus);
         auto r = tkw::game::play_game(g.ctx, ai, "P0");
         if (r.is_err())
             REQUIRE(r.unwrap_err() == tkw::game::LoopError::MaxRounds);
@@ -207,3 +229,89 @@ TEST_CASE("replay: two-player games stay consistent across seeds")
         CHECK(log.lines() == log2.lines());
     }
 }
+
+TEST_CASE("replay: aggressive ai is deterministic and pins its golden fingerprint")
+{
+    // 攻击优先档自钉：同 seed 两遍逐行一致 + 非空，行数与 FNV-1a 64 指纹
+    // 钉死当前行为（AI 调参漂移时此处变红，先解释再改）。首分叉（对 simple
+    // 线）在 P0 首回合出牌阶段：simple 按手牌序打五谷丰登，aggressive
+    // 按卡类优先级先打杀，后续顺手牵羊抢高价值牌并立刻打出万箭，事件流
+    // 自第 10 行起分岔（227 行 vs 79 行）。
+    tkw::game::AggressiveAI aggr;
+    const auto a = run_game_ai(aggr, 1, 2);
+    const auto b = run_game_ai(aggr, 1, 2);
+
+    CHECK(!a.empty());
+    CHECK(a == b);
+    CHECK(a.size() == AGGRESSIVE_2P_LINES);
+    CHECK(fingerprint(a) == AGGRESSIVE_2P_FP);
+}
+
+TEST_CASE("replay: aggressive 4-player seed 42 is deterministic and pinned")
+{
+    // 双种子模式镜像贪心档：4 人 seed 42 攻击优先档自钉。
+    tkw::game::AggressiveAI aggr;
+    const auto a = run_game_ai(aggr, 42, 4);
+    const auto b = run_game_ai(aggr, 42, 4);
+
+    CHECK(!a.empty());
+    CHECK(a == b);
+    CHECK(a.size() == AGGRESSIVE_4P_LINES);
+    CHECK(fingerprint(a) == AGGRESSIVE_4P_FP);
+}
+
+TEST_CASE("replay: aggressive ai diverges from the simple tier")
+{
+    // 差分守卫：两档决策源在同一 seed 下必须给出不同对局，防攻击优先档
+    // 意外退化成改名贪心档（静默 bug）。2 人 seed 1 两线日志逐行比对，
+    // 首分叉在 P0 首回合出牌（simple 打五谷 / aggressive 打杀）。
+    tkw::game::AggressiveAI aggr;
+    const auto aggressive = run_game_ai(aggr, 1, 2);
+    const auto simple = run_game(1, 2);
+
+    CHECK(aggressive != simple);
+}
+
+TEST_CASE("replay: aggressive two-player scan stays consistent")
+{
+    // 多 seed 扫描补轻量不变量（口径同贪心档扫描）：日志非空、存活者体力
+    // 为正、结束形态合法、同 seed 可重放。不重钉任何指纹。
+    for (std::uint32_t seed = 1; seed <= 20; ++seed)
+    {
+        TestGame g("deck", seed);
+        g.add_player("P0", 0, 4);
+        g.add_player("P1", 1, 4);
+
+        EventLog log(g.bus);
+        tkw::game::AggressiveAI ai;
+        const auto r = tkw::game::play_game(g.ctx, ai, "P0");
+
+        CHECK(!log.lines().empty());
+
+        for (const auto &e : *g.ctx.entities)
+            CHECK(e->get_hp() > 0);
+
+        if (r.is_ok())
+        {
+            CHECK(tkw::game::session_over(g.ctx));
+            const auto winner = tkw::game::session_winner(g.ctx);
+            const bool winner_alive =
+                winner.empty() || g.ctx.entities->find(winner).is_some();
+            CHECK(winner_alive);
+        }
+        else
+        {
+            CHECK(r.unwrap_err() == tkw::game::LoopError::MaxRounds);
+        }
+
+        // 同种子可重放：第二局逐行一致
+        TestGame again("deck", seed);
+        again.add_player("P0", 0, 4);
+        again.add_player("P1", 1, 4);
+        EventLog log2(again.bus);
+        tkw::game::AggressiveAI ai2;
+        (void)tkw::game::play_game(again.ctx, ai2, "P0");
+        CHECK(log.lines() == log2.lines());
+    }
+}
+

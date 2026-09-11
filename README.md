@@ -63,6 +63,7 @@ tkw --human P0 repl   # P0 真人参与，REPL 交互模式
 | `-v, --verbose` | 打印事件日志（摸/打/弃牌、伤害、体力、阵亡） |
 | `--autosave <path>` | REPL 退出时自动存档路径（空串关闭，默认 `tkw-autosave.json`） |
 | `--human <seat>` | 真人座位（可重复：`--human P0 --human P2`；存档不保存，读档后需重新指定） |
+| `--ai <simple\|aggressive>` | AI 难度（默认 `simple` 贪心；`aggressive` 伤害/多目标先行） |
 
 会话命令（`new`/`step`/`run`/`status`/`save`/`load`）共享同一进程内的会话，通常在
 `tkw repl` 内逐条输入使用；在 REPL 外单独执行不会保留会话（单独 `tkw new` 只开一局

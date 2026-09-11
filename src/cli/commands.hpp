@@ -31,6 +31,7 @@
 #include "entity/event.hpp"
 #include "entity/hp.hpp"
 #include "event/handler.hpp"
+#include "game/ai/aggressive.hpp"
 #include "game/ai/human.hpp"
 #include "game/ai/simple.hpp"
 #include "game/resolve/audit.hpp"
@@ -56,6 +57,13 @@ namespace tkw
         using pjh::cli::ParseContext;
         using pjh::cli::Visibility;
 
+        /** AI 难度档（CLI 值域；引擎侧实现为 SimpleDecider / AggressiveDecider）。 */
+        enum class AiLevel : std::uint8_t
+        {
+            Simple,     /**< 贪心档（默认） */
+            Aggressive, /**< 攻击优先档（伤害/多目标先行） */
+        };
+
         /** 命令行/REPL 解析出的对局参数。 */
         struct Options
         {
@@ -66,6 +74,7 @@ namespace tkw
             bool verbose = false;
             std::filesystem::path autosave = "tkw-autosave.json";
             std::vector<std::string> humans; /**< 真人座位 id（可重复选项累积） */
+            AiLevel ai = AiLevel::Simple;    /**< AI 难度档（默认 simple，零行为变化） */
         };
 
         /** 对局统计聚合：按已发布事件累计伤害/治疗与击杀归属，供对局结束复盘打印。 */
@@ -84,6 +93,7 @@ namespace tkw
             std::unique_ptr<tkw::game::Game> game;
             tkw::game::GameSession state;
             std::vector<std::string> humans; /**< 本会话的真人座位 id */
+            AiLevel ai = AiLevel::Simple;    /**< 本会话 AI 难度（new/load 写入，step/run 消费） */
             bool verbose = false;            /**< 本会话是否打印事件日志 */
             Options base;                    /**< REPL 启动选项（供行内命令继承） */
             bool active = false;
@@ -107,6 +117,7 @@ namespace tkw
                 opt.seed = static_cast<std::uint32_t>(
                     ctx.get_or<int, fixed_string("seed")>(static_cast<int>(base.seed)));
                 opt.verbose = ctx.get_or<bool, fixed_string("verbose")>(base.verbose);
+                opt.ai = ctx.get_or_enum<AiLevel, fixed_string("ai")>(base.ai);
                 opt.autosave =
                     ctx.get_or<std::filesystem::path, fixed_string("autosave")>(
                         base.autosave);
@@ -122,14 +133,15 @@ namespace tkw
             }
 
             /**
-             * @brief 在命令上声明标量公共选项（牌堆/人数/手牌/种子/日志/自动存档）。
+             * @brief 在命令上声明标量公共选项（牌堆/人数/手牌/种子/日志/存档/AI 难度）。
              * @param cmd   目标命令：根命令或会读取这些选项的 leaf。
              * @param rules 玩家数上下限来源。
              * @note pjh_cli 的选项查找沿父链（名与值都取最近声明处），故 leaf 不重
              *       声明也能解析祖先的选项；此处 per-leaf 重声明只为让 leaf 的帮助/
              *       用法行列出这些选项。未显式给的项仍由 options_from 沿父链或会话
              *       启动选项回落，声明处一律不设默认值；标量「最近声明胜出」即期望
-             *       语义，故 per-leaf 重声明无副作用。
+             *       语义，故 per-leaf 重声明无副作用。--ai 走 enum 映射，值域外
+             *       输入在解析期报 enum_value_error（与未知选项同一 rc=2 错误面）。
              */
             inline void declare_common_options(
                 pjh::cli::BaseCommand &cmd, const tkw::game::RulesConfig &rules)
@@ -154,6 +166,11 @@ namespace tkw
                 cmd.option<fixed_string("autosave")>(
                        "--autosave", "REPL 退出时自动存档路径（空串关闭）")
                     .path();
+                cmd.option<fixed_string("ai")>(
+                       "--ai", "AI 难度：simple 贪心 / aggressive 伤害优先")
+                    .enum_type<AiLevel>()
+                    .mapping({{"simple", AiLevel::Simple},
+                             {"aggressive", AiLevel::Aggressive}});
             }
 
             /**
@@ -400,14 +417,25 @@ namespace tkw
                 return {};
             }
 
-            /** 构造决策源：无真人走 SimpleAI，否则按 actor 路由到交互输入。 */
+            /**
+             * @brief 构造决策源：无真人按难度档取 AI，否则按 actor 路由到交互输入
+             *        （真人座位外的回落与全 AI 局同一难度档）。
+             * @param humans 真人座位 id；空 = 全 AI 对局。
+             * @param ai     AI 难度档（决定全 AI 局与真人局回落决策源）。
+             */
             inline std::unique_ptr<tkw::game::DecisionSource> make_decision_source(
-                const std::vector<std::string> &humans)
+                const std::vector<std::string> &humans, AiLevel ai)
             {
-                if (humans.empty())
+                auto make_ai = [](AiLevel lvl) -> std::unique_ptr<tkw::game::DecisionSource>
+                {
+                    if (lvl == AiLevel::Aggressive)
+                        return std::make_unique<tkw::game::AggressiveAI>();
                     return std::make_unique<tkw::game::SimpleAI>();
+                };
+                if (humans.empty())
+                    return make_ai(ai);
                 return std::make_unique<tkw::game::ai::RoutedAI>(
-                    humans, std::cin, std::cout);
+                    humans, std::cin, std::cout, make_ai(ai));
             }
 
             inline void print_status(const Session &s)
@@ -452,6 +480,7 @@ namespace tkw
                 s.game = std::move(game);
                 s.state = std::move(state);
                 s.humans = opt.humans;
+                s.ai = opt.ai;
                 s.verbose = opt.verbose;
                 s.active = true;
                 s.stats = BattleStats{};
@@ -466,7 +495,7 @@ namespace tkw
                     return CliFailure{CliError("没有进行中的对局")};
                 auto log = subscribe_event_log(*s.game, verbose);
                 auto stats_handles = subscribe_stats(*s.game, s.stats);
-                auto ai = make_decision_source(s.humans);
+                auto ai = make_decision_source(s.humans, s.ai);
                 auto ctx = s.game->context();
                 if (tkw::game::session_over(ctx))
                 {
@@ -502,7 +531,7 @@ namespace tkw
                     return CliFailure{CliError("没有进行中的对局")};
                 auto log = subscribe_event_log(*s.game, verbose);
                 auto stats_handles = subscribe_stats(*s.game, s.stats);
-                auto ai = make_decision_source(s.humans);
+                auto ai = make_decision_source(s.humans, s.ai);
                 auto ctx = s.game->context();
                 bool advanced = false;
                 while (!tkw::game::session_over(ctx))
@@ -566,6 +595,7 @@ namespace tkw
                 s.game = std::move(game);
                 s.state = std::move(state);
                 s.humans = opt.humans;
+                s.ai = opt.ai;
                 s.verbose = opt.verbose;
                 s.active = true;
                 s.stats = BattleStats{};
@@ -601,7 +631,7 @@ namespace tkw
                 BattleStats stats;
                 auto stats_handles = subscribe_stats(*game, stats);
 
-                auto ai = make_decision_source(opt.humans);
+                auto ai = make_decision_source(opt.humans, opt.ai);
                 tkw::game::GameSession session;
                 if (tkw::game::start_session(ctx, session, "P0", opt.hand).is_err())
                     return CliFailure{CliError("开局失败")};
@@ -810,6 +840,7 @@ namespace tkw
                     "  批量一次性:\n"
                     "    tkw                      跑一局 AI 对局\n"
                     "    tkw deal 2 1             按位置参数跑一局（2 人，种子 1）\n"
+                    "    tkw --ai aggressive deal 2 1  aggressive AI 跑一局\n"
                     "    tkw audit                审计牌堆\n"
                     "    tkw cards              列出牌表构成\n"
                     "  REPL 会话（先 tkw repl，再逐条输入）:\n"

@@ -329,3 +329,28 @@ TEST_CASE("cli: audit entry name renders chinese name with id")
           "雌雄双股剑(cixiong)");
     CHECK(tkw::cli::detail::audit_entry_name(cat, "nope") == "nope(nope)");
 }
+
+TEST_CASE("cli: new with --ai aggressive runs to the end in the session")
+{
+    Repl repl;
+
+    auto created = repl.run("new --players 2 --seed 1 --ai aggressive");
+    CHECK(created.ok);
+    CHECK(repl.session.ai == tkw::cli::AiLevel::Aggressive);
+
+    // 会话难度档被 step/run 消费：确定性种子跑完（胜者或回合上限平局）
+    auto ran = repl.run("run");
+    CHECK(ran.ok);
+    const bool has_outcome = ran.out.find("胜者") != std::string::npos ||
+                             ran.out.find("平局") != std::string::npos;
+    CHECK(has_outcome);
+}
+
+TEST_CASE("cli: --ai rejects an unmapped value")
+{
+    Repl repl;
+
+    auto bad = repl.run("new --ai bogus");
+    CHECK_FALSE(bad.ok);
+    CHECK(bad.error.find("Parse Error") != std::string::npos);
+}

@@ -56,7 +56,7 @@ target_compile_definitions(
 doctest_discover_tests(card_tests)
 
 add_executable(game_tests test_main.cpp game/game_test.cpp game/replay_test.cpp
-                           game/ai_test.cpp)
+                       game/ai_test.cpp game/aggressive_test.cpp)
 
 target_link_libraries(game_tests PRIVATE tkw_game doctest)
 
@@ -301,4 +301,18 @@ add_test(NAME cli_stats_kill_count
          COMMAND sh -c
                  "out=$($<TARGET_FILE:tkw> deal 2 3 2>&1); printf '%s' \"$out\" | grep -qE '击杀 [1-9]'")
 set_tests_properties(cli_stats_kill_count PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# --ai aggressive：完整跑局 + 统计块（与默认 deal 同关键词口径，仅 AI 档不同）。
+add_test(NAME cli_ai_aggressive_deal
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> deal 2 1 --ai aggressive 2>&1); printf '%s' \"$out\" | grep -qE '胜者|平局' && printf '%s' \"$out\" | grep -q '对局统计'")
+set_tests_properties(cli_ai_aggressive_deal PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 值域校验：非法 --ai 值解析期拒绝（enum 映射外，Parse Error rc=2）。
+add_test(NAME cli_ai_bogus_value_rejected
+         COMMAND tkw deal 2 1 --ai bogus)
+set_tests_properties(cli_ai_bogus_value_rejected PROPERTIES
+    WILL_FAIL TRUE
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

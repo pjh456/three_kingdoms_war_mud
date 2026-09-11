@@ -619,16 +619,26 @@ namespace tkw
 
             /**
              * @class RoutedAI
-             * @brief 按决策者 id 路由：命中真人座位走交互输入，其余回落贪心 AI。
+             * @brief 按决策者 id 路由：命中真人座位走交互输入，其余回落注入的 AI 决策源。
              * @note 每个回调携带的 actor 即该决策的发起者（出牌为回合角色，响应/
              *       救桃/无懈/弃牌/选牌为当事人）；路由只按 id 查表，不改接缝。
+             *       回落决策源构造注入（难度档同源注入点）；三参构造保持贪心档
+             *       回落，供既有调用点沿用。
              */
             class RoutedAI : public DecisionSource
             {
             public:
                 RoutedAI(
                     const std::vector<std::string> &humans, std::istream &in,
-                    std::ostream &out)
+                    std::ostream &out) :
+                    RoutedAI(humans, in, out, std::make_unique<SimpleAI>())
+                {
+                }
+
+                RoutedAI(
+                    const std::vector<std::string> &humans, std::istream &in,
+                    std::ostream &out, std::unique_ptr<DecisionSource> fallback) :
+                    fallback_(std::move(fallback))
                 {
                     for (const auto &id : humans)
                         humans_.emplace(id, std::make_unique<HumanAI>(in, out));
@@ -692,7 +702,7 @@ namespace tkw
                 }
 
             private:
-                SimpleAI fallback_;
+                std::unique_ptr<DecisionSource> fallback_;
                 std::map<std::string, std::unique_ptr<HumanAI>> humans_;
 
                 DecisionSource &route(const std::string &actor)
@@ -700,7 +710,7 @@ namespace tkw
                     const auto it = humans_.find(actor);
                     if (it != humans_.end())
                         return static_cast<DecisionSource &>(*it->second);
-                    return static_cast<DecisionSource &>(fallback_);
+                    return *fallback_;
                 }
             };
         }
