@@ -220,7 +220,15 @@ add_test(NAME cli_repl_query_padded_keyword
          COMMAND sh -c
                  "out=$(printf '? save\\n? aud\\n quit\\n' | $<TARGET_FILE:tkw> repl 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '匹配命令' && printf '%s' \"$out\" | grep -q 'save' && printf '%s' \"$out\" | grep -q 'audit' && ! printf '%s' \"$out\" | grep -q '您是否要找' && [ $rc -eq 0 ]")
 set_tests_properties(cli_repl_query_padded_keyword PROPERTIES
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# REPL 退出行带行尾空白（`quit `）应同样终止循环：不落入模糊歧义、其后输入行
+# 不被派发（会话摘要「会话: 无」仅首行 st 一处）。钉 shipped 二进制，防子模块回退。
+add_test(NAME cli_repl_quit_trailing_blank
+         COMMAND sh -c
+                 "out=$(printf 'st\\nquit \\nst\\n' | $<TARGET_FILE:tkw> repl 2>&1); rc=$?; [ $rc -eq 0 ] && ! printf '%s' \"$out\" | grep -q 'ambiguous' && [ \"$(printf '%s' \"$out\" | grep -c '会话: 无')\" -eq 1 ]")
+set_tests_properties(cli_repl_quit_trailing_blank PROPERTIES
+     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # REPL 内 `new --help` 走 App 帮助格式化器（与批量 --help 同一中文渲染路径）：
 # 钉中文段标题齐全且无英文残留。与上面 `?`/`help` 的导航渲染链互为补充，两条链
