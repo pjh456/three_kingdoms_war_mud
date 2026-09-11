@@ -177,6 +177,10 @@ TEST_CASE("cli: session commands report missing session")
     auto load = repl.run("load /tmp/tkw-cli-definitely-missing.json");
     CHECK_FALSE(load.ok);
     CHECK(load.error.find("读取存档失败") != std::string::npos);
+    // 标签与路径都要暴露给用户，便于直接排错。
+    CHECK(load.error.find("文件不存在") != std::string::npos);
+    CHECK(load.error.find("/tmp/tkw-cli-definitely-missing.json") !=
+          std::string::npos);
 }
 
 TEST_CASE("cli: save then load restores the session")
@@ -635,11 +639,11 @@ TEST_CASE("cli: load rejects a non-JSON archive and keeps the session")
     REQUIRE(repl.session.game != nullptr);
     const std::size_t entities = repl.session.game->entities.size();
 
-    // 文本非 JSON：CLI 应把 reader 的 ParseError 包成存档加载失败 kind=0
+    // 文本非 JSON：CLI 应把 reader 的 ParseError 包成「存档加载失败（JSON 非法）」
     auto bad = repl.run("load " + file.string());
     CHECK_FALSE(bad.ok);
     CHECK(bad.error.find("存档加载失败") != std::string::npos);
-    CHECK(bad.error.find("kind=0") != std::string::npos);
+    CHECK(bad.error.find("JSON 非法") != std::string::npos);
     CHECK(bad.error.find("JSON") != std::string::npos);
 
     // 解析失败不污染会话：仍是原对局、原进度、原实体数
@@ -680,7 +684,7 @@ TEST_CASE("cli: load rejects an archive written for a different deck")
         repl.run("load " + save.string() + " --deck " + dir.string());
     CHECK_FALSE(mismatched.ok);
     CHECK(mismatched.error.find("存档加载失败") != std::string::npos);
-    CHECK(mismatched.error.find("kind=2") != std::string::npos);
+    CHECK(mismatched.error.find("牌表不符") != std::string::npos);
     CHECK(mismatched.error.find("deck.hash") != std::string::npos);
 
     // 建局成功但校验失败，仍不替换会话
@@ -706,11 +710,35 @@ TEST_CASE("cli: save reports a write failure when the parent is missing")
     auto saved = repl.run("save " + file.string());
     CHECK_FALSE(saved.ok);
     CHECK(saved.error.find("写入存档失败") != std::string::npos);
+    CHECK(saved.error.find("父目录不存在") != std::string::npos);
     CHECK_FALSE(std::filesystem::exists(file));
 
     // 会话未受影响，仍可继续推进
     CHECK(repl.session.active);
     CHECK(repl.run("step").ok);
+
+    std::filesystem::remove_all(dir, ec);
+}
+
+TEST_CASE("cli: load rejects a directory with a non-file reason")
+{
+    Repl repl;
+    const std::filesystem::path dir = temp_dir("tkw_cli_load_dir");
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    REQUIRE(std::filesystem::create_directories(dir));
+
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+    const std::string current = repl.session.state.current;
+
+    // 目录存在但不是常规文件：read_text 报 NotAFile，文案保留路径与根因。
+    auto loaded = repl.run("load " + dir.string());
+    CHECK_FALSE(loaded.ok);
+    CHECK(loaded.error.find("读取存档失败") != std::string::npos);
+    CHECK(loaded.error.find("不是常规文件") != std::string::npos);
+    CHECK(loaded.error.find(dir.string()) != std::string::npos);
+    CHECK(repl.session.active);
+    CHECK(repl.session.state.current == current);
 
     std::filesystem::remove_all(dir, ec);
 }

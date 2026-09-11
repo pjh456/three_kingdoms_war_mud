@@ -1,15 +1,17 @@
 /**
  * @file error_zh.hpp
- * @brief CLI 解析错误中文渲染：把框架 CliError 渲染为面向用户的中文文本。
+ * @brief CLI 错误中文渲染：框架 CliError 与存档读写失败均渲染为面向用户的中文文本。
  * @note 只渲染不改退出码：解析错误（Parse）加中文前缀 + 中文正文，运行时错误
  *       （Runtime）原样返回 what()（项目自身消息本已中文、无前缀）。批量入口与
- *       REPL 共用同一渲染，保证两条路径文案一致。
+ *       REPL 共用同一渲染，保证两条路径文案一致。存档读写的根因标签与路径
+ *       在此统一拼装，CLI 命令体只负责取 Result 错误值。
  */
 #ifndef INCLUDE_TKW_CLI_ERROR_ZH_HPP
 #define INCLUDE_TKW_CLI_ERROR_ZH_HPP
 
 #include <concepts>
 #include <cstddef>
+#include <filesystem>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -17,6 +19,9 @@
 #include <vector>
 
 #include <pjh_cli.hpp>
+
+#include "io/error.hpp"
+#include "save/error.hpp"
 
 namespace tkw
 {
@@ -153,6 +158,88 @@ namespace tkw
             if (err.kind() == pjh::cli::ErrorKind::Runtime)
                 return err.what();
             return std::string(kParseErrorPrefix) + render_parse_error_zh(err.info());
+        }
+
+        /**
+         * @brief 存档加载失败类别 → 中文根因标签。
+         * @param kind 存档读取器返回的失败类别。
+         * @return 五个枚举值各自的中文标签；未命中回落「未知错误」。
+         * @note 穷举 `SaveErrorKind`，新增枚举值时编译器以 `-Wswitch` 提示补充。
+         */
+        inline std::string_view save_error_kind_zh(save::SaveErrorKind kind)
+        {
+            switch (kind)
+            {
+            case save::SaveErrorKind::ParseError:
+                return "JSON 非法";
+            case save::SaveErrorKind::VersionMismatch:
+                return "存档版本不符";
+            case save::SaveErrorKind::DeckMismatch:
+                return "牌表不符";
+            case save::SaveErrorKind::StructureError:
+                return "结构错误";
+            case save::SaveErrorKind::RngError:
+                return "随机源错误";
+            }
+            return "未知错误";
+        }
+
+        /**
+         * @brief 文件 I/O 错误 → 中文根因标签。
+         * @param e 文件层收敛后的错误类别。
+         * @param writing 是否为写入路径：`NotExist` 在写侧表示父目录不存在，
+         *        在读侧表示文件不存在，必须由调用方区分。
+         * @return 各枚举值的中文标签；未命中回落「未知错误」。
+         */
+        inline std::string_view io_error_zh(io::IoError e, bool writing)
+        {
+            switch (e)
+            {
+            case io::IoError::NotExist:
+                return writing ? "父目录不存在" : "文件不存在";
+            case io::IoError::NotAFile:
+                return "不是常规文件";
+            case io::IoError::Permission:
+                return "无访问权限";
+            case io::IoError::IoFailed:
+                return "读写失败";
+            }
+            return "未知错误";
+        }
+
+        /**
+         * @brief 存档解析失败文案：`存档加载失败（<标签>）: <detail>`。
+         * @param e 存档读取器错误（`detail` 为字段路径或定位串）。
+         * @return 中文标签 + 原始定位，保留根因与精确字段。
+         */
+        inline std::string render_save_error_zh(const save::SaveError &e)
+        {
+            return "存档加载失败（" + std::string(save_error_kind_zh(e.kind)) +
+                   "）: " + e.detail;
+        }
+
+        /**
+         * @brief 读档失败文案：`读取存档失败（<标签>）: <path>`。
+         * @param file 被读取的存档路径。
+         * @param e 文件层错误；`NotExist` 按读侧语义渲染为「文件不存在」。
+         */
+        inline std::string render_read_error_zh(
+            const std::filesystem::path &file, io::IoError e)
+        {
+            return "读取存档失败（" + std::string(io_error_zh(e, false)) +
+                   "）: " + file.string();
+        }
+
+        /**
+         * @brief 写档失败文案：`写入存档失败（<标签>）: <path>`。
+         * @param file 被写入的存档路径。
+         * @param e 文件层错误；`NotExist` 按写侧语义渲染为「父目录不存在」。
+         */
+        inline std::string render_write_error_zh(
+            const std::filesystem::path &file, io::IoError e)
+        {
+            return "写入存档失败（" + std::string(io_error_zh(e, true)) +
+                   "）: " + file.string();
         }
     }  // namespace cli
 }  // namespace tkw

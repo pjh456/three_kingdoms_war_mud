@@ -129,6 +129,13 @@ add_test(NAME cli_step_without_session_plain_error
 set_tests_properties(cli_step_without_session_plain_error PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# 读档失败文案可操作化：中文根因标签 + 保留路径，rc 仍 1。
+add_test(NAME cli_load_missing_file_reports_reason
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> load /nonexistent-tkw-save.json 2>&1); rc=$?; printf '%s' \"$out\" | grep -Fq '读取存档失败（文件不存在）' && printf '%s' \"$out\" | grep -q '/nonexistent-tkw-save.json' && [ $rc -eq 1 ]")
+set_tests_properties(cli_load_missing_file_reports_reason PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # audit：钉退出码与结果关键词；未实现卡集合随引擎演进而变，不钉具体卡名。
 add_test(NAME cli_audit_ok COMMAND tkw audit)
 set_tests_properties(cli_audit_ok PROPERTIES

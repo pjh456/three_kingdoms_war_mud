@@ -487,8 +487,10 @@ namespace tkw
                 meta.stats = s.stats;
                 const std::string text =
                     tkw::save::write(*s.game, s.state, "deck", meta);
-                if (tkw::io::write_text_atomic(file, text).is_err())
-                    return CliFailure{CliError("写入存档失败: " + file.string())};
+                const auto write = tkw::io::write_text_atomic(file, text);
+                if (write.is_err())
+                    return CliFailure{
+                        CliError(render_write_error_zh(file, write.unwrap_err()))};
                 std::cout << "已保存: " << file.string() << "\n";
                 return CliResult<void>::Ok();
             }
@@ -506,7 +508,8 @@ namespace tkw
             {
                 auto text = tkw::io::read_text(file);
                 if (text.is_err())
-                    return CliFailure{CliError("读取存档失败: " + file.string())};
+                    return CliFailure{
+                        CliError(render_read_error_zh(file, text.unwrap_err()))};
                 auto built = tkw::game::build_game(build_options_from(opt));
                 if (built.is_err())
                     return CliFailure{CliError(format_build_error(built.unwrap_err()))};
@@ -515,12 +518,7 @@ namespace tkw
                 tkw::save::SessionMeta meta;
                 auto r = tkw::save::read(text.unwrap(), *game, state, &meta);
                 if (r.is_err())
-                {
-                    const auto &e = r.unwrap_err();
-                    return CliFailure{CliError(
-                        "存档加载失败 (kind=" +
-                        std::to_string(static_cast<int>(e.kind)) + "): " + e.detail)};
-                }
+                    return CliFailure{CliError(render_save_error_zh(r.unwrap_err()))};
                 const std::string verr = validate_humans(*game, opt.humans);
                 if (!verr.empty())
                     return CliFailure{CliError(verr)};
