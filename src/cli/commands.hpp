@@ -341,15 +341,34 @@ namespace tkw
                 return tkw::game::LoopResult<RunOutcome>::Ok(RunOutcome::Finished);
             }
 
+            /**
+             * @brief 打印会话状态：无会话 / 进行中 / 已结束三态。
+             * @param s 当前会话；active 为假或 game 为空时只打印「会话: 无」。
+             * @note 结束态以引擎 session_over（存活 ≤ 1）判定，胜者经 winner_label
+             *       回落，0 存活显示「平局（同归于尽）」；仅进行中打印「下一回合」。
+             */
             inline void print_status(const Session &s)
             {
-                std::cout << "会话: " << (s.active ? "进行中" : "无") << "\n";
                 if (!s.active || !s.game)
+                {
+                    std::cout << "会话: 无\n";
                     return;
+                }
+
                 auto ctx = s.game->context();
-                std::cout << "  下一回合: " << s.state.current
-                          << "，已执行回合: " << s.state.turns
-                          << "，存活: " << ctx.entities->size() << "\n";
+                const bool over = tkw::game::session_over(ctx);
+                std::cout << "会话: " << (over ? "已结束" : "进行中") << "\n";
+
+                // 已结束不再提示下一回合，与 run/deal 共用 winner_label 回落。
+                if (over)
+                    std::cout << "  胜者: " << winner_label(tkw::game::session_winner(ctx))
+                              << "，已执行回合: " << s.state.turns
+                              << "，存活: " << ctx.entities->size() << "\n";
+                else
+                    std::cout << "  下一回合: " << s.state.current
+                              << "，已执行回合: " << s.state.turns
+                              << "，存活: " << ctx.entities->size() << "\n";
+
                 std::cout << "  AI 难度: " << ai_level_name(s.ai) << "\n";
                 std::cout << "  真人座位: ";
                 if (s.humans.empty())
@@ -433,7 +452,6 @@ namespace tkw
                     }
                     return CliFailure{CliError("回合执行失败")};
                 }
-                print_status(s);
                 if (tkw::game::session_over(ctx))
                 {
                     std::cout << "对局结束，胜者: "
@@ -442,6 +460,8 @@ namespace tkw
                     print_battle_stats(
                         s.stats, *s.game, tkw::game::session_winner(ctx), s.state.turns);
                 }
+                else
+                    print_status(s);
                 return CliResult<void>::Ok();
             }
 

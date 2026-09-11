@@ -474,3 +474,11 @@ add_test(NAME cli_human_seat_out_of_range
                  "out=$($<TARGET_FILE:tkw> --human P9 new --players 2 --seed 1 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '真人座位不存在: P9' && printf '%s' \"$out\" | grep -q '可用座位' && [ $rc -eq 1 ]")
 set_tests_properties(cli_human_seat_out_of_range PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# status 结束态：run 后 status 显示已结束与胜者，不再提示下一回合。
+# new 的进行中 status 仍含一次「下一回合」，故按出现次数钉（全程仅 1 次）。
+add_test(NAME cli_status_finished
+         COMMAND sh -c
+                 "out=$(printf 'new --players 2 --seed 1\\nrun\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); printf '%s' \"$out\" | grep -q '会话: 已结束' && printf '%s' \"$out\" | grep -q '胜者: P0' && [ \"$(printf '%s' \"$out\" | grep -c '下一回合')\" -eq 1 ]")
+set_tests_properties(cli_status_finished PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

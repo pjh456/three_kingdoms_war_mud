@@ -813,3 +813,28 @@ TEST_CASE("cli: resource and loop failures render Chinese reason labels")
     CHECK(tkw::cli::loop_error_zh(LoopError::NoPlayers) ==
           "对局失败（无可用玩家）");
 }
+
+TEST_CASE("cli: status reports a finished session and its winner")
+{
+    Repl repl;
+
+    // 2p seed1 确定性终局：status 显示已结束与胜者，不再提示下一回合。
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+    REQUIRE(repl.run("run").ok);
+    auto finished = repl.run("status");
+    CHECK(finished.ok);
+    CHECK(finished.out.find("会话: 已结束") != std::string::npos);
+    CHECK(finished.out.find("胜者: P0") != std::string::npos);
+    CHECK(finished.out.find("下一回合") == std::string::npos);
+
+    // 同归于尽（0 存活）：胜者回落「平局（同归于尽）」，不落空串。
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+    auto ctx = repl.session.game->context();
+    tkw::game::declare_death(ctx, "P0");
+    tkw::game::declare_death(ctx, "P1");
+    auto draw = repl.run("status");
+    CHECK(draw.ok);
+    CHECK(draw.out.find("会话: 已结束") != std::string::npos);
+    CHECK(draw.out.find("胜者: 平局（同归于尽）") != std::string::npos);
+    CHECK(draw.out.find("下一回合") == std::string::npos);
+}
