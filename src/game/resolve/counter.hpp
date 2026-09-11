@@ -32,13 +32,9 @@ namespace tkw
     {
         inline bool has_counter_card(const GameContext &ctx, const std::string &player)
         {
-            for (const auto &c : ctx.cards->hand(player))
-            {
-                const auto def = ctx.catalog->find(c.def_id);
-                if (def.is_some() && is_counter_def(*def.unwrap()))
-                    return true;
-            }
-            return false;
+            return any_hand_card_matching(
+                ctx, player,
+                [](const card::CardDef &def) { return is_counter_def(def); });
         }
 
         inline bool consume_counter(

@@ -60,6 +60,59 @@ namespace tkw
             return judge_triggered(j.trigger, c) ? j.success : j.failure;
         }
 
+        /**
+         * @brief 目录查找：命中返回定义指针，未命中或目录未绑定时返回 nullptr。
+         */
+        inline const card::CardDef *def_of(
+            const ReadOnlyContext &ctx, const std::string &def_id)
+        {
+            if (!ctx.catalog)
+                return nullptr;
+            const auto def = ctx.catalog->find(def_id);
+            return def.is_some() ? def.unwrap() : nullptr;
+        }
+
+        /**
+         * @brief 单张牌是否满足谓词（目录缺失或未命中即不匹配）。
+         * @tparam Accept 谓词类型：接受 `const card::CardDef &`、返回 bool。
+         */
+        template <class Accept>
+        inline bool hand_card_matching(
+            const ReadOnlyContext &ctx, const card::Card &c, Accept accept)
+        {
+            const card::CardDef *def = def_of(ctx, c.def_id);
+            return def != nullptr && accept(*def);
+        }
+
+        /**
+         * @brief 手牌中是否存在满足谓词者（只读扫描）。
+         * @tparam Accept 谓词类型：接受 `const card::CardDef &`、返回 bool。
+         */
+        template <class Accept>
+        inline bool any_hand_card_matching(
+            const ReadOnlyContext &ctx, const std::string &owner, Accept accept)
+        {
+            for (const auto &c : ctx.cards->hand(owner))
+                if (hand_card_matching(ctx, c, accept))
+                    return true;
+            return false;
+        }
+
+        /**
+         * @brief 手牌中首张满足谓词者（只读副本）。
+         * @tparam Accept 谓词类型：接受 `const card::CardDef &`、返回 bool。
+         * @return Some(首张匹配的手牌)；None = 无匹配（含目录缺失）。
+         */
+        template <class Accept>
+        inline Option<card::Card> find_hand_card_matching(
+            const ReadOnlyContext &ctx, const std::string &owner, Accept accept)
+        {
+            for (const auto &c : ctx.cards->hand(owner))
+                if (hand_card_matching(ctx, c, accept))
+                    return Option<card::Card>::Some(c);
+            return Option<card::Card>::None();
+        }
+
         /** @brief 回血（按上限钳制）。 */
         inline void apply_heal(GameContext &ctx, const std::string &target, int amount)
         {

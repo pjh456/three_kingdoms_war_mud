@@ -35,13 +35,9 @@ namespace tkw
         /** @brief 玩家手牌中是否有桃。 */
         inline bool has_peach(const GameContext &ctx, const std::string &player)
         {
-            for (const auto &c : ctx.cards->hand(player))
-            {
-                const auto def = ctx.catalog->find(c.def_id);
-                if (def.is_some() && is_rescue_def(*def.unwrap()))
-                    return true;
-            }
-            return false;
+            return any_hand_card_matching(
+                ctx, player,
+                [](const card::CardDef &def) { return is_rescue_def(def); });
         }
 
         /** @brief 消耗玩家指定的救场牌（校验确为救场牌）；失败返回 false。 */

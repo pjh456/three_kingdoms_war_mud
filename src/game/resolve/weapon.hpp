@@ -69,13 +69,9 @@ namespace tkw
         inline Option<card::Card> find_sha_in_hand(
             const GameContext &ctx, const std::string &player)
         {
-            for (const auto &c : ctx.cards->hand(player))
-            {
-                const auto def = ctx.catalog->find(c.def_id);
-                if (def.is_some() && is_response_def(*def.unwrap(), card::ResponseKind::Sha))
-                    return Option<card::Card>::Some(c);
-            }
-            return Option<card::Card>::None();
+            return find_hand_card_matching(
+                ctx, player, [](const card::CardDef &def)
+                { return is_response_def(def, card::ResponseKind::Sha); });
         }
 
         /**

@@ -33,12 +33,11 @@ namespace tkw
         inline bool has_response_card(
             const GameContext &ctx, const std::string &entity_id, card::ResponseKind kind)
         {
-            for (const auto &c : ctx.cards->hand(entity_id))
-            {
-                const auto def = ctx.catalog->find(c.def_id);
-                if (def.is_some() && is_response_def(*def.unwrap(), kind))
-                    return true;
-            }
+            if (any_hand_card_matching(
+                    ctx, entity_id,
+                    [kind](const card::CardDef &def)
+                    { return is_response_def(def, kind); }))
+                return true;
             return kind == card::ResponseKind::Sha &&
                    has_ability(ctx, entity_id, card::Ability::TwoCardsAsSha) &&
                    ctx.cards->hand_size(entity_id) >= 2;

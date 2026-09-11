@@ -22,6 +22,7 @@
 #include "game/ai/view.hpp"
 #include "game/core/decision.hpp"
 #include "game/core/effect.hpp"
+#include "game/core/state.hpp"
 #include "util/types.hpp"
 
 namespace tkw
@@ -244,21 +245,24 @@ namespace tkw
                     const ReadOnlyContext &ctx, const card::Card &c,
                     card::ResponseKind kind)
                 {
-                    const auto def = ctx.catalog->find(c.def_id);
-                    return def.is_some() && is_response_def(*def.unwrap(), kind);
+                    return hand_card_matching(
+                        ctx, c, [kind](const card::CardDef &def)
+                        { return is_response_def(def, kind); });
                 }
 
                 static bool is_rescue_card(const ReadOnlyContext &ctx, const card::Card &c)
                 {
-                    const auto def = ctx.catalog->find(c.def_id);
-                    return def.is_some() && is_rescue_def(*def.unwrap());
+                    return hand_card_matching(
+                        ctx, c,
+                        [](const card::CardDef &def) { return is_rescue_def(def); });
                 }
 
                 static bool is_counter_card(
                     const ReadOnlyContext &ctx, const card::Card &c)
                 {
-                    const auto def = ctx.catalog->find(c.def_id);
-                    return def.is_some() && is_counter_def(*def.unwrap());
+                    return hand_card_matching(
+                        ctx, c,
+                        [](const card::CardDef &def) { return is_counter_def(def); });
                 }
 
                 /** @brief 追加一个区域的候选牌，并为每张牌记录来源分区。 */
