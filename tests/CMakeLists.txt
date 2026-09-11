@@ -430,3 +430,23 @@ add_test(NAME cli_save_load_ai_roundtrip
                  "out=$(printf 'new --players 2 --seed 1 --ai aggressive\\nstep\\nsave ${CMAKE_CURRENT_BINARY_DIR}/tkw-ai-roundtrip.json\\nnew --players 2 --seed 1\\nload ${CMAKE_CURRENT_BINARY_DIR}/tkw-ai-roundtrip.json\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); rc=$?; rm -f ${CMAKE_CURRENT_BINARY_DIR}/tkw-ai-roundtrip.json; printf '%s' \"$out\" | grep -q 'AI 难度: aggressive' && [ $rc -eq 0 ]")
 set_tests_properties(cli_save_load_ai_roundtrip PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 位置参数越界：文案带当前值与合法范围 [2, 8]，rc=1（解析期 --players 走 rc=2 另一路径）。
+add_test(NAME cli_deal_players_out_of_range
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> deal 99 1 2>&1); rc=$?; printf '%s' \"$out\" | grep -Fq '超出范围 [2, 8]' && printf '%s' \"$out\" | grep -q '99' && [ $rc -eq 1 ]")
+set_tests_properties(cli_deal_players_out_of_range PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_test(NAME cli_simulate_players_out_of_range
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> simulate 1 99 2>&1); rc=$?; printf '%s' \"$out\" | grep -Fq '超出范围 [2, 8]' && printf '%s' \"$out\" | grep -q '99' && [ $rc -eq 1 ]")
+set_tests_properties(cli_simulate_players_out_of_range PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 真人座位越界：文案带可用座位，rc=1。
+add_test(NAME cli_human_seat_out_of_range
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> --human P9 new --players 2 --seed 1 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '真人座位不存在: P9' && printf '%s' \"$out\" | grep -q '可用座位' && [ $rc -eq 1 ]")
+set_tests_properties(cli_human_seat_out_of_range PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

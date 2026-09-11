@@ -309,10 +309,13 @@ TEST_CASE("cli: invalid human seats are rejected")
     auto missing = repl.run("new --human P9 --players 2 --seed 1");
     CHECK_FALSE(missing.ok);
     CHECK(missing.error.find("真人座位不存在") != std::string::npos);
+    CHECK(missing.error.find("可用座位") != std::string::npos);
+    CHECK(missing.error.find("P0") != std::string::npos);
 
     auto duplicate = repl.run("new --human P0 --human P0 --players 2 --seed 1");
     CHECK_FALSE(duplicate.ok);
     CHECK(duplicate.error.find("真人座位重复") != std::string::npos);
+    CHECK(duplicate.error.find("每个座位只能指定一次") != std::string::npos);
 }
 
 TEST_CASE("cli: --human completion offers seat ids")

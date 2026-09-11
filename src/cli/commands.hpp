@@ -215,18 +215,45 @@ namespace tkw
                 return format_load_error(e.config);
             }
 
-            /** 校验真人座位：必须是对局中存在的实体且互不重复；空串表示通过。 */
+            /**
+             * @brief 玩家数越界 → 用户可见文案。
+             * @param value 实际传入的玩家数。
+             * @param rules 玩家数上下限来源。
+             * @return 「玩家数 N 超出范围 [min, max]」，与选项 --players 的解析期
+             *         越界文案同用「超出范围 [min, max]」措辞。
+             */
+            inline std::string player_range_error(
+                int value, const tkw::game::RulesConfig &rules)
+            {
+                return "玩家数 " + std::to_string(value) + " 超出范围 [" +
+                       std::to_string(rules.min_players) + ", " +
+                       std::to_string(rules.max_players) + "]";
+            }
+
+            /**
+             * @brief 校验真人座位：必须是对局中存在的实体且互不重复；空串表示通过。
+             * @return 查无此 id 时返回「真人座位不存在: <id>（可用座位: ...）」；
+             *         重复时返回「真人座位重复: <id>（每个座位只能指定一次）」；
+             *         全部通过返回空串。
+             * @note 可用座位取当前存活实体的按座位序 id 列表。读档后阵亡者不在
+             *       实体集合中，故列表如实反映此刻可选座位，而非 P0..P{n-1} 范围。
+             */
             inline std::string validate_humans(
                 tkw::game::Game &game, const std::vector<std::string> &humans)
             {
                 auto ctx = game.context();
+                const auto seats = ctx.entities->ordered_ids();
+                const std::string seat_hint =
+                    seats.empty() ? "（无可用座位）"
+                                  : "（可用座位: " + join_items(seats, "、") + "）";
                 for (std::size_t i = 0; i < humans.size(); ++i)
                 {
                     if (ctx.entities->find(humans[i]).is_none())
-                        return "真人座位不存在: " + humans[i];
+                        return "真人座位不存在: " + humans[i] + seat_hint;
                     for (std::size_t j = i + 1; j < humans.size(); ++j)
                         if (humans[i] == humans[j])
-                            return "真人座位重复: " + humans[i];
+                            return "真人座位重复: " + humans[i] +
+                                   "（每个座位只能指定一次）";
                 }
                 return {};
             }
@@ -789,7 +816,8 @@ namespace tkw
                     opt.seed = static_cast<std::uint32_t>(ctx.get<int, 1>());
                     if (opt.players < rules.min_players ||
                         opt.players > rules.max_players)
-                        return CliFailure{CliError("玩家数超出允许范围")};
+                        return CliFailure{
+                            CliError(detail::player_range_error(opt.players, rules))};
                     return detail::run_game(opt);
                 });
 
@@ -809,7 +837,8 @@ namespace tkw
                     opt.players = ctx.get_or<int, 1>(opt.players);
                     if (opt.players < rules.min_players ||
                         opt.players > rules.max_players)
-                        return CliFailure{CliError("玩家数超出允许范围")};
+                        return CliFailure{
+                            CliError(detail::player_range_error(opt.players, rules))};
                     // --seed 按 Options 缺省为 42；simulate 的基种子缺省 1（局种子 1..N）
                     opt.seed = static_cast<std::uint32_t>(
                         ctx.get_or<int, fixed_string("seed")>(1));
