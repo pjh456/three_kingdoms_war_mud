@@ -679,6 +679,8 @@ namespace tkw
                 if (!game)
                     return CliFailure{CliError(err)};
 
+                // 此处只覆盖「枚举已存在但结算未实现」；未知机制名在严格加载期
+                // 即失败，不会到达这里（未知机制的审计报告见 audit 子命令）。
                 const auto unsupported =
                     tkw::game::unsupported_cards(game->catalog);
                 if (!unsupported.empty())
@@ -732,22 +734,27 @@ namespace tkw
                 const std::string herr = reject_humans(opt.humans, "audit");
                 if (!herr.empty())
                     return CliFailure{CliError(herr)};
-                std::string err;
-                auto game = build_game(opt, err);
-                if (!game)
-                    return CliFailure{CliError(err)};
 
-                const auto unsupported =
-                    tkw::game::unsupported_cards(game->catalog);
-                if (unsupported.empty())
+                // 不建局：只按原始机制名审计，未知机制名逐卡列出而非整体拒载
+                // （deal/simulate 仍走严格加载，未知机制在建局入口响亮失败）。
+                tkw::config::ResourceStore store(opt.deck);
+                auto unsupported = tkw::game::unsupported_cards(store, "deck");
+                if (unsupported.is_err())
+                {
+                    const auto &e = unsupported.unwrap_err();
+                    return CliFailure{CliError(
+                        "加载牌堆失败 (kind=" +
+                        std::to_string(static_cast<int>(e.kind)) + "): " + e.detail)};
+                }
+                const auto &cards = unsupported.unwrap();
+                if (cards.empty())
                 {
                     std::cout << "牌堆全部可结算\n";
                     return CliResult<void>::Ok();
                 }
-                std::cout << "未实现卡（" << unsupported.size() << " 张）:\n";
-                for (const auto &id : unsupported)
-                    std::cout << "  " << audit_entry_name(game->catalog, id)
-                              << "\n";
+                std::cout << "未实现卡（" << cards.size() << " 张）:\n";
+                for (const auto &c : cards)
+                    std::cout << "  " << c.name << "(" << c.id << ")\n";
                 return CliResult<void>::Ok();
             }
 
@@ -835,6 +842,7 @@ namespace tkw
                         std::to_string(static_cast<int>(e.kind)) + "): " + e.detail)};
                 }
                 const auto &cat = catalog.unwrap();
+                // 同 run_game：未知机制名到不了这里，非空只在未来枚举实现未补时出现。
                 const auto unsupported = tkw::game::unsupported_cards(cat);
                 if (!unsupported.empty())
                 {

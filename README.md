@@ -68,8 +68,8 @@ tkw --human P0 repl   # P0 真人参与，REPL 交互模式
 | `--ai <simple\|aggressive>` | AI 难度（默认 `simple` 贪心；`aggressive` 伤害/多目标先行） |
 
 上表的选项各命令都声明并接受，但生效面不同：`--deck`/`--players`/`--hand`/`--seed`/`--ai`
-只对建局/载入类命令（裸 `tkw`/`deal`/`new`/`load`/`repl`/`audit`/`simulate`，`cards` 只读
-`--deck`）实际生效；`step`/`run`/`status`/`save` 只读取其中的 `--verbose`（`step`/`run`）
+只对建局/载入类命令（裸 `tkw`/`deal`/`new`/`load`/`repl`/`simulate`）实际生效；`cards`/`audit`
+只读 `--deck`；`step`/`run`/`status`/`save` 只读取其中的 `--verbose`（`step`/`run`）
 或全不读取（`status`/`save`）。`--human` 只在运行真人参与对局的命令生效，`audit`/`cards`/
 `simulate` 会明确拒绝。
 
@@ -112,7 +112,8 @@ tkw repl
 - 卡文件定义 `id`/`name`/`type`/`subtype`/`copies`（逐张列花色与点数，条数即
   张数）/`text`（效果文案），按需再带 `effect`（主动效果）/`equip`（装备）/
   `judge`（判定）/`abilities`（被动能力）；
-- 新增卡牌只改牌表目录，代码零改动；`tkw --deck <dir> audit` 可审计未实现卡；
+- 新增卡牌只改牌表目录，代码零改动；`tkw --deck <dir> audit` 可审计未实现卡
+  （未知机制名逐卡列出，只审机制、不建局；`deal`/`simulate` 遇到未知机制仍会拒绝建局）；
 - 用 `--deck <dir>` 指向自定义牌表，如 `tkw --deck mydeck deal 2 1`。
 
 标准版牌表共 32 个卡牌定义、108 张牌。

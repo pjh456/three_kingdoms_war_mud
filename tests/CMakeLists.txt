@@ -145,6 +145,18 @@ set_tests_properties(cli_audit_bad_deck PROPERTIES
     WILL_FAIL TRUE
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# audit 容错报告未知机制名：严格加载拒载，audit 仍须逐卡列出并 rc=0（红→绿主证）。
+add_test(NAME cli_audit_reports_unknown_mechanism
+         COMMAND sh -c
+                 "d=$(mktemp -d); mkdir -p $d/cards; \
+                  printf '%s' '{\"name\":\"mini\",\"cards\":[\"ghost\"]}' > $d/deck.json; \
+                  printf '%s' '{\"id\":\"ghost\",\"name\":\"幽魂\",\"type\":\"basic\",\"copies\":[{\"suit\":\"spade\",\"number\":1}],\"effect\":{\"kind\":\"summon\",\"amount\":1,\"scope\":\"one_other\"}}' > $d/cards/ghost.json; \
+                  out=$($<TARGET_FILE:tkw> audit --deck $d 2>&1); rc=$?; rm -rf $d; \
+                  printf '%s' \"$out\" | grep -q '未实现卡' && \
+                  printf '%s' \"$out\" | grep -q '幽魂(ghost)' && [ $rc -eq 0 ]")
+set_tests_properties(cli_audit_reports_unknown_mechanism PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # cards：列出牌表。钉牌堆名与首卡「中文名(id) 类别 张数」形态；种类/张数随
 # 牌表演进，不钉全表。
 add_test(NAME cli_cards_list

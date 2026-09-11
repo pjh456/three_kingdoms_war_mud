@@ -47,6 +47,35 @@ namespace tkw
                 scope_table{{"self", Scope::Self}, {"one_other", Scope::OneOther},
                              {"all_others", Scope::AllOthers}, {"all", Scope::All}};
 
+            /** effect.kind 封闭名表：严格解析与名称查询共用的单一表源。 */
+            inline constexpr
+                std::initializer_list<std::pair<std::string_view, CardEffectKind>>
+                    effect_kind_table{{"damage", CardEffectKind::Damage},
+                                      {"jink", CardEffectKind::Jink},
+                                      {"heal", CardEffectKind::Heal},
+                                      {"draw", CardEffectKind::Draw},
+                                      {"discard_target", CardEffectKind::DiscardTarget},
+                                      {"steal", CardEffectKind::Steal},
+                                      {"aoe_damage", CardEffectKind::AoeDamage},
+                                      {"duel", CardEffectKind::Duel},
+                                      {"reveal_pick", CardEffectKind::RevealPick},
+                                      {"borrowed_sword", CardEffectKind::BorrowedSword}};
+
+            /** abilities 封闭名表：严格解析与名称查询共用的单一表源。 */
+            inline constexpr
+                std::initializer_list<std::pair<std::string_view, Ability>>
+                    ability_table{{"no_sha_limit", Ability::NoShaLimit},
+                                  {"ignore_armor", Ability::IgnoreArmor},
+                                  {"cixiong", Ability::Cixiong},
+                                  {"extra_sha_after_jink", Ability::ExtraShaAfterJink},
+                                  {"two_cards_as_sha", Ability::TwoCardsAsSha},
+                                  {"discard_two_force_damage", Ability::DiscardTwoForceDamage},
+                                  {"multi_target_sha", Ability::MultiTargetSha},
+                                  {"discard_horse_on_damage", Ability::DiscardHorseOnDamage},
+                                  {"damage_as_discard", Ability::DamageAsDiscard},
+                                  {"judgement_jink", Ability::JudgementJink},
+                                  {"black_sha_immune", Ability::BlackShaImmune}};
+
             /** 字符串 → 封闭枚举：未知值报 InvalidValue（detail = 字段路径）。 */
             template <typename E>
             cfg::ConfigResult<E> enum_value(
@@ -144,17 +173,7 @@ namespace tkw
             {
                 CardEffect eff;
                 auto kind = require_enum<CardEffectKind>(
-                    obj, "kind", path,
-                    {{"damage", CardEffectKind::Damage},
-                     {"jink", CardEffectKind::Jink},
-                     {"heal", CardEffectKind::Heal},
-                     {"draw", CardEffectKind::Draw},
-                     {"discard_target", CardEffectKind::DiscardTarget},
-                     {"steal", CardEffectKind::Steal},
-                     {"aoe_damage", CardEffectKind::AoeDamage},
-                     {"duel", CardEffectKind::Duel},
-                     {"reveal_pick", CardEffectKind::RevealPick},
-                     {"borrowed_sword", CardEffectKind::BorrowedSword}});
+                    obj, "kind", path, effect_kind_table);
                 if (kind.is_err())
                     return cfg::ConfigResult<CardEffect>::Err(kind.unwrap_err());
                 eff.kind = kind.unwrap();
@@ -331,19 +350,7 @@ namespace tkw
                     if (!s)
                         return cfg::fail<std::vector<Ability>>(
                             cfg::ConfigErrorKind::TypeMismatch, ip);
-                    auto a = enum_value<Ability>(
-                        *s, ip,
-                        {{"no_sha_limit", Ability::NoShaLimit},
-                         {"ignore_armor", Ability::IgnoreArmor},
-                         {"cixiong", Ability::Cixiong},
-                         {"extra_sha_after_jink", Ability::ExtraShaAfterJink},
-                         {"two_cards_as_sha", Ability::TwoCardsAsSha},
-                         {"discard_two_force_damage", Ability::DiscardTwoForceDamage},
-                         {"multi_target_sha", Ability::MultiTargetSha},
-                         {"discard_horse_on_damage", Ability::DiscardHorseOnDamage},
-                         {"damage_as_discard", Ability::DamageAsDiscard},
-                         {"judgement_jink", Ability::JudgementJink},
-                         {"black_sha_immune", Ability::BlackShaImmune}});
+                    auto a = enum_value<Ability>(*s, ip, ability_table);
                     if (a.is_err())
                         return cfg::ConfigResult<std::vector<Ability>>::Err(
                             a.unwrap_err());
@@ -459,6 +466,138 @@ namespace tkw
 
                 return cfg::ConfigResult<CardDef>::Ok(std::move(def));
             }
+        }
+
+        /**
+         * @brief effect.kind 原文 → 效果类别。
+         * @return None 表示名表无此机制（未知/未实现机制）。
+         * @note 与严格解析共用同一名表，避免名↔枚举映射漂移。
+         */
+        inline Option<CardEffectKind> effect_kind_from_name(std::string_view name)
+        {
+            for (const auto &[key, val] : detail::effect_kind_table)
+                if (key == name)
+                    return Option<CardEffectKind>::Some(val);
+            return Option<CardEffectKind>::None();
+        }
+
+        /**
+         * @brief abilities 原文 → 装备能力。
+         * @return None 表示名表无此能力（未知/未实现能力）。
+         * @note 与严格解析共用同一名表，避免名↔枚举映射漂移。
+         */
+        inline Option<Ability> ability_from_name(std::string_view name)
+        {
+            for (const auto &[key, val] : detail::ability_table)
+                if (key == name)
+                    return Option<Ability>::Some(val);
+            return Option<Ability>::None();
+        }
+
+        /** @brief 单卡机制名原文（不做枚举校验，仅供机制审计）。 */
+        struct RawMechanisms
+        {
+            std::string id;   /**< deck.json 引用的卡 id（= cards/<id>.json 文件名） */
+            std::string name; /**< 卡中文名；JSON 缺失时回落 id */
+            Option<std::string> effect_kind =
+                Option<std::string>::None(); /**< effect.kind 原文；无 effect/无 kind 为 None */
+            std::vector<std::string> abilities; /**< abilities 逐项原文；无则空 */
+        };
+
+        /**
+         * @brief 容错扫描牌堆的机制名原文：未知机制名不报错，交给调用方判定。
+         * @param store     资源目录句柄。
+         * @param deck_name 牌堆资源名（通常 "deck"）。
+         * @return Ok 为按 deck 序的逐卡机制原文；Err 为文件缺失/非法 JSON/
+         *         deck 结构错误/字段类型不符（detail 带路径），与严格加载同级。
+         * @note 只读 id/name/effect.kind/abilities 的字符串原文，不校验枚举值，
+         *       也不校验 scope/copies 等其余字段；用途是审计「机制名是否被引擎
+         *       认识」，对局建局仍走严格加载（未知机制直接失败）。
+         */
+        inline cfg::ConfigResult<std::vector<RawMechanisms>> scan_mechanisms(
+            const cfg::ResourceStore &store, std::string_view deck_name)
+        {
+            auto deck_doc = store.load(deck_name);
+            if (deck_doc.is_err())
+                return cfg::ConfigResult<std::vector<RawMechanisms>>::Err(
+                    deck_doc.unwrap_err());
+            const json::Json &root = deck_doc.unwrap().root();
+
+            std::vector<RawMechanisms> out;
+            auto er = cfg::each(root, "cards", {},
+                                [&out, &store](const json::Json &item,
+                                               std::string_view ip)
+                                    -> cfg::ConfigResult<void>
+            {
+                auto id_s = item.try_as_string();
+                if (!id_s)
+                    return cfg::fail<void>(
+                        cfg::ConfigErrorKind::TypeMismatch, std::string(ip));
+
+                RawMechanisms raw;
+                raw.id = std::string(*id_s);
+                raw.name = raw.id;
+
+                const std::string file = "cards/" + raw.id + ".json";
+                auto card_doc = store.load("cards/" + raw.id);
+                if (card_doc.is_err())
+                    return cfg::ConfigResult<void>::Err(card_doc.unwrap_err());
+                const json::Json &card = card_doc.unwrap().root();
+                const auto *co = card.try_as_object();
+                if (!co)
+                    return cfg::fail<void>(cfg::ConfigErrorKind::TypeMismatch, file);
+
+                auto name = cfg::opt_string(card, "name", raw.id, file);
+                if (name.is_err())
+                    return cfg::ConfigResult<void>::Err(name.unwrap_err());
+                raw.name = name.unwrap();
+
+                // 只取 effect.kind 原文；effect 缺失或为非对象按同级字段错误处理
+                if (co->contains("effect"))
+                {
+                    const auto *eo = (*co)["effect"].try_as_object();
+                    if (!eo)
+                        return cfg::fail<void>(
+                            cfg::ConfigErrorKind::TypeMismatch,
+                            cfg::field_path(file, "effect"));
+                    if (eo->contains("kind"))
+                    {
+                        auto k = (*eo)["kind"].try_as_string();
+                        if (!k)
+                            return cfg::fail<void>(
+                                cfg::ConfigErrorKind::TypeMismatch,
+                                cfg::field_path(file, "effect.kind"));
+                        raw.effect_kind = Option<std::string>::Some(std::string(*k));
+                    }
+                }
+
+                // 只取 abilities 原文；数组元素非字符串按同级字段错误处理
+                if (co->contains("abilities"))
+                {
+                    const auto *ao = (*co)["abilities"].try_as_array();
+                    if (!ao)
+                        return cfg::fail<void>(
+                            cfg::ConfigErrorKind::TypeMismatch,
+                            cfg::field_path(file, "abilities"));
+                    const std::string prefix = cfg::field_path(file, "abilities");
+                    for (std::size_t i = 0; i < ao->size(); ++i)
+                    {
+                        const auto s = (*ao)[i].try_as_string();
+                        if (!s)
+                            return cfg::fail<void>(
+                                cfg::ConfigErrorKind::TypeMismatch,
+                                prefix + "[" + std::to_string(i) + "]");
+                        raw.abilities.push_back(std::string(*s));
+                    }
+                }
+
+                out.push_back(std::move(raw));
+                return cfg::ConfigResult<void>::Ok();
+            });
+            if (er.is_err())
+                return cfg::ConfigResult<std::vector<RawMechanisms>>::Err(
+                    er.unwrap_err());
+            return cfg::ConfigResult<std::vector<RawMechanisms>>::Ok(std::move(out));
         }
 
         /**

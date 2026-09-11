@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <iterator>
 #include <string>
@@ -407,5 +408,58 @@ TEST_CASE("card: real standard deck loads to 108 copies")
     REQUIRE(taoyuan.unwrap()->effect.is_some());
     CHECK(taoyuan.unwrap()->effect.unwrap().kind == CardEffectKind::Heal);
     CHECK(taoyuan.unwrap()->effect.unwrap().scope.contains(Scope::All));
+}
+
+TEST_CASE("card: scan_mechanisms reads raw names and shares the name table")
+{
+    tkw::config::ResourceStore store(TKW_TEST_RESOURCE_DIR);
+    auto r = scan_mechanisms(store, "deck");
+    REQUIRE(r.is_ok());
+    const auto &raws = r.unwrap();
+    CHECK(raws.size() == 32);
+    CHECK(raws.front().id == "sha");
+
+    const auto sha = std::find_if(raws.begin(), raws.end(),
+                                  [](const RawMechanisms &m) { return m.id == "sha"; });
+    REQUIRE(sha != raws.end());
+    CHECK(sha->name == "杀");
+    REQUIRE(sha->effect_kind.is_some());
+    CHECK(sha->effect_kind.unwrap() == "damage");
+    CHECK(sha->abilities.empty());
+
+    // 名称查询与严格解析同表：已知名命中、未知名回落 None
+    CHECK(effect_kind_from_name("damage").unwrap() == CardEffectKind::Damage);
+    CHECK(effect_kind_from_name("summon").is_none());
+    CHECK(ability_from_name("cixiong").unwrap() == Ability::Cixiong);
+    CHECK(ability_from_name("super_power").is_none());
+}
+
+TEST_CASE("card: scan_mechanisms tolerates unknown mechanism names")
+{
+    const auto dir = temp_dir("tkw_card_scan_unknown");
+    REQUIRE(pjh::platform::Fs::create_directories(dir / "cards").is_ok());
+
+    CHECK(tkw::io::write_text(dir / "deck.json",
+                              R"({"name": "mini", "cards": ["ghost"]})")
+              .is_ok());
+    CHECK(tkw::io::write_text(dir / "cards" / "ghost.json", R"({
+        "id": "ghost", "name": "幽魂", "type": "basic",
+        "copies": [ {"suit": "spade", "number": 1} ],
+        "effect": {"kind": "summon", "amount": 1, "scope": "one_other"},
+        "abilities": ["super_power"]
+    })").is_ok());
+
+    tkw::config::ResourceStore store(dir);
+    auto r = scan_mechanisms(store, "deck");
+    REQUIRE(r.is_ok());
+    REQUIRE(r.unwrap().size() == 1);
+    CHECK(r.unwrap()[0].id == "ghost");
+    CHECK(r.unwrap()[0].name == "幽魂");
+    REQUIRE(r.unwrap()[0].effect_kind.is_some());
+    CHECK(r.unwrap()[0].effect_kind.unwrap() == "summon");
+    CHECK(r.unwrap()[0].abilities == std::vector<std::string>{"super_power"});
+
+    // 审计容错不放松严格加载：同一牌堆仍被拒载
+    CHECK(CardDefCatalog::load(store, "deck").is_err());
 }
 #endif  // TKW_TEST_RESOURCE_DIR

@@ -1,10 +1,13 @@
 #include <doctest/doctest.h>
 
 #include <cstdint>
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <string>
 #include <vector>
+
+#include <pjh_platform/fs.hpp>
 
 #include "card/card.hpp"
 #include "card/catalog.hpp"
@@ -26,6 +29,7 @@
 #include "game/flow/turn.hpp"
 #include "game/ai/simple.hpp"
 #include "game/resolve/audit.hpp"
+#include "io/file.hpp"
 #include "util/rng.hpp"
 #include "test_game.hpp"
 
@@ -1552,6 +1556,39 @@ TEST_CASE("game: unsupported deck cards are reported")
     TestGame g("deck");
     // 标准牌堆全部卡（含装备能力）引擎已实现
     CHECK(unsupported_cards(g.catalog).empty());
+}
+
+TEST_CASE("game: raw mechanism scan reports unknown names as unsupported")
+{
+    // 未知机制名让严格加载失败，但审计扫描仍应逐卡列出
+    const auto dir = pjh::platform::Fs::temp_directory() / "tkw_audit_unknown";
+    std::filesystem::remove_all(dir);
+    REQUIRE(pjh::platform::Fs::create_directories(dir / "cards").is_ok());
+    CHECK(tkw::io::write_text(dir / "deck.json",
+                              R"({"name": "mini", "cards": ["ghost"]})")
+              .is_ok());
+    CHECK(tkw::io::write_text(dir / "cards" / "ghost.json", R"({
+        "id": "ghost", "name": "幽魂", "type": "basic",
+        "copies": [ {"suit": "spade", "number": 1} ],
+        "effect": {"kind": "summon", "amount": 1, "scope": "one_other"}
+    })").is_ok());
+
+    tkw::config::ResourceStore store(dir);
+    auto r = unsupported_cards(store, "deck");
+    REQUIRE(r.is_ok());
+    REQUIRE(r.unwrap().size() == 1);
+    CHECK(r.unwrap()[0] == UnsupportedCard{"ghost", "幽魂"});
+
+    // 同一牌堆严格加载仍拒载（审计容错与建局严格口径分离）
+    CHECK(CardDefCatalog::load(store, "deck").is_err());
+}
+
+TEST_CASE("game: raw mechanism scan keeps standard deck settleable")
+{
+    tkw::config::ResourceStore store(TKW_TEST_RESOURCE_DIR);
+    auto r = unsupported_cards(store, "deck");
+    REQUIRE(r.is_ok());
+    CHECK(r.unwrap().empty());
 }
 
 TEST_CASE("game: effect traits are the single source of truth")
