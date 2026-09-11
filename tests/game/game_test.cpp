@@ -1383,6 +1383,24 @@ TEST_CASE("game: dying and died events published")
     CHECK(died == 0);
 }
 
+TEST_CASE("game: dying rescue is bounded by dying_rounds")
+{
+    TestGame g("deck");
+    g.rules.dying_rounds = 1;  // 注入小保险上限：允许 2 轮救场
+    g.add_player("a", 0, 1);
+    g.add_player("b", 1, 4);
+    g.give("a", "tao", "t#0");
+    g.give("a", "tao", "t#1");
+    g.give("a", "tao", "t#2");  // 3 张桃 > 上界可支撑的 2 轮
+
+    TestDecider decider;
+    decider.save = true;  // 有桃就救
+    // 空来源：避免击杀奖励 apply_draw 洗回弃牌堆污染牌数
+    deal_damage(g.ctx, decider, /*source=*/"", "a", 3);  // a: 1-3 = -2
+    CHECK(g.entities.find("a").is_none());  // 2 轮后仍 ≤0 → 判死
+    CHECK(g.cards.discard_size() == 3);     // 2 张消耗救场 + 1 张死亡清场
+}
+
 // ── 无懈可击 ─────────────────────────────────────────────────────────
 
 TEST_CASE("game: wuxie cancels aoe effect on one target only")
@@ -1542,6 +1560,27 @@ TEST_CASE("game: wuxie chain flips outcome (second wuxie counters first)")
     REQUIRE(r.is_ok());
     CHECK(g.cards.hand_size("b") == 0);  // b 的无懈与杀都被拆掉
     CHECK(g.cards.hand_size("c") == 1);  // c 只剩桃
+}
+
+TEST_CASE("game: wuxie chain is bounded by wuxie_rounds")
+{
+    TestGame g("deck");
+    g.rules.wuxie_rounds = 1;  // 注入小保险上限使其成为 binding constraint
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("b", "guohe", "gh#0");  // 使用者 b
+    g.give("a", "wuxie", "wx#0");
+    g.give("a", "wuxie", "wx#1");
+    g.give("a", "wuxie", "wx#2");  // 3 张无懈 > 上界 1
+
+    TestDecider decider;
+    decider.counter = true;  // 有无懈就出
+    const auto guohe = g.cards.hand("b")[0];  // 唯一手牌
+    auto r = resolve_play(g.ctx, decider, "b", guohe, {"a"});
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.hand_size("a") == 2);  // 上界 1：一轮至多一张，剩 2
+    CHECK(g.cards.hand_size("b") == 0);  // 过拆已打出
+    CHECK(g.cards.discard_size() == 2);  // 过拆 + 1 张无懈
 }
 
 TEST_CASE("game: tao is a basic card and cannot be countered")
