@@ -24,10 +24,10 @@
 #include "game/flow/loop.hpp"
 #include "game/core/rules.hpp"
 #include "game/flow/table.hpp"
+#include "save/deck_hash.hpp"
 #include "save/error.hpp"
 #include "save/format.hpp"
 #include "save/session_meta.hpp"
-#include "save/writer.hpp"
 #include "util/rng.hpp"
 
 namespace tkw
