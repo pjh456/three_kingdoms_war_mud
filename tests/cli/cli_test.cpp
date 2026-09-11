@@ -14,6 +14,7 @@
 #include "cli/error_zh.hpp"
 #include "cli/help_zh.hpp"
 #include "cli/render.hpp"
+#include "io/file.hpp"
 
 namespace
 {
@@ -78,6 +79,11 @@ namespace
     };
 
     std::filesystem::path temp_save(const std::string &name)
+    {
+        return std::filesystem::temp_directory_path() / name;
+    }
+
+    std::filesystem::path temp_dir(const std::string &name)
     {
         return std::filesystem::temp_directory_path() / name;
     }
@@ -597,4 +603,99 @@ TEST_CASE("cli: load restores ai and stats")
     CHECK(repl.session.ai == tkw::cli::AiLevel::Simple);
 
     std::filesystem::remove(file, ec);
+}
+
+TEST_CASE("cli: load rejects a non-JSON archive and keeps the session")
+{
+    Repl repl;
+    const std::filesystem::path file = temp_save("tkw-cli-badjson.json");
+    std::error_code ec;
+    std::filesystem::remove(file, ec);
+    REQUIRE(tkw::io::write_text(file, "{not json").is_ok());
+
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+    REQUIRE(repl.run("step").ok);
+    const std::string current = repl.session.state.current;
+    const int turns = repl.session.state.turns;
+    REQUIRE(repl.session.game != nullptr);
+    const std::size_t entities = repl.session.game->entities.size();
+
+    // 文本非 JSON：CLI 应把 reader 的 ParseError 包成存档加载失败 kind=0
+    auto bad = repl.run("load " + file.string());
+    CHECK_FALSE(bad.ok);
+    CHECK(bad.error.find("存档加载失败") != std::string::npos);
+    CHECK(bad.error.find("kind=0") != std::string::npos);
+    CHECK(bad.error.find("JSON") != std::string::npos);
+
+    // 解析失败不污染会话：仍是原对局、原进度、原实体数
+    CHECK(repl.session.active);
+    REQUIRE(repl.session.game != nullptr);
+    CHECK(repl.session.game->entities.size() == entities);
+    CHECK(repl.session.state.current == current);
+    CHECK(repl.session.state.turns == turns);
+
+    std::filesystem::remove(file, ec);
+}
+
+TEST_CASE("cli: load rejects an archive written for a different deck")
+{
+    Repl repl;
+    const std::filesystem::path dir = temp_dir("tkw_cli_bad_deck");
+    const std::filesystem::path save = temp_save("tkw-cli-deck-mismatch.json");
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::remove(save, ec);
+
+    // 合法一卡牌表：能成功加载，仅在读档指纹比对时与标准牌表不符
+    REQUIRE(std::filesystem::create_directories(dir / "cards"));
+    REQUIRE(tkw::io::write_text(
+                dir / "deck.json", R"({"name":"cli","cards":["h0"]})")
+                .is_ok());
+    REQUIRE(tkw::io::write_text(
+                dir / "cards" / "h0.json",
+                R"({"id":"h0","name":"测","type":"basic",)"
+                R"("copies":[{"suit":"spade","number":7}]})")
+                .is_ok());
+
+    // 标准牌表存档；读档换异牌堆 → deck.hash 不符
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+    REQUIRE(repl.run("save " + save.string()).ok);
+
+    auto mismatched =
+        repl.run("load " + save.string() + " --deck " + dir.string());
+    CHECK_FALSE(mismatched.ok);
+    CHECK(mismatched.error.find("存档加载失败") != std::string::npos);
+    CHECK(mismatched.error.find("kind=2") != std::string::npos);
+    CHECK(mismatched.error.find("deck.hash") != std::string::npos);
+
+    // 建局成功但校验失败，仍不替换会话
+    CHECK(repl.session.active);
+    REQUIRE(repl.session.game != nullptr);
+    CHECK(repl.session.game->entities.size() == 2);
+
+    std::filesystem::remove(save, ec);
+    std::filesystem::remove_all(dir, ec);
+}
+
+TEST_CASE("cli: save reports a write failure when the parent is missing")
+{
+    Repl repl;
+    const std::filesystem::path dir = temp_dir("tkw_cli_no_parent_dir");
+    const std::filesystem::path file = dir / "s.json";
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+
+    // 父目录不存在，原子写的临时文件落盘即失败，不生成目标文件
+    auto saved = repl.run("save " + file.string());
+    CHECK_FALSE(saved.ok);
+    CHECK(saved.error.find("写入存档失败") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(file));
+
+    // 会话未受影响，仍可继续推进
+    CHECK(repl.session.active);
+    CHECK(repl.run("step").ok);
+
+    std::filesystem::remove_all(dir, ec);
 }
