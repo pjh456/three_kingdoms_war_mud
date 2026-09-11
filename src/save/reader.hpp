@@ -211,7 +211,7 @@ namespace tkw
             if (!detail::read_int(*obj, "version", version) || version != kVersion)
                 return detail::fail(SaveErrorKind::VersionMismatch, "version");
 
-            // deck hash
+            // deck hash：写出侧按 int64 位型承载，高位指纹在此逐位还原为 uint64
             if (!obj->contains("deck") || !(*obj)["deck"].try_as_object())
                 return detail::fail(SaveErrorKind::StructureError, "deck");
             const auto &deck = (*obj)["deck"].as_object();

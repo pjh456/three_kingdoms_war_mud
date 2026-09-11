@@ -243,8 +243,11 @@ namespace tkw
 
             std::ostringstream os;
             os << "{\"format\":" << jstr(kFormat) << ",\"version\":" << kVersion;
+            // 指纹按 int64 位型写出：JSON 数值只有 int64 精确域，高位指纹
+            // （≥2^63）须落成负十进制，读取端再逐位还原为 uint64。
             os << ",\"deck\":{\"name\":" << jstr(deck_name)
-               << ",\"hash\":" << deck_hash(g.catalog) << "}";
+               << ",\"hash\":" << static_cast<std::int64_t>(deck_hash(g.catalog))
+               << "}";
             os << ",\"rules\":{"
                << "\"draw_per_turn\":" << r.draw_per_turn
                << ",\"sha_limit\":" << r.sha_limit

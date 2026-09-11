@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "card/catalog.hpp"
 #include "config/resource.hpp"
@@ -303,4 +304,137 @@ TEST_CASE("save: failed rng restore leaves the target untouched")
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err().kind == save::SaveErrorKind::RngError);
     CHECK(save::write(*b, sb, "deck") == before);
+}
+
+TEST_CASE("save: a high-bit fingerprint round-trips through the int64 wire form")
+{
+    // 牌表指纹是 uint64，但 JSON 数值只有 int64 精确域；高位指纹（≥2^63）
+    // 必须按 int64 位型写出（负十进制）并在读取端逐位还原，否则存档写出后
+    // 读不回。小牌表选定一个高位指纹做端到端钉子。
+    const auto dir =
+        std::filesystem::temp_directory_path() / "tkw_save_high_bit_hash";
+    std::filesystem::remove_all(dir);
+    REQUIRE(std::filesystem::create_directories(dir / "cards"));
+
+    auto write_deck = [&](const std::string &card_id)
+    {
+        REQUIRE(tkw::io::write_text(
+                    dir / "deck.json",
+                    std::string("{\"name\":\"hi\",\"cards\":[\"") + card_id + "\"]}")
+                    .is_ok());
+        REQUIRE(tkw::io::write_text(
+                    dir / "cards" / (card_id + ".json"),
+                    std::string("{\"id\":\"") + card_id +
+                        "\",\"name\":\"测\",\"type\":\"basic\","
+                        "\"copies\":[{\"suit\":\"spade\",\"number\":7}]}")
+                    .is_ok());
+    };
+
+    // 自发现首个 ≥2^63 指纹：FNV-1a 确定，循环上限保证终止
+    std::string id;
+    for (int i = 0; id.empty() && i < 64; ++i)
+    {
+        const std::string cand = "h" + std::to_string(i);
+        write_deck(cand);
+        tkw::config::ResourceStore store(dir);
+        auto cat = card::CardDefCatalog::load(store, "deck");
+        REQUIRE(cat.is_ok());
+        if (save::deck_hash(cat.unwrap()) >= (std::uint64_t{1} << 63))
+            id = cand;
+    }
+    REQUIRE(!id.empty());
+
+    tkw::config::ResourceStore store(dir);
+    auto cat_a = card::CardDefCatalog::load(store, "deck").unwrap();
+    const std::uint64_t h = save::deck_hash(cat_a);
+    REQUIRE(h >= (std::uint64_t{1} << 63));
+
+    Game a(std::move(cat_a), std::make_unique<SeededRng>(1));
+    REQUIRE(a.add_player("P0", 0, entity::Hp::make(4)).is_ok());
+    GameSession sa;
+    const std::string text = save::write(a, sa, "deck");
+
+    // 高位指纹以 int64 位型的负十进制承载（而非超出 int64 的正整数）
+    const auto wire = std::to_string(static_cast<std::int64_t>(h));
+    CHECK(text.find("\"hash\":" + wire) != std::string::npos);
+    CHECK(text.find("\"hash\":" + std::to_string(h)) == std::string::npos);
+
+    auto cat_b = card::CardDefCatalog::load(store, "deck").unwrap();
+    Game b(std::move(cat_b), std::make_unique<SeededRng>(99));
+    REQUIRE(b.add_player("P0", 0, entity::Hp::make(4)).is_ok());
+    GameSession sb;
+    REQUIRE(save::read(text, b, sb).is_ok());
+    CHECK(save::write(b, sb, "deck") == text);
+
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("save: a low-bit fingerprint stays a positive integer for legacy readers")
+{
+    // 标准牌表指纹 <2^63：写出与旧版逐字节一致的正整数，旧存档与新存档
+    // 双向可读。
+    auto a = make_game(1);
+    GameSession sa;
+    const std::uint64_t h = save::deck_hash(a->catalog);
+    REQUIRE(h < (std::uint64_t{1} << 63));
+    const std::string text = save::write(*a, sa, "deck");
+    CHECK(text.find("\"hash\":" + std::to_string(h)) != std::string::npos);
+
+    auto b = make_game(999);
+    GameSession sb;
+    REQUIRE(save::read(text, *b, sb).is_ok());
+    CHECK(save::write(*b, sb, "deck") == text);
+}
+
+TEST_CASE("save: deck hash errors distinguish structure from mismatch")
+{
+    auto a = make_game(1);
+    GameSession s;
+    const std::string text = save::write(*a, s, "deck");
+    const auto key = text.find("\"hash\":");
+    REQUIRE(key != std::string::npos);
+    const auto val_begin = key + 7;
+    auto val_end = val_begin;
+    while (val_end < text.size() && text[val_end] != ',' && text[val_end] != '}')
+        ++val_end;
+    REQUIRE(val_end > val_begin);
+    const auto with_hash = [&](std::string_view v)
+    {
+        std::string t = text;
+        t.replace(val_begin, val_end - val_begin, v);
+        return t;
+    };
+
+    // 合法 int64 位型但指纹不符（含 UINT64_MAX = -1、2^63 = INT64_MIN）→ DeckMismatch
+    for (std::string_view v : {"0", "-1", "-9223372036854775808"})
+    {
+        auto b = make_game(1);
+        GameSession sb;
+        auto r = save::read(with_hash(v), *b, sb);
+        REQUIRE(r.is_err());
+        CHECK(r.unwrap_err().kind == save::SaveErrorKind::DeckMismatch);
+        CHECK(r.unwrap_err().detail == "deck.hash");
+    }
+    // 超出 int64 范围的正整数退化为 double、非数值类型 → StructureError
+    for (std::string_view v : {"18446744073709551615", "\"abc\"", "true"})
+    {
+        auto b = make_game(1);
+        GameSession sb;
+        auto r = save::read(with_hash(v), *b, sb);
+        REQUIRE(r.is_err());
+        CHECK(r.unwrap_err().kind == save::SaveErrorKind::StructureError);
+        CHECK(r.unwrap_err().detail == "deck.hash");
+    }
+
+    // 缺失 hash 字段 → StructureError（连同前导逗号一并删除）
+    std::string missing = text;
+    REQUIRE(key > 0);
+    REQUIRE(text[key - 1] == ',');
+    missing.erase(key - 1, val_end - key + 1);
+    auto c = make_game(1);
+    GameSession sc;
+    auto rm = save::read(missing, *c, sc);
+    REQUIRE(rm.is_err());
+    CHECK(rm.unwrap_err().kind == save::SaveErrorKind::StructureError);
+    CHECK(rm.unwrap_err().detail == "deck.hash");
 }
