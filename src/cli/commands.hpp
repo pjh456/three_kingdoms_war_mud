@@ -1,6 +1,6 @@
 /**
  * @file commands.hpp
- * @brief CLI 命令树与命令执行体：声明公共选项、注册 9 个命令、共享 Session。
+ * @brief CLI 命令树与命令执行体：声明公共选项、注册 10 个命令、共享 Session。
  * @note 与 main.cpp 分离，使命令树可由测试直接构建并驱动 REPL。命令的
  *       action 写标准输出（用户可见），框架侧输出（?/help）走 InteractiveConsole
  *       注入的流。
@@ -233,6 +233,20 @@ namespace tkw
                 const tkw::card::CardDefCatalog &catalog, const std::string &def_id)
             {
                 return card_name(catalog, def_id) + "(" + def_id + ")";
+            }
+
+            /** 卡牌大类 → 中文展示（基本/锦囊/装备）。 */
+            inline constexpr const char *card_type_zh(const tkw::card::CardType t)
+            {
+                switch (t)
+                {
+                case tkw::card::CardType::Basic:
+                    return "基本";
+                case tkw::card::CardType::Trick:
+                    return "锦囊";
+                default:
+                    return "装备";
+                }
             }
 
             /**
@@ -636,6 +650,47 @@ namespace tkw
                 return CliResult<void>::Ok();
             }
 
+            /**
+             * @brief 列出牌表：只加载卡牌目录，打印牌堆名与种类/张数，再按
+             *        deck 序逐卡打印「中文名(id) 大类 张数」。
+             * @return Ok；Err 为牌堆加载失败（kind + detail，与建局错误面一致）。
+             * @note 只读牌堆查询，不建局、不消耗随机源；公共选项中仅 --deck
+             *       生效，其余被接受但不读取（与 audit 声明面一致）。deck.json
+             *       的 name 缺失或类型不符时头行退化为无牌堆名，不阻断列出。
+             */
+            inline CliResult<void> cards_list(const Options &opt)
+            {
+                tkw::config::ResourceStore store(opt.deck);
+                auto catalog = tkw::card::CardDefCatalog::load(store, "deck");
+                if (catalog.is_err())
+                {
+                    const auto &e = catalog.unwrap_err();
+                    return CliFailure{CliError(
+                        "加载牌堆失败 (kind=" +
+                        std::to_string(static_cast<int>(e.kind)) + "): " + e.detail)};
+                }
+                const auto &cat = catalog.unwrap();
+
+                std::string deck_name;
+                const auto deck_doc = store.load("deck");
+                if (deck_doc.is_ok())
+                {
+                    const auto nm = tkw::config::opt_string(
+                        deck_doc.unwrap().root(), "name", "", "deck");
+                    if (nm.is_ok())
+                        deck_name = nm.unwrap();
+                }
+
+                std::cout << "牌堆" << (deck_name.empty() ? "" : " " + deck_name)
+                          << "（" << cat.size() << " 种 / " << cat.total_copies()
+                          << " 张）\n";
+                for (const auto &def : cat)
+                    std::cout << "  " << def.name << "(" << def.id << ") "
+                              << card_type_zh(def.type) << ' ' << def.copies.size()
+                              << "\n";
+                return CliResult<void>::Ok();
+            }
+
             /** 把 "Usage: " 前缀换成中文，其余原样（帮助与 REPL 无匹配提示共用）。 */
             inline std::string zh_usage_prefix(std::string text)
             {
@@ -756,6 +811,7 @@ namespace tkw
                     "    tkw                      跑一局 AI 对局\n"
                     "    tkw deal 2 1             按位置参数跑一局（2 人，种子 1）\n"
                     "    tkw audit                审计牌堆\n"
+                    "    tkw cards              列出牌表构成\n"
                     "  REPL 会话（先 tkw repl，再逐条输入）:\n"
                     "    new --players 2 --seed 1 开新局\n"
                     "    step                     执行一个回合\n"
@@ -870,6 +926,13 @@ namespace tkw
             audit.action(
                 [](ParseContext &ctx) -> CliResult<void>
                 { return detail::audit_deck(detail::options_from(ctx)); });
+
+            // cards：列出牌表（只读牌堆查询，仅 --deck 生效；公共选项与 audit 同款）
+            auto &cards = app.add_leaf("cards", "列出牌表（牌堆种类与张数）");
+            detail::declare_common_options(cards, rules);
+            cards.action(
+                [](ParseContext &ctx) -> CliResult<void>
+                { return detail::cards_list(detail::options_from(ctx)); });
 
             // deal：位置参数跑局（REPL/批量通用）
             auto &deal = app.add_leaf("deal", "跑一局：deal <玩家数> <种子>");

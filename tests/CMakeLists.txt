@@ -145,6 +145,19 @@ set_tests_properties(cli_audit_bad_deck PROPERTIES
     WILL_FAIL TRUE
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# cards：列出牌表。钉牌堆名与首卡「中文名(id) 类别 张数」形态；种类/张数随
+# 牌表演进，不钉全表。
+add_test(NAME cli_cards_list
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> cards 2>&1); printf '%s' \"$out\" | grep -q '标准版' && printf '%s' \"$out\" | grep -q '杀(sha) 基本 30'")
+set_tests_properties(cli_cards_list PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_test(NAME cli_cards_bad_deck COMMAND tkw cards --deck /nonexistent-deck-dir)
+set_tests_properties(cli_cards_bad_deck PROPERTIES
+    WILL_FAIL TRUE
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 批量入口模糊匹配：唯一近距手误自动纠错到 audit；只钉退出码，不钉审计输出内容。
 add_test(NAME cli_fuzzy_typo_resolves COMMAND tkw audti)
 set_tests_properties(cli_fuzzy_typo_resolves PROPERTIES
