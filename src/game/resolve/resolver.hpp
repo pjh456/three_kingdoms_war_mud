@@ -70,7 +70,7 @@ namespace tkw
             TargetPicks picks;
             for (const auto &t : targets)
             {
-                // 无懈窗口逐目标单元素，与 resolve_play 的 nullified 闭包同口径
+                // 无懈窗口逐目标单元素，与 EffectInvocation::nullified 同口径
                 if (is_trick && resolve_nullification(ctx, ai, def, player, {t}))
                     continue;
                 const auto picked = ai.pick_card_from_target(ctx, player, t);
@@ -81,6 +81,249 @@ namespace tkw
             }
             return GameResult<TargetPicks>::Ok(std::move(picks));
         }
+
+        // ── 效果分派（按 kind 的结算函数）────────────────────────────────
+
+        namespace detail
+        {
+            /** @brief 一次效果结算的引用束：引用 resolve_play 局部量，不持有所有权。 */
+            struct EffectInvocation
+            {
+                GameContext &ctx;
+                DecisionSource &ai;
+                const std::string &player;
+                const card::Card &played;
+                const card::CardDef &def;
+                const card::CardEffect &eff;
+                const std::vector<std::string> &targets;
+                bool is_trick;
+
+                /** @brief 无懈窗口：仅锦囊开；窗口目标由调用点决定（逐目标或全量）。 */
+                bool nullified(const std::vector<std::string> &window_targets) const
+                {
+                    return is_trick &&
+                           resolve_nullification(ctx, ai, def, player, window_targets);
+                }
+            };
+
+            /** @brief 杀：逐目标按实体杀结算。 */
+            inline GameResult<void> resolve_damage(const EffectInvocation &e)
+            {
+                for (const auto &t : e.targets)
+                    resolve_sha(
+                        e.ctx, e.ai, e.player, e.played, t, e.eff.amount,
+                        static_cast<int>(e.targets.size()));
+                return GameResult<void>::Ok();
+            }
+
+            /** @brief 群体伤害：逐目标开单元素无懈窗口，未响应则受伤。 */
+            inline GameResult<void> resolve_aoe_damage(const EffectInvocation &e)
+            {
+                for (const auto &t : e.targets)
+                {
+                    if (e.nullified({t}))
+                        continue;
+                    bool responded = false;
+                    if (e.eff.response.is_some())
+                    {
+                        const auto kind = e.eff.response.unwrap();
+                        responded = kind == card::ResponseKind::Sha
+                            ? respond_sha(e.ctx, e.ai, t, "")
+                            : request_response(e.ctx, e.ai, t, kind);
+                    }
+                    if (!responded)
+                        deal_damage(e.ctx, e.ai, e.player, t, e.eff.amount);
+                }
+                return GameResult<void>::Ok();
+            }
+
+            /** @brief 群体回复：逐目标开单元素无懈窗口，未被抵消则回血。 */
+            inline GameResult<void> resolve_heal(const EffectInvocation &e)
+            {
+                for (const auto &t : e.targets)
+                {
+                    if (e.nullified({t}))
+                        continue;
+                    apply_heal(e.ctx, t, e.eff.amount);
+                }
+                return GameResult<void>::Ok();
+            }
+
+            /** @brief 摸牌：全量目标单窗，被无懈抵消则既摸。 */
+            inline GameResult<void> resolve_draw(const EffectInvocation &e)
+            {
+                if (e.nullified(e.targets))
+                    return GameResult<void>::Ok();
+                apply_draw(e.ctx, e.player, e.eff.count);
+                return GameResult<void>::Ok();
+            }
+
+            /** @brief 过河拆桥：先收集校验全部目标选牌，再统一弃置（事务性）。 */
+            inline GameResult<void> resolve_discard_target(const EffectInvocation &e)
+            {
+                // 先收集并校验全部选择，再统一落子（事务性）
+                auto picks_r = collect_target_picks(
+                    e.ctx, e.ai, e.player, e.targets, e.is_trick, e.def);
+                if (picks_r.is_err())
+                    return GameResult<void>::Err(picks_r.unwrap_err());
+                const auto picks = std::move(picks_r).unwrap();
+                for (const auto &[owner, picked_card] : picks)
+                {
+                    if (remove_any_and_discard(e.ctx, owner, picked_card.instance_id)
+                            .is_none())
+                        return GameResult<void>::Err(EffectError::InvalidChoice);
+                }
+                return GameResult<void>::Ok();
+            }
+
+            /** @brief 顺手牵羊：先收集校验全部目标选牌，再统一移入使用者手牌（事务性）。 */
+            inline GameResult<void> resolve_steal(const EffectInvocation &e)
+            {
+                // 先收集并校验全部选择，再统一落子（事务性）
+                auto picks_r = collect_target_picks(
+                    e.ctx, e.ai, e.player, e.targets, e.is_trick, e.def);
+                if (picks_r.is_err())
+                    return GameResult<void>::Err(picks_r.unwrap_err());
+                const auto picks = std::move(picks_r).unwrap();
+                for (const auto &[owner, picked_card] : picks)
+                {
+                    card::Card removed;
+                    Zone from = Zone::Limbo;
+                    if (!remove_card_from_zones(
+                            e.ctx, owner, picked_card.instance_id, removed, &from))
+                        return GameResult<void>::Err(EffectError::InvalidChoice);
+                    e.ctx.cards->add_to_hand(e.player, removed);
+                    emit_card_moved(e.ctx, owner, e.player, removed, from, Zone::Hand);
+                }
+                return GameResult<void>::Ok();
+            }
+
+            /** @brief 决斗：目标先出杀轮流，先不出者受伤；轮次耗尽平局。 */
+            inline GameResult<void> resolve_duel(const EffectInvocation &e)
+            {
+                if (e.nullified(e.targets))
+                    return GameResult<void>::Ok();
+
+                // 目标先开始，轮流打出杀；先不出的受对方 1 点伤害；
+                // 轮次耗尽（双方每轮都出了杀）平局结算。
+                std::string attacker = e.player;
+                std::string defender = e.targets.front();
+                for (int round = 0; round < rules_of(e.ctx).duel_rounds; ++round)
+                {
+                    if (!respond_sha(e.ctx, e.ai, defender, ""))
+                    {
+                        deal_damage(e.ctx, e.ai, attacker, defender, e.eff.amount);
+                        return GameResult<void>::Ok();
+                    }
+                    std::swap(attacker, defender);
+                }
+                // 轮次耗尽：双方每轮都出了杀、无人「先不出」→ 平局，不再造成伤害
+                return GameResult<void>::Ok();
+            }
+
+            /** @brief 五谷丰登：亮出等同存活人数的牌，按座位序各选一张，余牌弃置。 */
+            inline GameResult<void> resolve_reveal_pick(const EffectInvocation &e)
+            {
+                if (e.nullified(e.targets))
+                    return GameResult<void>::Ok();
+
+                // 亮出等同存活人数的牌（摸牌堆空则弃牌堆洗回，口径同摸牌/判定）
+                std::vector<card::Card> revealed;
+                const int n = static_cast<int>(e.ctx.entities->size());
+                for (int i = 0; i < n; ++i)
+                {
+                    auto c = draw_with_refill(e.ctx);
+                    if (c.is_none())
+                        break;
+                    revealed.push_back(std::move(c).unwrap());
+                }
+
+                // 按座位序（从使用者开始）依次选一张
+                for (const auto &p : e.ctx.entities->order_from(e.player))
+                {
+                    if (revealed.empty())
+                        break;
+                    const auto picked = e.ai.pick_from_revealed(e.ctx, p, revealed);
+                    std::size_t idx = 0;
+                    if (picked.is_some())
+                        for (std::size_t k = 0; k < revealed.size(); ++k)
+                            if (revealed[k].instance_id == picked.unwrap().instance_id)
+                            {
+                                idx = k;
+                                break;
+                            }
+                    card::Card chosen = revealed[idx];
+                    revealed.erase(revealed.begin() + std::ptrdiff_t(idx));
+                    e.ctx.cards->add_to_hand(p, chosen);
+                    emit_card_moved(e.ctx, "", p, chosen, Zone::Limbo, Zone::Hand);
+                }
+                // 剩余置入弃牌堆
+                for (const auto &c : revealed)
+                    discard_and_emit(e.ctx, "", c);
+                return GameResult<void>::Ok();
+            }
+
+            /** @brief 借刀杀人：令持刀者出杀，不出则使用者掠夺其武器。 */
+            inline GameResult<void> resolve_borrowed_sword(const EffectInvocation &e)
+            {
+                if (e.nullified(e.targets))
+                    return GameResult<void>::Ok();
+                const std::string &holder = e.targets[0];
+                const std::string &victim = e.targets[1];
+
+                if (respond_sha(e.ctx, e.ai, holder, victim))
+                    return GameResult<void>::Ok();
+
+                // 未出杀：使用者获得 holder 的武器
+                for (const auto &c : e.ctx.cards->equip(holder))
+                {
+                    const auto d = e.ctx.catalog->find(c.def_id);
+                    if (d.is_some() && d.unwrap()->equip.is_some() &&
+                        d.unwrap()->equip.unwrap().slot == card::EquipSlot::Weapon)
+                    {
+                        auto removed =
+                            e.ctx.cards->remove_from_equip(holder, c.instance_id);
+                        if (removed.is_some())
+                        {
+                            card::Card weapon = std::move(removed).unwrap();
+                            e.ctx.cards->add_to_hand(e.player, weapon);
+                            emit_card_moved(
+                                e.ctx, holder, e.player, weapon, Zone::Equip, Zone::Hand);
+                        }
+                        break;
+                    }
+                }
+                return GameResult<void>::Ok();
+            }
+
+            /** @brief 按 effect.kind 分派到对应结算函数；未实现返回 UnsupportedKind。 */
+            inline GameResult<void> apply_effect(const EffectInvocation &e)
+            {
+                switch (e.eff.kind)
+                {
+                case card::CardEffectKind::Damage:
+                    return resolve_damage(e);
+                case card::CardEffectKind::AoeDamage:
+                    return resolve_aoe_damage(e);
+                case card::CardEffectKind::Heal:
+                    return resolve_heal(e);
+                case card::CardEffectKind::Draw:
+                    return resolve_draw(e);
+                case card::CardEffectKind::DiscardTarget:
+                    return resolve_discard_target(e);
+                case card::CardEffectKind::Steal:
+                    return resolve_steal(e);
+                case card::CardEffectKind::Duel:
+                    return resolve_duel(e);
+                case card::CardEffectKind::RevealPick:
+                    return resolve_reveal_pick(e);
+                case card::CardEffectKind::BorrowedSword:
+                    return resolve_borrowed_sword(e);
+                default:
+                    return GameResult<void>::Err(EffectError::UnsupportedKind);
+                }
+            }
+        }  // namespace detail
 
         // ── 结算入口 ────────────────────────────────────────────────────
 
@@ -128,198 +371,10 @@ namespace tkw
             // 无懈可击只抵消锦囊牌；基本牌（杀/闪/桃）不可无懈
             // 窗口粒度 = 每个受影响目标一窗，窗内只携带该目标（卡面「对一名角色」）
             const bool is_trick = def.type == card::CardType::Trick;
-            const auto nullified = [&](const std::vector<std::string> &window_targets)
-            {
-                return is_trick &&
-                       resolve_nullification(ctx, ai, def, player, window_targets);
-            };
 
-            const auto apply = [&]() -> GameResult<void>
-            {
-                switch (eff.kind)
-                {
-                case card::CardEffectKind::Damage:
-                    for (const auto &t : targets)
-                        resolve_sha(
-                            ctx, ai, player, played, t, eff.amount,
-                            static_cast<int>(targets.size()));
-                    return GameResult<void>::Ok();
-
-                case card::CardEffectKind::AoeDamage:
-                    for (const auto &t : targets)
-                    {
-                        if (nullified({t}))
-                            continue;
-                        bool responded = false;
-                        if (eff.response.is_some())
-                        {
-                            const auto kind = eff.response.unwrap();
-                            responded = kind == card::ResponseKind::Sha
-                                ? respond_sha(ctx, ai, t, "")
-                                : request_response(ctx, ai, t, kind);
-                        }
-                        if (!responded)
-                            deal_damage(ctx, ai, player, t, eff.amount);
-                    }
-                    return GameResult<void>::Ok();
-
-                case card::CardEffectKind::Heal:
-                    for (const auto &t : targets)
-                    {
-                        if (nullified({t}))
-                            continue;
-                        apply_heal(ctx, t, eff.amount);
-                    }
-                    return GameResult<void>::Ok();
-
-                case card::CardEffectKind::Draw:
-                    if (nullified(targets))
-                        return GameResult<void>::Ok();
-                    apply_draw(ctx, player, eff.count);
-                    return GameResult<void>::Ok();
-
-                case card::CardEffectKind::DiscardTarget:
-                {
-                    // 先收集并校验全部选择，再统一落子（事务性）
-                    auto picks_r =
-                        collect_target_picks(ctx, ai, player, targets, is_trick, def);
-                    if (picks_r.is_err())
-                        return GameResult<void>::Err(picks_r.unwrap_err());
-                    const auto picks = std::move(picks_r).unwrap();
-                    for (const auto &[owner, picked_card] : picks)
-                    {
-                        if (remove_any_and_discard(
-                                ctx, owner, picked_card.instance_id)
-                                .is_none())
-                            return GameResult<void>::Err(EffectError::InvalidChoice);
-                    }
-                    return GameResult<void>::Ok();
-                }
-
-                case card::CardEffectKind::Steal:
-                {
-                    // 先收集并校验全部选择，再统一落子（事务性）
-                    auto picks_r =
-                        collect_target_picks(ctx, ai, player, targets, is_trick, def);
-                    if (picks_r.is_err())
-                        return GameResult<void>::Err(picks_r.unwrap_err());
-                    const auto picks = std::move(picks_r).unwrap();
-                    for (const auto &[owner, picked_card] : picks)
-                    {
-                        card::Card removed;
-                        Zone from = Zone::Limbo;
-                        if (!remove_card_from_zones(
-                                ctx, owner, picked_card.instance_id, removed, &from))
-                            return GameResult<void>::Err(EffectError::InvalidChoice);
-                        ctx.cards->add_to_hand(player, removed);
-                        emit_card_moved(ctx, owner, player, removed, from, Zone::Hand);
-                    }
-                    return GameResult<void>::Ok();
-                }
-
-                case card::CardEffectKind::Duel:
-                    if (nullified(targets))
-                        return GameResult<void>::Ok();
-                    {
-                        // 目标先开始，轮流打出杀；先不出的受对方 1 点伤害；
-                        // 轮次耗尽（双方每轮都出了杀）平局结算。
-                        std::string attacker = player;
-                        std::string defender = targets.front();
-                        for (int round = 0; round < rules_of(ctx).duel_rounds; ++round)
-                        {
-                            if (!respond_sha(ctx, ai, defender, ""))
-                            {
-                                deal_damage(ctx, ai, attacker, defender, eff.amount);
-                                return GameResult<void>::Ok();
-                            }
-                            std::swap(attacker, defender);
-                        }
-                        // 轮次耗尽：双方每轮都出了杀、无人「先不出」→ 平局，不再造成伤害
-                        return GameResult<void>::Ok();
-                    }
-
-                case card::CardEffectKind::RevealPick:
-                {
-                    if (nullified(targets))
-                        return GameResult<void>::Ok();
-
-                    // 亮出等同存活人数的牌（摸牌堆空则弃牌堆洗回，口径同摸牌/判定）
-                    std::vector<card::Card> revealed;
-                    const int n = static_cast<int>(ctx.entities->size());
-                    for (int i = 0; i < n; ++i)
-                    {
-                        auto c = draw_with_refill(ctx);
-                        if (c.is_none())
-                            break;
-                        revealed.push_back(std::move(c).unwrap());
-                    }
-
-                    // 按座位序（从使用者开始）依次选一张
-                    for (const auto &p : ctx.entities->order_from(player))
-                    {
-                        if (revealed.empty())
-                            break;
-                        const auto picked = ai.pick_from_revealed(ctx, p, revealed);
-                        std::size_t idx = 0;
-                        if (picked.is_some())
-                            for (std::size_t k = 0; k < revealed.size(); ++k)
-                                if (revealed[k].instance_id ==
-                                    picked.unwrap().instance_id)
-                                {
-                                    idx = k;
-                                    break;
-                                }
-                        card::Card chosen = revealed[idx];
-                        revealed.erase(revealed.begin() + std::ptrdiff_t(idx));
-                        ctx.cards->add_to_hand(p, chosen);
-                        emit_card_moved(ctx, "", p, chosen, Zone::Limbo, Zone::Hand);
-                    }
-                    // 剩余置入弃牌堆
-                    for (const auto &c : revealed)
-                        discard_and_emit(ctx, "", c);
-                    return GameResult<void>::Ok();
-                }
-
-                case card::CardEffectKind::BorrowedSword:
-                {
-                    if (nullified(targets))
-                        return GameResult<void>::Ok();
-                    const std::string &holder = targets[0];
-                    const std::string &victim = targets[1];
-
-                    if (respond_sha(ctx, ai, holder, victim))
-                        return GameResult<void>::Ok();
-
-                    // 未出杀：使用者获得 holder 的武器
-                    for (const auto &c : ctx.cards->equip(holder))
-                    {
-                        const auto d = ctx.catalog->find(c.def_id);
-                        if (d.is_some() && d.unwrap()->equip.is_some() &&
-                            d.unwrap()->equip.unwrap().slot ==
-                                card::EquipSlot::Weapon)
-                        {
-                            auto removed =
-                                ctx.cards->remove_from_equip(holder, c.instance_id);
-                            if (removed.is_some())
-                            {
-                                card::Card weapon = std::move(removed).unwrap();
-                                ctx.cards->add_to_hand(player, weapon);
-                                emit_card_moved(
-                                    ctx, holder, player, weapon, Zone::Equip,
-                                    Zone::Hand);
-                            }
-                            break;
-                        }
-                    }
-                    return GameResult<void>::Ok();
-                }
-
-                default:
-                    return GameResult<void>::Err(EffectError::UnsupportedKind);
-                }
-            };
-
-            const auto rr = apply();
+            const detail::EffectInvocation invocation{
+                ctx, ai, player, played, def, eff, targets, is_trick};
+            const auto rr = detail::apply_effect(invocation);
             if (rr.is_err())
             {
                 // 结算失败回滚：仅取回打出的牌；结算中途已消耗的响应牌
