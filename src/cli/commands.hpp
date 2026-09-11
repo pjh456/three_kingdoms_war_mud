@@ -696,14 +696,20 @@ namespace tkw
                 return CliResult<void>::Ok();
             }
 
+            /**
+             * @brief 审计牌堆：容错扫描原始机制名，列出引擎未实现的卡。
+             * @param opt 对局选项；仅 --deck 决定被审计的牌表目录。
+             * @return Ok；Err 为牌堆加载失败（kind + detail，与建局错误面一致）。
+             * @note 不建局：未知机制名逐卡列出而非整体拒载（deal/simulate 仍走
+             *       严格加载，未知机制在建局入口响亮失败）；公共选项中仅 --deck
+             *       生效，--human 因该命令不运行对局而被拒绝。
+             */
             inline CliResult<void> audit_deck(const Options &opt)
             {
                 const std::string herr = reject_humans(opt.humans, "audit");
                 if (!herr.empty())
                     return CliFailure{CliError(herr)};
 
-                // 不建局：只按原始机制名审计，未知机制名逐卡列出而非整体拒载
-                // （deal/simulate 仍走严格加载，未知机制在建局入口响亮失败）。
                 tkw::config::ResourceStore store(opt.deck);
                 auto unsupported = tkw::game::unsupported_cards(store, "deck");
                 if (unsupported.is_err())
@@ -712,6 +718,8 @@ namespace tkw
                     return CliFailure{CliError(format_load_error(e))};
                 }
                 const auto &cards = unsupported.unwrap();
+                // 输出头先亮明本命令实际读取的牌表目录，便于多牌表核对。
+                std::cout << "牌表: " << opt.deck.string() << "\n";
                 if (cards.empty())
                 {
                     std::cout << "牌堆全部可结算\n";
@@ -729,8 +737,9 @@ namespace tkw
              * @return Ok；Err 为牌堆加载失败（kind + detail，与建局错误面一致）。
              * @note 只读牌堆查询，不建局、不消耗随机源；公共选项中仅 --deck
              *       生效，其余被接受但不读取（与 audit 声明面一致），--human
-             *       因该命令不运行对局而被拒绝。deck.json
-             *       的 name 缺失或类型不符时头行退化为无牌堆名，不阻断列出。
+             *       因该命令不运行对局而被拒绝。输出头先亮明实际牌表目录，再打
+             *       牌堆名与种类/张数；deck.json 的 name 缺失或类型不符时头行
+             *       退化为无牌堆名，不阻断列出。
              */
             inline CliResult<void> cards_list(const Options &opt)
             {
@@ -756,6 +765,7 @@ namespace tkw
                         deck_name = nm.unwrap();
                 }
 
+                std::cout << "牌表: " << opt.deck.string() << "\n";
                 std::cout << "牌堆" << (deck_name.empty() ? "" : " " + deck_name)
                           << "（" << cat.size() << " 种 / " << cat.total_copies()
                           << " 张）\n";
@@ -785,8 +795,8 @@ namespace tkw
              * @note 基种子缺省 1（局种子 1..N，跨档对比口径可比），与
              *       Options.seed 缺省 42 不同；--verbose/--autosave 接受但不读
              *       （逐局不打事件日志、无会话），--human 因全 AI 批量模拟而拒绝。
-             *       胜者空串 = 平局；平均回合为
-             *       回合总和除以局数（向下取整）。每局不打印胜者行与统计块，
+             *       汇总头行先亮明本批实际使用的牌表目录；胜者空串 = 平局；平均
+             *       回合为回合总和除以局数（向下取整）。每局不打印胜者行与统计块，
              *       未实现卡警告在循环前打印一次。
              */
             inline CliResult<void> simulate_games(const Options &opt, int n)
@@ -846,7 +856,9 @@ namespace tkw
                     agg.turns_sum += session.turns;
                 }
 
-                // 汇总：头行（局数/人数/种子区间/AI 档）+ 逐座位胜场与平局 + 平均回合。
+                // 汇总：头行（牌表来源 + 局数/人数/种子区间/AI 档）+ 逐座位胜场与平局
+                // + 平均回合。
+                std::cout << "牌表: " << opt.deck.string() << "\n";
                 std::cout << "模拟 " << n << " 局（" << opt.players << " 人，种子 "
                           << opt.seed << ".." << opt.seed + n - 1 << "，ai="
                           << ai_level_name(opt.ai) << "）:\n";

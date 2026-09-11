@@ -514,3 +514,15 @@ add_test(NAME cli_status_deck_source
                  "out=$(printf 'new --players 2 --seed 1\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); printf '%s' \"$out\" | grep -q '牌表: resources'")
 set_tests_properties(cli_status_deck_source PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 一次性命令牌表来源可见化：cards/audit/simulate 输出头均显示实际所用目录（默认
+# resources）；内联与前置 --deck resources 两位置等价，均显示同一来源。
+add_test(NAME cli_oneshot_deck_source
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> cards 2>&1); printf '%s' \"$out\" | grep -q '牌表: resources' && \
+                  out=$($<TARGET_FILE:tkw> audit 2>&1); printf '%s' \"$out\" | grep -q '牌表: resources' && \
+                  out=$($<TARGET_FILE:tkw> simulate 1 2 2>&1); printf '%s' \"$out\" | grep -q '牌表: resources' && \
+                  inline=$($<TARGET_FILE:tkw> cards --deck resources 2>&1); printf '%s' \"$inline\" | grep -q '牌表: resources' && \
+                  front=$($<TARGET_FILE:tkw> --deck resources cards 2>&1); printf '%s' \"$front\" | grep -q '牌表: resources'")
+set_tests_properties(cli_oneshot_deck_source PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
