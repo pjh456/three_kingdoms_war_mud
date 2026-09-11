@@ -144,7 +144,7 @@ three_kingdoms_war_mud/
 │   ├── card/  entity/  event/  # 卡牌域 / 实体域 / 事件总线
 │   ├── game/               #   对局五层 core/query/resolve/flow/ai（严格单向依赖）
 │   └── save/  util/        #   存档 / 通用（Result、随机源）
-├── tests/                  # doctest，目录镜像 src，10 个测试可执行文件
+├── tests/                  # doctest，目录镜像 src，11 个测试可执行文件
 ├── resources/              # 数据驱动牌表：deck.json + cards/<id>.json
 ├── thirdparty/             # 子模块：pjh_result / pjh_json / pjh_cli / pjh_platform
 └── build/                  # 构建产物（不入库）
