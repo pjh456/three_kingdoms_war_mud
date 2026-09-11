@@ -96,6 +96,7 @@ namespace tkw
                 counter_windows;  /**< 各无懈窗口携带的目标集合（按询问顺序） */
             bool bogus_pick = false;  /**< 选牌返回一张不存在的牌（校验测试用） */
             bool decline_discards = false; /**< 弃牌选择返回空（雌雄二选一的放弃分支） */
+            std::size_t revealed_pick = 0; /**< pick_from_revealed 返回的候选下标（越界回落首张） */
             std::string response_id;  /**< 非空时响应窗口固定打出该牌 */
             std::string response_second_id; /**< 非空时与 response_id 成对（两张当杀） */
             std::vector<Ability> triggers;
@@ -196,7 +197,9 @@ namespace tkw
             {
                 if (options.empty())
                     return Option<card::Card>::None();
-                return Option<card::Card>::Some(options.front());
+                const std::size_t idx =
+                    revealed_pick < options.size() ? revealed_pick : 0;
+                return Option<card::Card>::Some(options[idx]);
             }
 
             Option<PlayAction> choose_play(

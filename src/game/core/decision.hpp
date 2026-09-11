@@ -94,7 +94,7 @@ namespace tkw
                 DiscardReason reason) = 0;
 
             /**
-             * @brief 从亮出的若干张牌中选一张（五谷丰登）。
+             * @brief 从候选牌中选一张（五谷丰登亮牌 / 麒麟弓选弃目标坐骑）。
              * @return 选中的牌；None = 放弃/非法（结算器回落到第一张）。
              */
             virtual Option<card::Card> pick_from_revealed(

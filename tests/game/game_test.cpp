@@ -2374,6 +2374,27 @@ TEST_CASE("game: qilin does not ask when the target has no horse")
     CHECK(decider.trigger_calls.empty());  // 无马不询问
 }
 
+TEST_CASE("game: qilin lets the attacker choose which horse to discard")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "qilin", "e#0");
+    g.equip("b", "chitu", "e#1");    // 装备区首匹
+    g.equip("b", "jueying", "e#2");  // 装备区次匹
+    g.give("a", "sha", "s#1");
+
+    TestDecider decider;
+    decider.triggers = {Ability::DiscardHorseOnDamage};
+    decider.revealed_pick = 1;  // 攻击方选择第二匹坐骑
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);              // 命中
+    CHECK(g.cards.equip_size("b") == 1);  // 仅弃一匹
+    CHECK(g.cards.equip("b")[0].def_id == "chitu");  // 保留首匹，弃所选的绝影
+}
+
 TEST_CASE("game: hanbing converts damage into discarding two cards")
 {
     TestGame g("deck");

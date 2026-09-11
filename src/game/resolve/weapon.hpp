@@ -11,7 +11,7 @@
  *       - 青龙偃月刀：被闪后可再对同一目标使用一张杀；
  *       - 贯石斧：被闪后可弃两张牌令杀依然命中；
  *       - 寒冰剑：命中前可防止伤害改为弃置目标两张牌；
- *       - 麒麟弓：造成伤害后可弃置目标一匹坐骑；
+ *       - 麒麟弓：造成伤害后可弃置目标一匹坐骑（由使用者选哪一匹）；
  *       - 方天画戟：杀为最后一张手牌时可额外指定至多两名目标
  *         （作用于目标集合，经目标数校验放宽实现，不走本表钩子）；
  *       - 丈八蛇矛：两张手牌当一张「杀」（虚拟杀无花色，仁王盾黑杀
@@ -117,24 +117,18 @@ namespace tkw
             return false;
         }
 
-        /** @brief 弃置目标装备区的一匹坐骑（麒麟弓）。 */
-        inline bool discard_first_horse(GameContext &ctx, const std::string &target)
+        /** @brief 目标装备区的全部坐骑（装备区顺序，供麒麟弓选弃与预检共用）。 */
+        inline std::vector<card::Card> target_horses(
+            const GameContext &ctx, const std::string &target)
         {
+            std::vector<card::Card> out;
             for (const auto &c : ctx.cards->equip(target))
             {
                 const auto def = ctx.catalog->find(c.def_id);
                 if (def.is_some() && is_horse_def(*def.unwrap()))
-                {
-                    auto removed = ctx.cards->remove_from_equip(target, c.instance_id);
-                    if (removed.is_some())
-                    {
-                        card::Card card = std::move(removed).unwrap();
-                        discard_and_emit(ctx, target, card);
-                    }
-                    return true;
-                }
+                    out.push_back(c);
             }
-            return false;
+            return out;
         }
 
         /**
@@ -299,16 +293,38 @@ namespace tkw
 
         /**
          * @brief 麒麟弓：造成伤害后，目标装备区有坐骑时询问攻击方是否弃置其一。
-         * @note 无坐骑不询问（避免空操作）；弃哪一匹当前取装备区首个。
+         * @note 无坐骑不询问（避免空操作）；由使用者选弃哪一匹，决策源返回
+         *       None 或引用不在候选中时回落首个（已发动则必弃一张）。
          */
         inline void hook_qilin(ShaContext &sc)
         {
             if (!target_has_horse(sc.ctx, sc.target))
                 return;
 
-            if (sc.ai.trigger_effect(
+            if (!sc.ai.trigger_effect(
                     sc.ctx, sc.attacker, card::Ability::DiscardHorseOnDamage))
-                discard_first_horse(sc.ctx, sc.target);
+                return;
+
+            // 候选为目标的全部坐骑（装备区顺序），攻击方从中选一张
+            const auto horses = target_horses(sc.ctx, sc.target);
+            if (horses.empty())
+                return;
+            std::string chosen = horses.front().instance_id;
+            const auto picked = sc.ai.pick_from_revealed(sc.ctx, sc.attacker, horses);
+            if (picked.is_some())
+                for (const auto &h : horses)
+                    if (h.instance_id == picked.unwrap().instance_id)
+                    {
+                        chosen = h.instance_id;
+                        break;
+                    }
+
+            auto removed = sc.ctx.cards->remove_from_equip(sc.target, chosen);
+            if (removed.is_some())
+            {
+                card::Card card = std::move(removed).unwrap();
+                discard_and_emit(sc.ctx, sc.target, card);
+            }
         }
 
         // ── 管线 ────────────────────────────────────────────────────────

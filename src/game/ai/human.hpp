@@ -74,7 +74,7 @@ namespace tkw
                     case DecisionKind::PickCard:
                         return decide_pick(request, "选择目标区域的牌");
                     case DecisionKind::PickRevealed:
-                        return decide_pick(request, "从亮出的牌中选择");
+                        return decide_pick(request, "从候选牌中选择");
                     case DecisionKind::Discard:
                         return decide_discard(request);
                     }
