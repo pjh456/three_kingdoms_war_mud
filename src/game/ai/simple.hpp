@@ -95,45 +95,18 @@ namespace tkw
                         if (!def)
                             continue;
 
-                        if (def->effect.is_none())
+                        // 满血自疗：跳过本组，继续看下一组（档位分歧，留派生）
+                        if (def->effect.is_some())
                         {
-                            // 装备/延时锦囊：OneOther 集火，其余取唯一动作
-                            const auto scope =
-                                def->judge.is_some()
-                                    ? def->judge.unwrap().scope.unwrap_or(
-                                          card::Scope::Self)
-                                    : card::Scope::Self;
-                            if (scope == card::Scope::OneOther)
-                                return pick_single(req.view, out, c.instance_id, opts);
-                            return pick_all(out, c.instance_id, opts.front().targets);
+                            const card::CardEffect &eff = def->effect.unwrap();
+                            if (eff.kind == card::CardEffectKind::Heal &&
+                                eff.scope.unwrap_or(card::Scope::Self) ==
+                                    card::Scope::Self &&
+                                req.view.self_hp >= req.view.self_max_hp)
+                                continue;
                         }
 
-                        const card::CardEffect &eff = def->effect.unwrap();
-                        if (eff.kind == card::CardEffectKind::Heal &&
-                            eff.scope.unwrap_or(card::Scope::Self) ==
-                                card::Scope::Self &&
-                            req.view.self_hp >= req.view.self_max_hp)
-                            continue;  // 满血不打桃
-
-                        if (eff.kind == card::CardEffectKind::BorrowedSword)
-                            return pick_borrowed_sword(
-                                req.view, out, c.instance_id, opts);
-
-                        if (eff.scope.unwrap_or(card::Scope::Self) ==
-                            card::Scope::OneOther)
-                        {
-                            // 方天画戟：存在多目标动作时优先选目标最多者
-                            //（否则贪心会把它丢成单目标）
-                            const LegalAction *most = &opts.front();
-                            for (const auto &a : opts)
-                                if (a.targets.size() > most->targets.size())
-                                    most = &a;
-                            if (most->targets.size() > 1)
-                                return pick_all(out, c.instance_id, most->targets);
-                            return pick_single(req.view, out, c.instance_id, opts);
-                        }
-
-                        return pick_all(out, c.instance_id, opts.front().targets);
+                        return select_group_targets(req, opts, *def);
                     }
                     return out;
                 }

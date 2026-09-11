@@ -120,17 +120,13 @@ namespace tkw
                  * @brief 已选组内选目标。
                  * @param def 组代表卡的定义；丈八组允许为空（按伤害结算，
                  *        不查目录），非丈八组调用前已保证非空。
-                 * @note 丈八组：多目标动作取目标最多者（方天画戟），否则集火
-                 *       最低体力；OneOther 效果牌同规则；借刀取受害者体力最低
-                 *       的合法对；AOE/自作用取首动作完整 targets。
+                 * @note 丈八组按伤害接管；其余目标选择委托共享尾段，组内丈八
+                 *       扫描范围是本档与贪心档的有意分歧，故留在本处。
                  */
                 static DecisionChoice decide_play_group(
                     const DecisionRequest &req, const std::vector<LegalAction> &opts,
                     const card::CardDef *def)
                 {
-                    DecisionChoice out;
-                    const card::Card &c = opts.front().card;
-
                     // 丈八蛇矛：组内存在两张当杀动作（第二张非空）即按伤害接管
                     std::vector<LegalAction> zhangba;
                     for (const auto &a : opts)
@@ -139,40 +135,7 @@ namespace tkw
                     if (!zhangba.empty())
                         return decide_zhangba(req, zhangba);
 
-                    if (def->effect.is_none())
-                    {
-                        // 装备/延时锦囊：OneOther 集火，其余取唯一动作
-                        const auto scope =
-                            def->judge.is_some()
-                                ? def->judge.unwrap().scope.unwrap_or(
-                                      card::Scope::Self)
-                                : card::Scope::Self;
-                        if (scope == card::Scope::OneOther)
-                            return pick_single(
-                                req.view, out, c.instance_id, opts);
-                        return pick_all(out, c.instance_id, opts.front().targets);
-                    }
-
-                    const card::CardEffect &eff = def->effect.unwrap();
-                    if (eff.kind == card::CardEffectKind::BorrowedSword)
-                        return pick_borrowed_sword(
-                            req.view, out, c.instance_id, opts);
-
-                    if (eff.scope.unwrap_or(card::Scope::Self) ==
-                        card::Scope::OneOther)
-                    {
-                        // 方天画戟：存在多目标动作时优先选目标最多者
-                        //（否则贪心会把它丢成单目标）
-                        const LegalAction *most = &opts.front();
-                        for (const auto &a : opts)
-                            if (a.targets.size() > most->targets.size())
-                                most = &a;
-                        if (most->targets.size() > 1)
-                            return pick_all(out, c.instance_id, most->targets);
-                        return pick_single(req.view, out, c.instance_id, opts);
-                    }
-
-                    return pick_all(out, c.instance_id, opts.front().targets);
+                    return select_group_targets(req, opts, *def);
                 }
 
                 /**
