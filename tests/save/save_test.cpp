@@ -438,3 +438,76 @@ TEST_CASE("save: deck hash errors distinguish structure from mismatch")
     CHECK(rm.unwrap_err().kind == save::SaveErrorKind::StructureError);
     CHECK(rm.unwrap_err().detail == "deck.hash");
 }
+
+TEST_CASE("save: per-section structure errors carry their field path")
+{
+    // 源档：标准牌表、未开局 → writer 紧凑模板（各区空、session 全默认）
+    auto a = make_game(1);
+    GameSession s;
+    const std::string base = save::write(*a, s, "deck");
+
+    // 只替换首个命中子串；找不到即 REQUIRE 红（writer 输出格式漂移的哨兵）
+    auto mutate = [](std::string text, std::string_view from, std::string_view to)
+    {
+        const auto pos = text.find(from);
+        REQUIRE(pos != std::string::npos);
+        text.replace(pos, from.size(), to);
+        return text;
+    };
+
+    // 读入独立目标并断言 kind/detail；同时钉「失败不污染目标状态」
+    auto expect = [&](const std::string &text, save::SaveErrorKind kind,
+                      std::string_view detail)
+    {
+        auto b = make_game(7);
+        b->rules.draw_per_turn = 9;  // 非默认值，使任何污染都可见
+        GameSession sb{"P0", 5, true};
+        const std::string before = save::write(*b, sb, "deck");
+
+        auto r = save::read(text, *b, sb);
+        REQUIRE(r.is_err());
+        CHECK(r.unwrap_err().kind == kind);
+        CHECK(r.unwrap_err().detail == detail);
+        // rules/rng/session/cards/entities 与失败前逐字节一致（先全量校验后落子）
+        CHECK(save::write(*b, sb, "deck") == before);
+    };
+
+    // 根与信封
+    expect("[]", save::SaveErrorKind::StructureError, "root");
+    expect(mutate(base, "\"format\":\"tkw-save\",", ""),
+           save::SaveErrorKind::VersionMismatch, "format");
+    expect(mutate(base, "\"version\":1,", ""),
+           save::SaveErrorKind::VersionMismatch, "version");
+
+    // rules
+    expect(mutate(base, "\"wuxie_rounds\":32", "\"wuxie_rounds\":\"x\""),
+           save::SaveErrorKind::StructureError, "rules");
+
+    // rng
+    expect(mutate(base, ",\"rng\":{\"data\":", ",\"rngx\":{\"data\":"),
+           save::SaveErrorKind::StructureError, "rng");
+    expect(mutate(base, "\"rng\":{\"data\":", "\"rng\":{\"datax\":"),
+           save::SaveErrorKind::StructureError, "rng.data");
+
+    // session
+    expect(mutate(base, "\"current\":\"\"", "\"current\":123"),
+           save::SaveErrorKind::StructureError, "session");
+    expect(mutate(base, "\"started\":false", "\"started\":false,\"stats\":123"),
+           save::SaveErrorKind::StructureError, "session.stats");
+
+    // cards
+    expect(mutate(base, "\"instance_seq\":0", "\"instance_seq\":\"x\""),
+           save::SaveErrorKind::StructureError, "cards.instance_seq");
+    expect(mutate(base, ",\"cards\":{\"instance_seq\":", ",\"cardsx\":{\"instance_seq\":"),
+           save::SaveErrorKind::StructureError, "cards");
+    expect(mutate(base, "\"draw\":[]", "\"drawx\":[]"),
+           save::SaveErrorKind::StructureError, "cards");
+
+    // entities
+    expect(mutate(base, ",\"entities\":[", ",\"entitiesx\":["),
+           save::SaveErrorKind::StructureError, "entities");
+    expect(mutate(base, "\"seat\":0,", ""),
+           save::SaveErrorKind::StructureError, "entities");
+    expect(mutate(base, "\"gender\":\"male\"", "\"gender\":\"x\""),
+           save::SaveErrorKind::StructureError, "entities.gender");
+}
