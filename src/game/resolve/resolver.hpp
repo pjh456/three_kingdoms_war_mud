@@ -480,7 +480,7 @@ namespace tkw
             if (!victim.empty())
             {
                 // 对目标结算的响应计打出（与虚拟杀响应同口径）
-                int dmg = 1;
+                int dmg = rules_of(ctx).default_damage;
                 if (def.unwrap()->effect.is_some())
                     dmg = def.unwrap()->effect.unwrap().amount;
                 emit_card_played(ctx, entity, card);

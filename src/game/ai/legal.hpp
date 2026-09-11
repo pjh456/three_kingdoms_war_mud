@@ -170,7 +170,9 @@ namespace tkw
                             {
                                 if (u != t)
                                     combo.push_back(u);
-                                if (combo.size() >= 3)
+                                if (combo.size() >=
+                                    static_cast<std::size_t>(
+                                        rules_of(ctx).sha_multi_target_max))
                                     break;
                             }
                             if (combo.size() > 1 &&
@@ -216,7 +218,9 @@ namespace tkw
                             {
                                 if (u != t)
                                     combo.push_back(u);
-                                if (combo.size() >= 3)
+                                if (combo.size() >=
+                                    static_cast<std::size_t>(
+                                        rules_of(ctx).sha_multi_target_max))
                                     break;
                             }
                             if (combo.size() > 1 &&

@@ -241,8 +241,9 @@ namespace tkw
          */
         inline void hook_guanshi(ShaContext &sc)
         {
-            // 发动前置：手牌不足 2 张付不起代价，直接不发动
-            if (sc.ctx.cards->hand_size(sc.attacker) < 2)
+            // 发动前置：手牌不足两张付不起代价，直接不发动
+            if (sc.ctx.cards->hand_size(sc.attacker) <
+                static_cast<std::size_t>(rules_of(sc.ctx).two_card_cost))
                 return;
 
             if (!sc.ai.trigger_effect(
@@ -250,20 +251,21 @@ namespace tkw
                 return;
 
             const auto discards = sc.ai.choose_discards(
-                sc.ctx, sc.attacker, 2, DiscardReason::AbilityCost);
+                sc.ctx, sc.attacker, rules_of(sc.ctx).two_card_cost,
+                DiscardReason::AbilityCost);
 
-            // 只计数实际弃成功的牌，封顶 2 张
+            // 只计数实际弃成功的牌，封顶 two_card_cost 张
             int discarded = 0;
             for (const auto &id : discards)
             {
-                if (discarded == 2)
+                if (discarded == rules_of(sc.ctx).two_card_cost)
                     break;
                 if (remove_and_discard(sc.ctx, sc.attacker, id).is_some())
                     ++discarded;
             }
 
             // 弃满两张才强制命中，否则杀仍视为被闪
-            if (discarded == 2)
+            if (discarded == rules_of(sc.ctx).two_card_cost)
                 sc.responded = false;
         }
 
@@ -275,21 +277,23 @@ namespace tkw
          */
         inline void hook_hanbing(ShaContext &sc)
         {
-            // 发动前置：目标可选区不足 2 张付不起代价，直接不发动
+            // 发动前置：目标可选区不足两张付不起代价，直接不发动
             if (sc.ctx.cards->hand_size(sc.target) +
                     sc.ctx.cards->equip_size(sc.target) +
-                    sc.ctx.cards->judge_size(sc.target) < 2)
+                    sc.ctx.cards->judge_size(sc.target) <
+                static_cast<std::size_t>(rules_of(sc.ctx).two_card_cost))
                 return;
 
             if (!sc.ai.trigger_effect(
                     sc.ctx, sc.attacker, card::Ability::DamageAsDiscard))
                 return;
 
-            const int discarded =
-                discard_target_cards(sc.ctx, sc.ai, sc.attacker, sc.target, 2);
+            const int discarded = discard_target_cards(
+                sc.ctx, sc.ai, sc.attacker, sc.target,
+                rules_of(sc.ctx).two_card_cost);
 
             // 弃满两张才免伤，否则伤害照常落地
-            if (discarded == 2)
+            if (discarded == rules_of(sc.ctx).two_card_cost)
                 sc.prevented = true;
         }
 

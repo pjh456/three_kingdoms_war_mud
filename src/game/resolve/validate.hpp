@@ -187,7 +187,9 @@ namespace tkw
                     const bool multi_sha =
                         eff.kind == card::CardEffectKind::Damage &&
                         sha_multi_target(ctx, player, cards_consumed);
-                    target_ok = targets.size() <= (multi_sha ? 3 : 1);
+                    const std::size_t multi_max = static_cast<std::size_t>(
+                        rules_of(ctx).sha_multi_target_max);
+                    target_ok = targets.size() <= (multi_sha ? multi_max : 1);
                     break;
                 }
                 case card::Scope::All:

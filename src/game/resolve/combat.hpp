@@ -101,7 +101,7 @@ namespace tkw
                         continue;
                     if (!consume_peach(ctx, saver, chosen.unwrap()))
                         continue;
-                    apply_heal(ctx, dying, 1);
+                    apply_heal(ctx, dying, rules_of(ctx).rescue_heal);
                     progress = true;
                     const auto cur = ctx.entities->find(dying);
                     if (cur.is_none())

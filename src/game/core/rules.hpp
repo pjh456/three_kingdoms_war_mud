@@ -28,6 +28,10 @@ namespace tkw
             int base_hp = 4;        /**< 玩家初始/上限体力 */
             int min_players = 2;    /**< 允许的最小玩家数 */
             int max_players = 8;    /**< 允许的最大玩家数 */
+            int rescue_heal = 1;           /**< 濒死救回每张桃回复的体力 */
+            int default_damage = 1;        /**< 响应杀无 effect 时的伤害回退 */
+            int sha_multi_target_max = 3;  /**< 方天画戟杀最多目标数（含原目标） */
+            int two_card_cost = 2;         /**< 贯石斧/寒冰剑「弃两张」能力代价 */
         };
     }
 }
