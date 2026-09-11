@@ -1583,6 +1583,29 @@ TEST_CASE("game: raw mechanism scan reports unknown names as unsupported")
     CHECK(CardDefCatalog::load(store, "deck").is_err());
 }
 
+TEST_CASE("game: raw mechanism scan reports unknown abilities")
+{
+    // 无主动效果、只有未知装备能力：走能力判定分支
+    const auto dir =
+        pjh::platform::Fs::temp_directory() / "tkw_audit_unknown_ability";
+    std::filesystem::remove_all(dir);
+    REQUIRE(pjh::platform::Fs::create_directories(dir / "cards").is_ok());
+    CHECK(tkw::io::write_text(dir / "deck.json",
+                              R"({"name": "mini", "cards": ["blade"]})")
+              .is_ok());
+    CHECK(tkw::io::write_text(dir / "cards" / "blade.json", R"({
+        "id": "blade", "name": "神兵", "type": "equipment",
+        "copies": [ {"suit": "spade", "number": 2} ],
+        "abilities": ["super_power"]
+    })").is_ok());
+
+    tkw::config::ResourceStore store(dir);
+    auto r = unsupported_cards(store, "deck");
+    REQUIRE(r.is_ok());
+    REQUIRE(r.unwrap().size() == 1);
+    CHECK(r.unwrap()[0] == UnsupportedCard{"blade", "神兵"});
+}
+
 TEST_CASE("game: raw mechanism scan keeps standard deck settleable")
 {
     tkw::config::ResourceStore store(TKW_TEST_RESOURCE_DIR);
