@@ -12,9 +12,10 @@
 #define INCLUDE_TKW_CONFIG_FIELDS_HPP
 
 #include <cstdint>
-#include <pjh_json/json.hpp>
 #include <string>
 #include <string_view>
+
+#include <pjh_json/json.hpp>
 
 #include "config/error.hpp"
 

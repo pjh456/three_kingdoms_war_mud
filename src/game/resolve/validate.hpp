@@ -40,8 +40,8 @@ namespace tkw
             InvalidTarget,   /**< 目标数量不符 scope / 不在合法目标集合内 */
             CardNotOwned,    /**< 打出的牌不在该玩家手牌中 */
             InvalidChoice,   /**< 决策源选中的牌不存在于目标区域 */
-            ShaLimitExceeded,/**< 本回合杀次数已达上限 */
-            DelayedDuplicate,/**< 判定区已有同名的延时锦囊 */
+            ShaLimitExceeded, /**< 本回合杀次数已达上限 */
+            DelayedDuplicate, /**< 判定区已有同名的延时锦囊 */
         };
 
         template <typename T>

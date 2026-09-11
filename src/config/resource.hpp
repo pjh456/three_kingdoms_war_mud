@@ -9,10 +9,11 @@
 #define INCLUDE_TKW_CONFIG_RESOURCE_HPP
 
 #include <filesystem>
-#include <pjh_json/document.hpp>
-#include <pjh_json/error.hpp>
 #include <string>
 #include <string_view>
+
+#include <pjh_json/document.hpp>
+#include <pjh_json/error.hpp>
 
 #include "config/error.hpp"
 #include "io/file.hpp"

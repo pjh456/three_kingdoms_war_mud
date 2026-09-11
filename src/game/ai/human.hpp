@@ -10,8 +10,8 @@
 #define INCLUDE_TKW_GAME_AI_HUMAN_HPP
 
 #include <algorithm>
-#include <charconv>
 #include <cctype>
+#include <charconv>
 #include <cstddef>
 #include <istream>
 #include <map>

@@ -10,19 +10,20 @@
 #include <cstdint>
 #include <map>
 #include <optional>
-#include <pjh_json/document.hpp>
-#include <pjh_json/json.hpp>
 #include <set>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include <pjh_json/document.hpp>
+#include <pjh_json/json.hpp>
+
 #include "card/card.hpp"
 #include "card/manager.hpp"
 #include "entity/manager.hpp"
-#include "game/flow/loop.hpp"
 #include "game/core/rules.hpp"
+#include "game/flow/loop.hpp"
 #include "game/flow/table.hpp"
 #include "save/deck_hash.hpp"
 #include "save/error.hpp"

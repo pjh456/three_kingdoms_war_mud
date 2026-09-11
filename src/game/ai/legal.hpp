@@ -17,10 +17,10 @@
 #include "card/manager.hpp"
 #include "game/core/context.hpp"
 #include "game/core/decision.hpp"
-#include "game/query/distance.hpp"
-#include "game/query/judge.hpp"
 #include "game/core/effect.hpp"
+#include "game/query/distance.hpp"
 #include "game/query/equip.hpp"
+#include "game/query/judge.hpp"
 #include "game/resolve/validate.hpp"
 
 namespace tkw
