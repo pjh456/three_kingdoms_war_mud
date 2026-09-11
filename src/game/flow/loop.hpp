@@ -146,7 +146,11 @@ namespace tkw
             else
                 session.current = next_after_seat(ctx, seat);  // 回合中死亡
 
-            if (++session.turns > rules_of(ctx).max_turns)
+            ++session.turns;
+
+            // 唯一存活判定先于回合上限：本回合已出现唯一存活者时会话即结束，
+            // 回合上限不再适用（平局要求不存在唯一存活者）
+            if (ctx.entities->size() != 1 && session.turns > rules_of(ctx).max_turns)
                 return LoopResult<void>::Err(LoopError::MaxRounds);
             return LoopResult<void>::Ok();
         }

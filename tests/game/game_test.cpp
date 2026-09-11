@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -1461,6 +1462,63 @@ TEST_CASE("game: play_game ends when one player kills the other")
     CHECK(r.unwrap().turns >= 1);
     CHECK(g.entities.find("b").is_none());   // b 已死亡移除
     CHECK(g.entities.find("a").is_some());
+}
+
+TEST_CASE("game: a killing blow on the turn past the cap still yields a winner")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 10);
+    g.add_player("b", 1, 2);
+    g.rules.max_turns = 2;  // 第 3 回合是首个超上限回合
+    g.give("a", "sha", "s#1");
+    g.give("a", "sha", "s#2");
+    g.give("b", "sha", "s#3");
+
+    // 出牌阶段会连续询问直到 None，共享脚本无法跨回合角色，按角色分脚本
+    // （每角色每回合至多一张）
+    struct ScriptedDecider : TestDecider
+    {
+        std::map<std::string, std::vector<PlayAction>> script;
+        std::map<std::string, std::size_t> cursor;
+
+        Option<PlayAction> choose_play(
+            const GameContext &, const TurnContext &turn) override
+        {
+            // 每回合至多出一张杀：已出杀即停（脚本全为杀）
+            if (turn.sha_played > 0)
+                return Option<PlayAction>::None();
+            const auto &plays = script[turn.player];
+            auto &i = cursor[turn.player];
+            if (i >= plays.size())
+                return Option<PlayAction>::None();
+            return Option<PlayAction>::Some(plays[i++]);
+        }
+    };
+    ScriptedDecider decider;
+    // 回合 1 a 削 b 至 1 血、回合 2 b 还手、回合 3 a 补死 b：致死击恰好
+    // 落在首个超上限回合，唯一存活判定须先于回合上限生效
+    decider.script["a"] = {PlayAction{"s#1", {"b"}}, PlayAction{"s#2", {"b"}}};
+    decider.script["b"] = {PlayAction{"s#3", {"a"}}};
+
+    auto r = play_game(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(r.unwrap().winner == "a");
+    CHECK(r.unwrap().turns == 3);
+}
+
+TEST_CASE("game: play_game still reports MaxRounds when no sole survivor at the cap")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.rules.max_turns = 1;  // 第 2 回合即超上限
+
+    TestDecider decider;  // 无人出牌，多存活者到顶
+    auto r = play_game(g.ctx, decider, "a");
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == LoopError::MaxRounds);
+    CHECK(g.ctx.entities->find("a").is_some());
+    CHECK(g.ctx.entities->find("b").is_some());
 }
 
 TEST_CASE("game: play_game with no players is an error")
