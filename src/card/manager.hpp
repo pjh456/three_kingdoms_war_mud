@@ -326,29 +326,24 @@ namespace tkw
             CardStack discard_pile;
             std::array<ZoneMap, 3> entity_zones; /**< 槽位顺序见 kSlotZones */
 
+            /** @brief 槽位 → 区域表：跨区操作与 zone_slot 统一按此序（Hand → Equip → Judge）。 */
+            static constexpr std::array<Zone, 3> kSlotZones = {
+                Zone::Hand, Zone::Equip, Zone::Judge};
+
             /**
-             * @brief 实体区 → 槽位下标（Hand=0 / Equip=1 / Judge=2）。
-             * @note 不变量：仅 Hand/Equip/Judge 三区合法且必须与 kSlotZones
-             *       同序；其余 Zone 值（Draw/Discard/Limbo）不进入实体区。
+             * @brief 实体区 → 槽位下标（kSlotZones 反查：Hand=0 / Equip=1 / Judge=2）。
+             * @note 不变量：仅 Hand/Equip/Judge 三区合法；其余 Zone 值
+             *       （Draw/Discard/Limbo）不在表中，返回 -1，不进入实体区。
              */
             static constexpr int zone_slot(Zone zone)
             {
-                switch (zone)
+                for (std::size_t i = 0; i < kSlotZones.size(); ++i)
                 {
-                    case Zone::Hand:
-                        return 0;
-                    case Zone::Equip:
-                        return 1;
-                    case Zone::Judge:
-                        return 2;
-                    default:
-                        return -1;
+                    if (kSlotZones[i] == zone)
+                        return static_cast<int>(i);
                 }
+                return -1;
             }
-
-            /** @brief 槽位 → 区域表：跨区操作统一按此序（Hand → Equip → Judge）。 */
-            static constexpr std::array<Zone, 3> kSlotZones = {
-                Zone::Hand, Zone::Equip, Zone::Judge};
 
             ZoneMap &zones_of(Zone zone) { return entity_zones[zone_slot(zone)]; }
 
