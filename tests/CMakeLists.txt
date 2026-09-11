@@ -177,6 +177,14 @@ add_test(NAME cli_alias_help_discoverable
 set_tests_properties(cli_alias_help_discoverable PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# 批量入口近距手误仍报歧义而非静默纠错（card → 多候选，退出 2）；候选集随
+# 命令面演进，只钉「失败」不钉内容。
+add_test(NAME cli_ambiguous_prefix_still_errors
+         COMMAND tkw card)
+set_tests_properties(cli_ambiguous_prefix_still_errors PROPERTIES
+    WILL_FAIL TRUE
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # REPL 内别名直达：st 查看状态、r 跑到结束（seed 1 2p 确定性胜者）；无歧义残留。
 # 自动存档指到构建目录，避免污染源码树。
 add_test(NAME cli_repl_alias_dispatch
@@ -204,6 +212,14 @@ add_test(NAME cli_repl_query_and_help_zh
          COMMAND sh -c
                  "out=$(printf '?\\nhelp new\\nquit\\n' | $<TARGET_FILE:tkw> repl); echo \"$out\" | grep -q '审计牌堆' && echo \"$out\" | grep -q '用法:' && echo \"$out\" | grep -q '公共选项:'")
 set_tests_properties(cli_repl_query_and_help_zh PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# REPL ? <关键词>（带空格，README/用法示例教的形态）应走子串命中列表渲染，不是
+# 模糊建议；退出行带前导空格应正常终止循环。钉 shipped 二进制，防子模块回退。
+add_test(NAME cli_repl_query_padded_keyword
+         COMMAND sh -c
+                 "out=$(printf '? save\\n? aud\\n quit\\n' | $<TARGET_FILE:tkw> repl 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '匹配命令' && printf '%s' \"$out\" | grep -q 'save' && printf '%s' \"$out\" | grep -q 'audit' && ! printf '%s' \"$out\" | grep -q '您是否要找' && [ $rc -eq 0 ]")
+set_tests_properties(cli_repl_query_padded_keyword PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # REPL 内 `new --help` 走 App 帮助格式化器（与批量 --help 同一中文渲染路径）：

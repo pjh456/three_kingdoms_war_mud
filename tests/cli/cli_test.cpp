@@ -210,9 +210,13 @@ TEST_CASE("cli: repl query and help render commands")
     CHECK(listing.console.find("audit") != std::string::npos);
     CHECK(listing.console.find("repl") == std::string::npos);
 
+    // 带空格关键词走子串命中列表渲染（Matched），不是模糊建议：查询串
+    // 若残留前导空格，会退化到「您是否要找」路径，该断言方向即红。
     auto filtered = repl.run("? aud");
     CHECK(filtered.ok);
+    CHECK(filtered.console.find("匹配命令") != std::string::npos);
     CHECK(filtered.console.find("audit") != std::string::npos);
+    CHECK(filtered.console.find("您是否要找") == std::string::npos);
 
     auto help = repl.run("help new");
     CHECK(help.ok);
@@ -260,9 +264,13 @@ TEST_CASE("cli: aliases dispatch to canonical commands")
     CHECK(listing.console.find("save (w)") != std::string::npos);
     CHECK(listing.console.find("load (l)") != std::string::npos);
 
-    // ? 过滤按别名命中：st 应列出 status。
+    // ? 过滤按子串命中：st 应同时列出 status 与 step（Matched 列表渲染，
+    // 别名 status (st) 也经子串命中而非模糊建议）。
     auto filtered = repl.run("? st");
+    CHECK(filtered.console.find("匹配命令") != std::string::npos);
     CHECK(filtered.console.find("status") != std::string::npos);
+    CHECK(filtered.console.find("step") != std::string::npos);
+    CHECK(filtered.console.find("您是否要找") == std::string::npos);
 }
 
 TEST_CASE("cli: unknown command and bad options are errors")
