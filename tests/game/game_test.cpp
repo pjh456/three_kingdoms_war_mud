@@ -140,6 +140,38 @@ TEST_CASE("game: same-direction horse replaces previous")
     CHECK(g.cards.equip("a")[0].def_id == "dawan");
 }
 
+TEST_CASE("game: equip clears every old same-slot card when the first is not last")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.cards.build_deck(g.catalog);
+    // 装备区：[-1马 chitu, -1马 dawan, 防具 bagua]
+    // 同槽旧件 chitu 不在末项，其后仍有同槽 dawan
+    g.equip("a", "chitu", "h#1");
+    g.equip("a", "dawan", "h#2");
+    g.equip("a", "bagua", "e#3");
+    g.give("a", "chitu", "h#4");  // 替换用 -1马
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"h#4", {}}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+
+    CHECK(g.cards.equip_size("a") == 2);  // 两件旧 -1马全清，只剩 bagua + 新马
+    CHECK(g.cards.discard_size() == 2);   // 两件旧 -1马各弃置一次
+
+    bool has_new = false, has_bagua = false, has_dawan = false;
+    for (const auto &c : g.cards.equip("a"))
+    {
+        if (c.instance_id == "h#4") has_new = true;
+        if (c.instance_id == "e#3") has_bagua = true;
+        if (c.instance_id == "h#2") has_dawan = true;
+    }
+    CHECK(has_new);
+    CHECK(has_bagua);
+    CHECK_FALSE(has_dawan);
+}
+
 TEST_CASE("game: valid_targets by scope and range")
 {
     TestGame g("deck");

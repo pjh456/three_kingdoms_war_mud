@@ -177,7 +177,9 @@ namespace tkw
                 return TurnResult<void>::Err(TurnError::NotEquipment);
             const auto slot = def.unwrap()->equip.unwrap().slot;
 
-            for (const auto &c : ctx.cards->equip(player))
+            // 按值取装备区副本：remove_from_equip 会 erase 底层 vector，直接遍历原区间迭代器会失效
+            const auto equipped = ctx.cards->equip(player);
+            for (const auto &c : equipped)
             {
                 const auto d = ctx.catalog->find(c.def_id);
                 if (d.is_some() && d.unwrap()->equip.is_some() &&
