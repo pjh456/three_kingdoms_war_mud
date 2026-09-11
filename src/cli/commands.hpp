@@ -39,6 +39,7 @@
 #include "game/ai/simple.hpp"
 #include "game/resolve/audit.hpp"
 #include "game/core/card_event.hpp"
+#include "game/flow/factory.hpp"
 #include "game/flow/loop.hpp"
 #include "game/flow/table.hpp"
 #include "io/file.hpp"
@@ -167,42 +168,20 @@ namespace tkw
                     .boolean();
             }
 
-            /** 性别占位：无玩家数据源，按座位奇偶交替（P0 男 / P1 女 / …）。 */
-            inline tkw::entity::Gender gender_for_seat(int seat)
+            /** 建局入参：只取装配所需字段（hand/AI/verbose 属会话参数）。 */
+            inline tkw::game::BuildOptions build_options_from(const Options &opt)
             {
-                return seat % 2 == 0 ? tkw::entity::Gender::Male
-                                     : tkw::entity::Gender::Female;
+                return tkw::game::BuildOptions{opt.deck, opt.players, opt.seed};
             }
 
-            /** 按选项构建一局（加载牌堆 + 建玩家）；失败返回 nullptr 并填 err。 */
-            inline std::unique_ptr<tkw::game::Game> build_game(
-                const Options &opt, std::string &err)
+            /** 建局错误 → 用户可见文案（目录加载与玩家创建两类错误面）。 */
+            inline std::string format_build_error(const tkw::game::BuildError &e)
             {
-                tkw::config::ResourceStore store(opt.deck);
-                auto catalog = tkw::card::CardDefCatalog::load(store, "deck");
-                if (catalog.is_err())
-                {
-                    const auto &e = catalog.unwrap_err();
-                    err = "加载牌堆失败 (kind=" +
-                          std::to_string(static_cast<int>(e.kind)) + "): " + e.detail;
-                    return nullptr;
-                }
-                auto game = std::make_unique<tkw::game::Game>(
-                    std::move(catalog).unwrap(),
-                    std::make_unique<tkw::SeededRng>(opt.seed));
-                for (int i = 0; i < opt.players; ++i)
-                {
-                    auto r = game->add_player(
-                        "P" + std::to_string(i), i,
-                        tkw::entity::Hp::make(game->rules.base_hp),
-                        gender_for_seat(i));
-                    if (r.is_err())
-                    {
-                        err = "创建玩家失败: P" + std::to_string(i);
-                        return nullptr;
-                    }
-                }
-                return game;
+                if (e.kind == tkw::game::BuildError::Kind::CreatePlayer)
+                    return "创建玩家失败: P" + std::to_string(e.player_index);
+                return "加载牌堆失败 (kind=" +
+                       std::to_string(static_cast<int>(e.config.kind)) + "): " +
+                       e.config.detail;
             }
 
             /** 校验真人座位：必须是对局中存在的实体且互不重复；空串表示通过。 */
@@ -295,10 +274,10 @@ namespace tkw
 
             inline CliResult<void> cmd_new(const Options &opt, Session &s)
             {
-                std::string err;
-                auto game = build_game(opt, err);
-                if (!game)
-                    return CliFailure{CliError(err)};
+                auto built = tkw::game::build_game(build_options_from(opt));
+                if (built.is_err())
+                    return CliFailure{CliError(format_build_error(built.unwrap_err()))};
+                auto game = std::move(built).unwrap();
                 const std::string verr = validate_humans(*game, opt.humans);
                 if (!verr.empty())
                     return CliFailure{CliError(verr)};
@@ -425,10 +404,10 @@ namespace tkw
                 auto text = tkw::io::read_text(file);
                 if (text.is_err())
                     return CliFailure{CliError("读取存档失败: " + file.string())};
-                std::string err;
-                auto game = build_game(opt, err);
-                if (!game)
-                    return CliFailure{CliError(err)};
+                auto built = tkw::game::build_game(build_options_from(opt));
+                if (built.is_err())
+                    return CliFailure{CliError(format_build_error(built.unwrap_err()))};
+                auto game = std::move(built).unwrap();
                 tkw::game::GameSession state;
                 tkw::save::SessionMeta meta;
                 auto r = tkw::save::read(text.unwrap(), *game, state, &meta);
@@ -464,10 +443,10 @@ namespace tkw
 
             inline CliResult<void> run_game(const Options &opt)
             {
-                std::string err;
-                auto game = build_game(opt, err);
-                if (!game)
-                    return CliFailure{CliError(err)};
+                auto built = tkw::game::build_game(build_options_from(opt));
+                if (built.is_err())
+                    return CliFailure{CliError(format_build_error(built.unwrap_err()))};
+                auto game = std::move(built).unwrap();
 
                 // 此处只覆盖「枚举已存在但结算未实现」；未知机制名在严格加载期
                 // 即失败，不会到达这里（未知机制的审计报告见 audit 子命令）。
@@ -649,10 +628,11 @@ namespace tkw
                     // 每局独立随机源：种子 = 基种子 + 局序号。
                     Options per = opt;
                     per.seed = opt.seed + static_cast<std::uint32_t>(i);
-                    std::string err;
-                    auto game = build_game(per, err);
-                    if (!game)
-                        return CliFailure{CliError(err)};
+                    auto built = tkw::game::build_game(build_options_from(per));
+                    if (built.is_err())
+                        return CliFailure{
+                            CliError(format_build_error(built.unwrap_err()))};
+                    auto game = std::move(built).unwrap();
 
                     // 全 AI 局：无真人座位，决策源按难度档取单档。
                     auto ctx = game->context();
