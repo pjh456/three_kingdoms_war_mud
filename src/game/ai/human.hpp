@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "card/card.hpp"
+#include "card/catalog.hpp"
 #include "card/def.hpp"
 #include "game/ai/decider.hpp"
 #include "game/ai/simple.hpp"
@@ -130,19 +131,6 @@ namespace tkw
                     return true;
                 }
 
-                /** @brief 卡名优先取目录 name，缺失回落 def_id（代码不硬编码牌名）。 */
-                static std::string card_name(
-                    const DecisionRequest &req, const std::string &def_id)
-                {
-                    if (req.catalog)
-                    {
-                        const auto def = req.catalog->find(def_id);
-                        if (def.is_some() && !def.unwrap()->name.empty())
-                            return def.unwrap()->name;
-                    }
-                    return def_id;
-                }
-
                 /** @brief 把某个区域渲染成「卡名/卡名」；空区域回落「无」。 */
                 static std::string zone_names(
                     const DecisionRequest &req,
@@ -155,7 +143,7 @@ namespace tkw
                     {
                         if (i > 0)
                             out += "/";
-                        out += card_name(req, zone[i].def_id);
+                        out += card::display_name(req.catalog, zone[i].def_id);
                     }
                     return out;
                 }
@@ -212,8 +200,8 @@ namespace tkw
                         out_ << "  " << (i + 1) << ") ";
                         if (has_zones)
                             out_ << zone_tag(req.zone_labels[i]) << " ";
-                        out_ << card_name(req, options[i].def_id) << " "
-                             << options[i].instance_id << "\n";
+                        out_ << card::display_name(req.catalog, options[i].def_id)
+                             << " " << options[i].instance_id << "\n";
                     }
                 }
 
@@ -278,7 +266,7 @@ namespace tkw
                             const auto &d = *def.unwrap();
                             for (const auto ability : d.abilities)
                                 if (ability == req.ability)
-                                    return d.name.empty() ? d.id : d.name;
+                                    return card::display_name(d);
                         }
                     }
                     return "装备能力";
@@ -298,8 +286,8 @@ namespace tkw
                         {
                             const auto &act = req.legal[i];
                             out_ << "  " << (i + 1) << ") "
-                                 << card_name(req, act.card.def_id) << " "
-                                 << act.card.instance_id;
+                                 << card::display_name(req.catalog, act.card.def_id)
+                                 << " " << act.card.instance_id;
                             if (!act.second_instance_id.empty())
                                 out_ << " + " << act.second_instance_id;
                             if (!act.targets.empty())
@@ -412,8 +400,8 @@ namespace tkw
                         print_view(req);
                         for (std::size_t i = 0; i < hand.size(); ++i)
                             out_ << "  " << (i + 1) << ") "
-                                 << card_name(req, hand[i].def_id) << " "
-                                 << hand[i].instance_id << "\n";
+                                 << card::display_name(req.catalog, hand[i].def_id)
+                                 << " " << hand[i].instance_id << "\n";
                         out_ << "输入 play <序号> + <序号> 或 pass：" << std::flush;
 
                         std::string line;

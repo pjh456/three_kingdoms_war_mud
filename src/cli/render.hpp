@@ -29,21 +29,11 @@ namespace tkw
     {
         namespace detail
         {
-            /** 卡牌 id → 目录中文名；目录未收录该 id 或名称为空时回落 id 本身。 */
-            inline const std::string &card_name(
-                const tkw::card::CardDefCatalog &catalog, const std::string &def_id)
-            {
-                const auto def = catalog.find(def_id);
-                if (def.is_some() && !def.unwrap()->name.empty())
-                    return def.unwrap()->name;
-                return def_id;
-            }
-
             /** 未实现卡展示名：目录中文名 + (id) 后缀；目录未收录时回落 id。 */
             inline std::string audit_entry_name(
                 const tkw::card::CardDefCatalog &catalog, const std::string &def_id)
             {
-                return card_name(catalog, def_id) + "(" + def_id + ")";
+                return tkw::card::display_name(catalog, def_id) + "(" + def_id + ")";
             }
 
             /** 卡牌大类 → 中文展示（基本/锦囊/装备）。 */
@@ -76,20 +66,24 @@ namespace tkw
                     [&catalog = game.catalog](tkw::HandlerContext<tkw::CardPlayedEvent> &c)
                     {
                         std::cout << "[打出] " << c.event.user << " "
-                                  << card_name(catalog, c.event.def_id) << "\n";
+                                  << tkw::card::display_name(catalog, c.event.def_id)
+                                  << "\n";
                     })));
                 handles.push_back(
                     game.bus.subscribe(tkw::Handler<tkw::CardDiscardedEvent>(
                         [&catalog = game.catalog](
                             tkw::HandlerContext<tkw::CardDiscardedEvent> &c) {
                             std::cout << "[弃置] " << c.event.entity << " "
-                                      << card_name(catalog, c.event.def_id) << "\n";
+                                      << tkw::card::display_name(
+                                             catalog, c.event.def_id)
+                                      << "\n";
                         })));
                 handles.push_back(game.bus.subscribe(tkw::Handler<tkw::CardDrawnEvent>(
                     [&catalog = game.catalog](
                         tkw::HandlerContext<tkw::CardDrawnEvent> &c) {
                         std::cout << "[摸牌] " << c.event.entity << " "
-                                  << card_name(catalog, c.event.def_id) << "\n";
+                                  << tkw::card::display_name(catalog, c.event.def_id)
+                                  << "\n";
                     })));
                 handles.push_back(
                     game.bus.subscribe(tkw::Handler<tkw::EntityDamagedEvent>(

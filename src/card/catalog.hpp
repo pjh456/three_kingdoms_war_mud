@@ -700,6 +700,37 @@ namespace tkw
             std::vector<CardDef> defs; /**< deck.json 引用顺序（build_deck 等依赖此序） */
             std::unordered_map<std::string, std::size_t> index; /**< id → defs 下标 */
         };
+
+        /**
+         * @brief 卡定义展示名：name 非空取 name，否则回落 id。
+         * @return 引用指向 def 自身字段（name 或 id），生命周期同 def。
+         */
+        inline const std::string &display_name(const CardDef &def) noexcept
+        {
+            return def.name.empty() ? def.id : def.name;
+        }
+
+        /**
+         * @brief 按 id 从目录取展示名。
+         * @return 目录收录且 name 非空 → name；否则回落 def_id 本身（拷贝）。
+         * @note 结果按值返回：目录未收录时返回入参的拷贝，不暴露调用方引用。
+         */
+        inline std::string display_name(
+            const CardDefCatalog &catalog, const std::string &def_id)
+        {
+            const auto def = catalog.find(def_id);
+            return def.is_some() ? display_name(*def.unwrap()) : def_id;
+        }
+
+        /**
+         * @brief 目录指针可空（决策请求的目录可选）的展示名。
+         * @return catalog 为空或未收录 → def_id；否则同目录重载。
+         */
+        inline std::string display_name(
+            const CardDefCatalog *catalog, const std::string &def_id)
+        {
+            return catalog == nullptr ? def_id : display_name(*catalog, def_id);
+        }
     }
 }
 
