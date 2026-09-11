@@ -342,6 +342,31 @@ TEST_CASE("cli: --human completion offers seat ids")
     CHECK(none.candidates.empty());
 }
 
+TEST_CASE("cli: --ai completion offers level names")
+{
+    Repl repl;
+
+    // 空前缀：两个档位全量；s/a 前缀单命中；越界前缀为空。
+    auto all = pjh::cli::complete_line_result(repl.app, "--ai ", 5);
+    REQUIRE(all.candidates.size() == 2);
+    std::vector<std::string> got;
+    for (const auto &c : all.candidates)
+        got.push_back(c.display);
+    CHECK(std::find(got.begin(), got.end(), "simple") != got.end());
+    CHECK(std::find(got.begin(), got.end(), "aggressive") != got.end());
+
+    auto s = pjh::cli::complete_line_result(repl.app, "--ai s", 6);
+    REQUIRE(s.candidates.size() == 1);
+    CHECK(s.candidates[0].display == "simple");
+
+    // leaf 位置经祖先链同样命中（--ai 每个 leaf 都声明）。
+    auto leaf = pjh::cli::complete_line_result(repl.app, "new --ai ", 9);
+    CHECK(leaf.candidates.size() == 2);
+
+    auto none = pjh::cli::complete_line_result(repl.app, "--ai x", 6);
+    CHECK(none.candidates.empty());
+}
+
 TEST_CASE("cli: audit entry name renders chinese name with id")
 {
     tkw::config::ResourceStore store(TKW_TEST_RESOURCE_DIR);

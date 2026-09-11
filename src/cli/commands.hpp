@@ -146,7 +146,11 @@ namespace tkw
                        "AI 难度：simple 贪心 / aggressive 伤害优先（默认 simple）")
                     .enum_type<AiLevel>()
                     .mapping({{"simple", AiLevel::Simple},
-                             {"aggressive", AiLevel::Aggressive}});
+                             {"aggressive", AiLevel::Aggressive}})
+                    .completer([] {
+                        // 候选值域与上方 enum 映射保持一致
+                        return std::vector<std::string>{"simple", "aggressive"};
+                    });
             }
 
             /**
