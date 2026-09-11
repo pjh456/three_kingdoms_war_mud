@@ -57,6 +57,7 @@ namespace tkw
             Options base;                    /**< REPL 启动选项（供行内命令继承） */
             bool active = false;
             BattleStats stats; /**< 本会话累计的对局统计（new 时重置、load 时从存档恢复；对局结束时打印） */
+            std::filesystem::path deck = "resources"; /**< 本会话牌表目录（new/load 写入；status 展示来源） */
         };
     }
 }

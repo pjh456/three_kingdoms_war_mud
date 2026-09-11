@@ -507,3 +507,10 @@ add_test(NAME cli_status_finished
                  "out=$(printf 'new --players 2 --seed 1\\nrun\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); printf '%s' \"$out\" | grep -q '会话: 已结束' && printf '%s' \"$out\" | grep -q '胜者: P0' && [ \"$(printf '%s' \"$out\" | grep -c '下一回合')\" -eq 1 ]")
 set_tests_properties(cli_status_finished PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# status 展示本会话牌表来源（默认 resources；REPL 启动选项被行内建局继承）。
+add_test(NAME cli_status_deck_source
+         COMMAND sh -c
+                 "out=$(printf 'new --players 2 --seed 1\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); printf '%s' \"$out\" | grep -q '牌表: resources'")
+set_tests_properties(cli_status_deck_source PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

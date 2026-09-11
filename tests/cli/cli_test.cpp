@@ -938,3 +938,50 @@ TEST_CASE("cli: status reports a finished session and its winner")
     CHECK(draw.out.find("胜者: 平局（同归于尽）") != std::string::npos);
     CHECK(draw.out.find("下一回合") == std::string::npos);
 }
+
+TEST_CASE("cli: status shows the session deck source")
+{
+    Repl repl;
+
+    // 默认牌表继承 REPL 启动选项，开局后 status 展示该来源。
+    REQUIRE(repl.run("new --players 2 --seed 1 --hand 0").ok);
+    CHECK(repl.session.deck == std::filesystem::path(TKW_TEST_RESOURCE_DIR));
+    auto status = repl.run("status");
+    CHECK(status.ok);
+    CHECK(status.out.find("牌表: " + std::string(TKW_TEST_RESOURCE_DIR)) !=
+          std::string::npos);
+
+    // 行内 --deck 覆盖启动选项并记入会话；status 展示行内来源。
+    const std::filesystem::path dir = temp_dir("tkw_cli_deck_source");
+    const std::filesystem::path save = temp_save("tkw-cli-deck-source.json");
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::remove(save, ec);
+    REQUIRE(std::filesystem::create_directories(dir / "cards"));
+    REQUIRE(tkw::io::write_text(
+                dir / "deck.json", R"({"name":"cli","cards":["h0"]})")
+                .is_ok());
+    REQUIRE(tkw::io::write_text(
+                dir / "cards" / "h0.json",
+                R"({"id":"h0","name":"测","type":"basic",)"
+                R"("copies":[{"suit":"spade","number":7}]})")
+                .is_ok());
+
+    auto overridden = repl.run("new --players 2 --seed 1 --hand 0 --deck " +
+                               dir.string());
+    CHECK(overridden.ok);
+    CHECK(repl.session.deck == dir);
+    CHECK(overridden.out.find("牌表: " + dir.string()) != std::string::npos);
+
+    // 读档同样以命令行牌表落子并记入会话（换回默认牌表后再读回）。
+    REQUIRE(repl.run("save " + save.string()).ok);
+    REQUIRE(repl.run("new --players 2 --seed 1 --hand 0").ok);
+    CHECK(repl.session.deck == std::filesystem::path(TKW_TEST_RESOURCE_DIR));
+    auto loaded = repl.run("load " + save.string() + " --deck " + dir.string());
+    CHECK(loaded.ok);
+    CHECK(repl.session.deck == dir);
+    CHECK(loaded.out.find("牌表: " + dir.string()) != std::string::npos);
+
+    std::filesystem::remove(save, ec);
+    std::filesystem::remove_all(dir, ec);
+}

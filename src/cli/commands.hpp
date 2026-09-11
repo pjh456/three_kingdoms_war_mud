@@ -414,7 +414,8 @@ namespace tkw
              * @brief 打印会话状态：无会话 / 进行中 / 已结束三态。
              * @param s 当前会话；active 为假或 game 为空时只打印「会话: 无」。
              * @note 结束态以引擎 session_over（存活 ≤ 1）判定，胜者经 winner_label
-             *       回落，0 存活显示「平局（同归于尽）」；仅进行中打印「下一回合」。
+             *       回落，0 存活显示「平局（同归于尽）」；仅进行中打印「下一回合」，
+             *       并展示本会话牌表来源。
              */
             inline void print_status(const Session &s)
             {
@@ -439,6 +440,7 @@ namespace tkw
                               << "，存活: " << ctx.entities->size() << "\n";
 
                 std::cout << "  AI 难度: " << ai_level_name(s.ai) << "\n";
+                std::cout << "  牌表: " << s.deck.string() << "\n";
                 std::cout << "  真人座位: ";
                 if (s.humans.empty())
                     std::cout << "无";
@@ -490,6 +492,7 @@ namespace tkw
                 s.ai = opt.ai;
                 s.verbose = opt.verbose;
                 s.active = true;
+                s.deck = opt.deck;
                 s.stats = BattleStats{};
                 std::cout << "新对局已开始\n";
                 print_status(s);
@@ -630,6 +633,7 @@ namespace tkw
                 s.stats = std::move(meta.stats);
                 s.verbose = opt.verbose;
                 s.active = true;
+                s.deck = opt.deck;
                 std::cout << "已加载: " << file.string() << "\n";
                 print_status(s);
                 return CliResult<void>::Ok();
