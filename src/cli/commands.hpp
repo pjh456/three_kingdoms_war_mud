@@ -386,7 +386,7 @@ namespace tkw
                 std::cout << "  回合数: " << turns << "\n";
                 std::cout << "  胜者: " << (winner.empty() ? "无" : winner) << "\n";
                 std::set<std::string> ids = stats.died;
-                for (const auto &e : game.entities)
+                for (const auto *e : game.entities.const_view())
                     ids.insert(e->get_id());
                 for (const auto &id : ids)
                 {

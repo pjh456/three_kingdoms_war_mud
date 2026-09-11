@@ -26,7 +26,8 @@ namespace tkw
         /**
          * @brief 决策接缝的只读上下文：聚合 const 容器指针。
          * @note 不暴露事件总线与随机源：决策源不得发事件、不得推进随机；
-         *       传入本类型即从类型上排除改状态的可能（所有成员为 const 指针）。
+         *       所有容器成员均为 const 指针，实体只读遍历走
+         *       EntityManager::const_view()，故传入本类型即在类型上排除改状态。
          */
         struct ReadOnlyContext
         {

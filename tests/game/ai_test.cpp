@@ -870,6 +870,13 @@ namespace
     concept CanRemoveFromHand = requires(T *c, const std::string &id) {
         c->remove_from_hand(id, id);
     };
+
+    /** @brief const 管理器可直接迭代（仅当提供了 const begin/end 时为真）。 */
+    template <typename T>
+    concept ConstIterable = requires(const T &m) {
+        m.begin();
+        m.end();
+    };
 }
 
 TEST_CASE("ai: decision context is read-only at compile time")
@@ -890,6 +897,8 @@ TEST_CASE("ai: decision context is read-only at compile time")
     static_assert(!HasTakeDamage<const tkw::entity::Entity>);
     static_assert(CanRemoveFromHand<tkw::card::CardManager>);
     static_assert(!CanRemoveFromHand<const tkw::card::CardManager>);
+    // const 实体管理器不可迭代：实体只读遍历唯一入口是 const_view()
+    static_assert(!ConstIterable<tkw::EntityManager>);
     // 接缝无法还原出可变上下文（一旦进入只读，改状态路径被类型切断）
     static_assert(!std::is_convertible_v<ReadOnlyContext, GameContext>);
     CHECK(true);
