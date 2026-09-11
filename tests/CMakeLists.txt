@@ -240,6 +240,14 @@ add_test(NAME cli_help_option_defaults_zh
 set_tests_properties(cli_help_option_defaults_zh PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# 高频 leaf 命令 --help 附「示例:」段，含与当前选项面一致的示例行；非高频 leaf
+# （repl）不附；REPL 内 help <命令> 走同一渲染，示例同样可见。
+add_test(NAME cli_help_leaf_examples_zh
+         COMMAND sh -c
+                 "for c in new deal load save run step simulate cards audit; do out=$($<TARGET_FILE:tkw> $c --help); printf '%s' \"$out\" | grep -q '示例:' || exit 1; done && $<TARGET_FILE:tkw> deal --help | grep -q 'tkw --ai aggressive deal 2 1' && ! $<TARGET_FILE:tkw> repl --help | grep -q '示例:' && rpl=$(printf 'help new\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave ''); printf '%s' \"$rpl\" | grep -q 'tkw new --players 2 --seed 1'")
+set_tests_properties(cli_help_leaf_examples_zh PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # REPL ? 应列命令并带中文描述；help <命令> 应走同一中文用法渲染，继承选项段同样中文化。
 add_test(NAME cli_repl_query_and_help_zh
          COMMAND sh -c

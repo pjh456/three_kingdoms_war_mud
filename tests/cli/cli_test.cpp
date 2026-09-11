@@ -262,6 +262,48 @@ TEST_CASE("cli: repl query and help render commands")
     CHECK(inline_help.console.find("Inherited Options") == std::string::npos);
 }
 
+TEST_CASE("cli: high-frequency leaf help appends usage examples")
+{
+    Repl repl;
+
+    // 高频 leaf 的 --help 末尾附「示例:」段，每段含可辨识的示例行；示例须与
+    // 当前选项面/位置参数一致，改声明时同步改这里。
+    struct LeafExample
+    {
+        const char *cmd;
+        const char *snippet;
+    };
+    const LeafExample cases[] = {
+        {"new", "tkw new --players 2 --seed 1"},
+        {"deal", "tkw --ai aggressive deal 2 1"},
+        {"load", "tkw load s.json --ai aggressive"},
+        {"save", "保存当前对局（别名 w）"},
+        {"run", "跑到对局结束（别名 r）"},
+        {"step", "执行一个回合（可重复）"},
+        {"simulate", "tkw --ai aggressive simulate 100 2"},
+        {"cards", "tkw --deck resources cards"},
+        {"audit", "tkw --deck resources audit"},
+    };
+    for (const auto &c : cases)
+    {
+        auto help = repl.run(std::string(c.cmd) + " --help");
+        CHECK(help.ok);
+        CHECK(help.console.find("示例:") != std::string::npos);
+        CHECK(help.console.find(c.snippet) != std::string::npos);
+    }
+
+    // 非高频 leaf 不附示例段，避免帮助冗长；REPL 的 help <命令> 与批量 --help
+    // 走同一渲染，示例同样可见。
+    auto repl_help = repl.run("repl --help");
+    CHECK(repl_help.ok);
+    CHECK(repl_help.console.find("示例:") == std::string::npos);
+
+    auto nav_help = repl.run("help deal");
+    CHECK(nav_help.ok);
+    CHECK(nav_help.console.find("示例:") != std::string::npos);
+    CHECK(nav_help.console.find("tkw deal 2 1") != std::string::npos);
+}
+
 TEST_CASE("cli: aliases dispatch to canonical commands")
 {
     Repl repl;

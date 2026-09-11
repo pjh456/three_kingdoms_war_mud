@@ -98,18 +98,69 @@ namespace tkw
                 }
                 return out;
             }
+
+            /**
+             * @brief 高频 leaf 命令的单命令用法示例（根帮助「示例」段的叶子版）。
+             * @param name 命令规范名（即 cmd.name()）。
+             * @return 「示例:」段文本；无示例的命令返回空串。
+             * @note 会话流命令在 REPL 内逐条输入，示例给命令名形态并附前置步骤；
+             *       一次性命令给 `tkw <命令>` 形态。示例必须与当前选项面一致，
+             *       增删选项或位置参数时同步复核本表。
+             */
+            inline std::string leaf_help_examples(std::string_view name)
+            {
+                if (name == "new")
+                    return "示例:\n"
+                           "    tkw new --players 2 --seed 1   开一局并打印状态\n"
+                           "    new --players 2 --seed 1       REPL 内开新局\n";
+                if (name == "deal")
+                    return "示例:\n"
+                           "    tkw deal 2 1                     2 人、种子 1 跑一局\n"
+                           "    tkw --ai aggressive deal 2 1     用 aggressive AI 跑一局\n";
+                if (name == "simulate")
+                    return "示例:\n"
+                           "    tkw simulate 100 2               2 人模拟 100 局\n"
+                           "    tkw --ai aggressive simulate 100 2  用 aggressive AI 模拟\n";
+                if (name == "cards")
+                    return "示例:\n"
+                           "    tkw cards                        列出默认牌表构成\n"
+                           "    tkw --deck resources cards       显式指定牌表目录后再列出\n";
+                if (name == "audit")
+                    return "示例:\n"
+                           "    tkw audit                        审计默认牌堆\n"
+                           "    tkw --deck resources audit       审计指定目录的牌堆\n";
+                if (name == "step")
+                    return "示例:\n"
+                           "    new --players 2 --seed 1   先在 REPL 内开一局\n"
+                           "    step                       执行一个回合（可重复）\n";
+                if (name == "run")
+                    return "示例:\n"
+                           "    new --players 2 --seed 1   先在 REPL 内开一局\n"
+                           "    run                        跑到对局结束（别名 r）\n";
+                if (name == "save")
+                    return "示例:\n"
+                           "    new --players 2 --seed 1   先在 REPL 内开一局\n"
+                           "    save s.json                保存当前对局（别名 w）\n";
+                if (name == "load")
+                    return "示例:\n"
+                           "    load s.json                      在 REPL 内载入存档续玩（别名 l）\n"
+                           "    tkw load s.json --ai aggressive  命令行载入并覆盖 AI 档\n";
+                return {};
+            }
         }  // namespace detail
 
         /**
          * @brief 把命令树的框架帮助数据渲染为中文帮助。
          * @param cmd 请求帮助的命令（根或任一子命令）。
-         * @return 中文段标题（用法/选项/公共选项/参数/子命令）的完整帮助；根命令额外附用法示例。
+         * @return 中文段标题（用法/选项/公共选项/参数/子命令）的完整帮助；根命令附
+         *         分组用法示例，高频叶子命令附单命令示例。
          * @note 只替换框架渲染结果的段标题与 usage 前缀，选项/参数/子命令的排布与
          *       对齐仍由框架负责，避免自造排版。段标题在渲染后再替换，使框架仍按
          *       英文段名选择列宽上限（选项段 32 字节）。选项标注（如 (repeatable)）
          *       保持框架原文。program_name 用完整命令路径，子命令帮助也带 tkw 前缀。
          *       根帮助示例按「批量一次性」与「REPL 会话」分组：会话流命令只能在
-         *       `tkw repl` 内逐条输入，不带 tkw 前缀。
+         *       `tkw repl` 内逐条输入，不带 tkw 前缀。叶子示例只覆盖高频命令，见
+         *       detail::leaf_help_examples。
          */
         inline std::string render_help_zh(const pjh::cli::BaseCommand &cmd)
         {
@@ -154,6 +205,8 @@ namespace tkw
                     "  真人参与（先 tkw --human P0 repl，再逐条输入）:\n"
                     "    new --players 2 --seed 1 开新局\n"
                     "    step                     轮到 P0 时按提示输入（play/pass/discard）\n";
+            else
+                text += detail::leaf_help_examples(cmd.name());
             return text;
         }
 
