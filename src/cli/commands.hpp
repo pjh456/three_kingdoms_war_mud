@@ -401,6 +401,17 @@ namespace tkw
                 }
             }
 
+            /**
+             * @brief 终结行胜者展示：会话已无存活者（空串）时回落「平局（同归于尽）」。
+             * @note 只用于会话已结束（存活 ≤ 1）的胜者行：唯一存活者时胜者非空，
+             *       回合上限平局走错误分支「平局（达到最大回合数）」，不经此处，
+             *       故空串只可能来自同归于尽。统计块的「无」回落口径不变。
+             */
+            inline std::string winner_label(const std::string &winner)
+            {
+                return winner.empty() ? "平局（同归于尽）" : winner;
+            }
+
             /** 校验真人座位：必须是对局中存在的实体且互不重复；空串表示通过。 */
             inline std::string validate_humans(
                 tkw::game::Game &game, const std::vector<std::string> &humans)
@@ -500,7 +511,8 @@ namespace tkw
                 if (tkw::game::session_over(ctx))
                 {
                     std::cout << "对局已结束，胜者: "
-                              << tkw::game::session_winner(ctx) << "\n";
+                              << winner_label(tkw::game::session_winner(ctx))
+                              << "\n";
                     return CliResult<void>::Ok();
                 }
                 auto r = tkw::game::step_session(ctx, *ai, s.state);
@@ -517,7 +529,8 @@ namespace tkw
                 print_status(s);
                 if (tkw::game::session_over(ctx))
                 {
-                    std::cout << "对局结束，胜者: " << tkw::game::session_winner(ctx)
+                    std::cout << "对局结束，胜者: "
+                              << winner_label(tkw::game::session_winner(ctx))
                               << "\n";
                     print_battle_stats(
                         s.stats, *s.game, tkw::game::session_winner(ctx), s.state.turns);
@@ -549,7 +562,8 @@ namespace tkw
                     }
                     advanced = true;
                 }
-                std::cout << "胜者: " << tkw::game::session_winner(ctx)
+                std::cout << "胜者: "
+                          << winner_label(tkw::game::session_winner(ctx))
                           << "，回合数: " << s.state.turns << "\n";
                 // 对局在本次命令内跑完才附统计块；已在更早 step 结束时不重复打印。
                 if (advanced)
@@ -653,7 +667,7 @@ namespace tkw
                     }
                 }
                 const std::string winner = tkw::game::session_winner(ctx);
-                std::cout << "胜者: " << winner
+                std::cout << "胜者: " << winner_label(winner)
                           << "，回合数: " << session.turns << "\n";
                 print_battle_stats(stats, *game, winner, session.turns);
                 return CliResult<void>::Ok();

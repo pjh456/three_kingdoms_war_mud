@@ -371,3 +371,31 @@ TEST_CASE("cli: --ai rejects an unmapped value")
     CHECK_FALSE(bad.ok);
     CHECK(bad.error.find("Parse Error") != std::string::npos);
 }
+
+TEST_CASE("cli: all-dead session reports the mutual destruction draw label")
+{
+    Repl repl;
+
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+
+    // 标准牌堆的同回合伤害路径（杀/全场/决斗/闪电）总留下一名存活者，
+    // 完整对局打不出全员阵亡；用引擎死亡路径构造等效终态：
+    // 0 存活、回合数远低于上限。
+    auto ctx = repl.session.game->context();
+    tkw::game::declare_death(ctx, "P0");
+    tkw::game::declare_death(ctx, "P1");
+    CHECK(tkw::game::session_over(ctx));
+    CHECK(tkw::game::session_winner(ctx).empty());
+
+    // 对已结束会话 step：胜者行回落平局标签，不留空串
+    auto stepped = repl.run("step");
+    CHECK(stepped.ok);
+    CHECK(stepped.out.find("对局已结束，胜者: 平局（同归于尽）") !=
+          std::string::npos);
+
+    // 对已结束会话 run：同一回落（会话不重复执行），回合数如实
+    auto ran = repl.run("run");
+    CHECK(ran.ok);
+    CHECK(ran.out.find("胜者: 平局（同归于尽），回合数: 0") != std::string::npos);
+    CHECK(ran.out.find("胜者: ，") == std::string::npos);
+}
