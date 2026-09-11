@@ -48,6 +48,40 @@ namespace tkw
             GameContext &ctx, DecisionSource &ai,
             const std::string &entity, const std::string &victim);
 
+        // ── 效果辅助 ────────────────────────────────────────────────────
+
+        /** @brief 目标选牌集合：按 targets 顺序的 (owner, 选中的牌) 对。 */
+        using TargetPicks = std::vector<std::pair<std::string, card::Card>>;
+
+        /**
+         * @brief 收集「对每个目标选一张牌」的决策（全部收集校验，不落子）。
+         * @param is_trick 该效果是否锦囊；false 不开无懈窗口。
+         * @param def 锦囊定义，透传给 resolve_nullification。
+         * @return Ok(picks) 按 targets 顺序（已跳过被无懈抵消的目标）；
+         *         InvalidChoice = 某目标选择为空，或所选牌不在该目标任一区域。
+         * @note 只读收集：不移动/弃置牌、不发牌域事件；被无懈抵消的目标不进
+         *       picks。落子由调用方在收集校验成功后执行。
+         */
+        inline GameResult<TargetPicks> collect_target_picks(
+            GameContext &ctx, DecisionSource &ai, const std::string &player,
+            const std::vector<std::string> &targets, bool is_trick,
+            const card::CardDef &def)
+        {
+            TargetPicks picks;
+            for (const auto &t : targets)
+            {
+                // 无懈窗口逐目标单元素，与 resolve_play 的 nullified 闭包同口径
+                if (is_trick && resolve_nullification(ctx, ai, def, player, {t}))
+                    continue;
+                const auto picked = ai.pick_card_from_target(ctx, player, t);
+                if (picked.is_none() ||
+                    !ctx.cards->has_card(t, picked.unwrap().instance_id))
+                    return GameResult<TargetPicks>::Err(EffectError::InvalidChoice);
+                picks.emplace_back(t, picked.unwrap());
+            }
+            return GameResult<TargetPicks>::Ok(std::move(picks));
+        }
+
         // ── 结算入口 ────────────────────────────────────────────────────
 
         /**
@@ -147,17 +181,11 @@ namespace tkw
                 case card::CardEffectKind::DiscardTarget:
                 {
                     // 先收集并校验全部选择，再统一落子（事务性）
-                    std::vector<std::pair<std::string, card::Card>> picks;
-                    for (const auto &t : targets)
-                    {
-                        if (nullified({t}))
-                            continue;
-                        const auto picked = ai.pick_card_from_target(ctx, player, t);
-                        if (picked.is_none() ||
-                            !ctx.cards->has_card(t, picked.unwrap().instance_id))
-                            return GameResult<void>::Err(EffectError::InvalidChoice);
-                        picks.emplace_back(t, picked.unwrap());
-                    }
+                    auto picks_r =
+                        collect_target_picks(ctx, ai, player, targets, is_trick, def);
+                    if (picks_r.is_err())
+                        return GameResult<void>::Err(picks_r.unwrap_err());
+                    const auto picks = std::move(picks_r).unwrap();
                     for (const auto &[owner, picked_card] : picks)
                     {
                         if (remove_any_and_discard(
@@ -171,17 +199,11 @@ namespace tkw
                 case card::CardEffectKind::Steal:
                 {
                     // 先收集并校验全部选择，再统一落子（事务性）
-                    std::vector<std::pair<std::string, card::Card>> picks;
-                    for (const auto &t : targets)
-                    {
-                        if (nullified({t}))
-                            continue;
-                        const auto picked = ai.pick_card_from_target(ctx, player, t);
-                        if (picked.is_none() ||
-                            !ctx.cards->has_card(t, picked.unwrap().instance_id))
-                            return GameResult<void>::Err(EffectError::InvalidChoice);
-                        picks.emplace_back(t, picked.unwrap());
-                    }
+                    auto picks_r =
+                        collect_target_picks(ctx, ai, player, targets, is_trick, def);
+                    if (picks_r.is_err())
+                        return GameResult<void>::Err(picks_r.unwrap_err());
+                    const auto picks = std::move(picks_r).unwrap();
                     for (const auto &[owner, picked_card] : picks)
                     {
                         card::Card removed;
