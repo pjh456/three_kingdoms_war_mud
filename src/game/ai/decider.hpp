@@ -7,8 +7,8 @@
  *       只读数据（观察 + 候选 + 卡牌目录），故决策是纯函数、可回放、可单测。
  */
 
-#ifndef INCLUDE_TKW_GAME_AI_DECIDER_HPP
-#define INCLUDE_TKW_GAME_AI_DECIDER_HPP
+#ifndef INCLUDE_TKW_GAME_DECIDER_HPP
+#define INCLUDE_TKW_GAME_DECIDER_HPP
 
 #include <cstdint>
 #include <string>
@@ -279,4 +279,4 @@ namespace tkw
     }
 }
 
-#endif  // INCLUDE_TKW_GAME_AI_DECIDER_HPP
+#endif  // INCLUDE_TKW_GAME_DECIDER_HPP

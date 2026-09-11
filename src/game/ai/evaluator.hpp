@@ -3,8 +3,8 @@
  * @brief AI 评估函数：牌价值（纯函数）。
  */
 
-#ifndef INCLUDE_TKW_GAME_AI_EVALUATOR_HPP
-#define INCLUDE_TKW_GAME_AI_EVALUATOR_HPP
+#ifndef INCLUDE_TKW_GAME_EVALUATOR_HPP
+#define INCLUDE_TKW_GAME_EVALUATOR_HPP
 
 #include "card/def.hpp"
 
@@ -56,4 +56,4 @@ namespace tkw
     }
 }
 
-#endif  // INCLUDE_TKW_GAME_AI_EVALUATOR_HPP
+#endif  // INCLUDE_TKW_GAME_EVALUATOR_HPP

@@ -10,8 +10,8 @@
  *       时用两张手牌当杀（丈八蛇矛）。
  */
 
-#ifndef INCLUDE_TKW_GAME_AI_SIMPLE_HPP
-#define INCLUDE_TKW_GAME_AI_SIMPLE_HPP
+#ifndef INCLUDE_TKW_GAME_SIMPLE_HPP
+#define INCLUDE_TKW_GAME_SIMPLE_HPP
 
 #include <algorithm>
 #include <cstddef>
@@ -128,4 +128,4 @@ namespace tkw
     }
 }
 
-#endif  // INCLUDE_TKW_GAME_AI_SIMPLE_HPP
+#endif  // INCLUDE_TKW_GAME_SIMPLE_HPP

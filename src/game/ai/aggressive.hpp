@@ -9,8 +9,8 @@
  *       无懈/触发/弃牌/丈八组目标）与贪心档同逻辑。无随机、无隐藏状态，确定性可回放。
  */
 
-#ifndef INCLUDE_TKW_GAME_AI_AGGRESSIVE_HPP
-#define INCLUDE_TKW_GAME_AI_AGGRESSIVE_HPP
+#ifndef INCLUDE_TKW_GAME_AGGRESSIVE_HPP
+#define INCLUDE_TKW_GAME_AGGRESSIVE_HPP
 
 #include <algorithm>
 #include <cstddef>
@@ -232,4 +232,4 @@ namespace tkw
     }
 }
 
-#endif  // INCLUDE_TKW_GAME_AI_AGGRESSIVE_HPP
+#endif  // INCLUDE_TKW_GAME_AGGRESSIVE_HPP

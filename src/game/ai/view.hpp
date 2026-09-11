@@ -4,8 +4,8 @@
  * @note 纯函数，不持有状态；决策只依赖它 + TurnContext，保证可回放/可存档。
  */
 
-#ifndef INCLUDE_TKW_GAME_AI_VIEW_HPP
-#define INCLUDE_TKW_GAME_AI_VIEW_HPP
+#ifndef INCLUDE_TKW_GAME_VIEW_HPP
+#define INCLUDE_TKW_GAME_VIEW_HPP
 
 #include <string>
 #include <utility>
@@ -94,4 +94,4 @@ namespace tkw
     }
 }
 
-#endif  // INCLUDE_TKW_GAME_AI_VIEW_HPP
+#endif  // INCLUDE_TKW_GAME_VIEW_HPP

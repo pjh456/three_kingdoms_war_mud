@@ -6,8 +6,8 @@
  *       候选按 1 起编号；非法输入重提示；EOF 一律视为放弃并立即返回。
  */
 
-#ifndef INCLUDE_TKW_GAME_AI_HUMAN_HPP
-#define INCLUDE_TKW_GAME_AI_HUMAN_HPP
+#ifndef INCLUDE_TKW_GAME_HUMAN_HPP
+#define INCLUDE_TKW_GAME_HUMAN_HPP
 
 #include <algorithm>
 #include <cctype>
@@ -718,4 +718,4 @@ namespace tkw
     }
 }
 
-#endif  // INCLUDE_TKW_GAME_AI_HUMAN_HPP
+#endif  // INCLUDE_TKW_GAME_HUMAN_HPP

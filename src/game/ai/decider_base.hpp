@@ -6,8 +6,8 @@
  *       不新增虚函数、无实例状态，header-only 多 TU 包含无 ODR 问题。
  */
 
-#ifndef INCLUDE_TKW_GAME_AI_DECIDER_BASE_HPP
-#define INCLUDE_TKW_GAME_AI_DECIDER_BASE_HPP
+#ifndef INCLUDE_TKW_GAME_DECIDER_BASE_HPP
+#define INCLUDE_TKW_GAME_DECIDER_BASE_HPP
 
 #include <algorithm>
 #include <cstddef>
@@ -330,4 +330,4 @@ namespace tkw
     }
 }
 
-#endif  // INCLUDE_TKW_GAME_AI_DECIDER_BASE_HPP
+#endif  // INCLUDE_TKW_GAME_DECIDER_BASE_HPP
