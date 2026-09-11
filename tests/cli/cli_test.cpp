@@ -209,6 +209,15 @@ TEST_CASE("cli: repl query and help render commands")
     CHECK(listing.console.find("new") != std::string::npos);
     CHECK(listing.console.find("audit") != std::string::npos);
     CHECK(listing.console.find("repl") == std::string::npos);
+    // 新注册的批量命令自动进 ? 列表，无硬编码同步面。
+    CHECK(listing.console.find("simulate") != std::string::npos);
+
+    // ? sim 子串唯一命中 simulate（Matched 列表渲染），不走模糊建议。
+    auto sim_filter = repl.run("? sim");
+    CHECK(sim_filter.ok);
+    CHECK(sim_filter.console.find("匹配命令") != std::string::npos);
+    CHECK(sim_filter.console.find("simulate") != std::string::npos);
+    CHECK(sim_filter.console.find("您是否要找") == std::string::npos);
 
     // 带空格关键词走子串命中列表渲染（Matched），不是模糊建议：查询串
     // 若残留前导空格，会退化到「您是否要找」路径，该断言方向即红。

@@ -340,3 +340,25 @@ add_test(NAME cli_ai_bogus_value_rejected
 set_tests_properties(cli_ai_bogus_value_rejected PROPERTIES
     WILL_FAIL TRUE
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# simulate 批量模拟：aggressive 档完整跑 20 局，钉汇总关键词与「种子 1..20」
+# 缺省基种子文案（Options.seed 缺省 42 不适用于 simulate）。
+add_test(NAME cli_simulate_aggressive
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> simulate 20 2 --ai aggressive 2>&1); rc=$?; [ $rc -eq 0 ] && printf '%s' \"$out\" | grep -q '模拟 20 局' && printf '%s' \"$out\" | grep -q '种子 1..20' && printf '%s' \"$out\" | grep -q 'ai=aggressive' && printf '%s' \"$out\" | grep -q '胜' && printf '%s' \"$out\" | grep -q '平均回合'")
+set_tests_properties(cli_simulate_aggressive PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 确定性：同参数两跑输出逐字节一致（种子完全由基种子 + 局序号决定）。
+add_test(NAME cli_simulate_deterministic
+         COMMAND sh -c
+                 "a=$($<TARGET_FILE:tkw> simulate 3 2 2>&1); b=$($<TARGET_FILE:tkw> simulate 3 2 2>&1); [ \"$a\" = \"$b\" ]")
+set_tests_properties(cli_simulate_deterministic PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 坏牌堆目录：错误面与 audit/cards 同款（加载牌堆失败，rc≠0）。
+add_test(NAME cli_simulate_bad_deck
+         COMMAND tkw simulate 1 2 --deck /nonexistent-deck-dir)
+set_tests_properties(cli_simulate_bad_deck PROPERTIES
+    WILL_FAIL TRUE
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

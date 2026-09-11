@@ -1,6 +1,6 @@
 /**
  * @file commands.hpp
- * @brief CLI 命令树与命令执行体：声明公共选项、注册 10 个命令、共享 Session。
+ * @brief CLI 命令树与命令执行体：声明公共选项、注册 11 个命令、共享 Session。
  * @note 与 main.cpp 分离，使命令树可由测试直接构建并驱动 REPL。命令的
  *       action 写标准输出（用户可见），框架侧输出（?/help）走 InteractiveConsole
  *       注入的流。
@@ -721,6 +721,117 @@ namespace tkw
                 return CliResult<void>::Ok();
             }
 
+            /** AI 难度档 → CLI 值域字符串（模拟汇总头行展示用）。 */
+            inline const char *ai_level_name(AiLevel ai)
+            {
+                return ai == AiLevel::Aggressive ? "aggressive" : "simple";
+            }
+
+            /** 跨局模拟聚合：各座位胜场、平局局数与回合总和（单局展示统计不可跨局累加）。 */
+            struct SimAggregate
+            {
+                std::map<std::string, int> wins; /**< 座位 id → 胜场数 */
+                int draws = 0;                  /**< 平局局数（达回合上限或同归于尽） */
+                std::int64_t turns_sum = 0;      /**< 全部局回合数总和 */
+            };
+
+            /**
+             * @brief 批量模拟：N 局独立种子全 AI 跑完，打印跨局聚合摘要（胜者
+             *        分布 / 平局 / 平均回合）。
+             * @param opt 对局选项；seed 为基种子（第 i 局用 seed + i），
+             *        --deck/--players/--hand/--seed/--ai 生效。
+             * @param n   局数；须 ≥1（由调用方校验），耗时随 n 线性。
+             * @return Ok；Err 为牌堆加载失败 / 开局失败 / 对局失败（文案与
+             *         run_game 一致）。
+             * @note 基种子缺省 1（局种子 1..N，跨档对比口径可比），与
+             *       Options.seed 缺省 42 不同；--verbose/--autosave 接受但不读
+             *       （逐局不打事件日志、无会话）。胜者空串 = 平局；平均回合为
+             *       回合总和除以局数（向下取整）。每局不打印胜者行与统计块，
+             *       未实现卡警告在循环前打印一次。
+             */
+            inline CliResult<void> simulate_games(const Options &opt, int n)
+            {
+                // 预载牌表：未实现卡警告循环前打一次，不逐局重复。
+                tkw::config::ResourceStore store(opt.deck);
+                auto catalog = tkw::card::CardDefCatalog::load(store, "deck");
+                if (catalog.is_err())
+                {
+                    const auto &e = catalog.unwrap_err();
+                    return CliFailure{CliError(
+                        "加载牌堆失败 (kind=" +
+                        std::to_string(static_cast<int>(e.kind)) + "): " + e.detail)};
+                }
+                const auto &cat = catalog.unwrap();
+                const auto unsupported = tkw::game::unsupported_cards(cat);
+                if (!unsupported.empty())
+                {
+                    std::cerr << "警告: 牌堆含 " << unsupported.size()
+                              << " 张引擎未实现的卡:";
+                    for (const auto &id : unsupported)
+                        std::cerr << ' ' << audit_entry_name(cat, id);
+                    std::cerr << "\n";
+                }
+
+                SimAggregate agg;
+                for (int i = 0; i < n; ++i)
+                {
+                    // 每局独立随机源：种子 = 基种子 + 局序号。
+                    Options per = opt;
+                    per.seed = opt.seed + static_cast<std::uint32_t>(i);
+                    std::string err;
+                    auto game = build_game(per, err);
+                    if (!game)
+                        return CliFailure{CliError(err)};
+
+                    // 全 AI 局：无真人座位，决策源按难度档取单档。
+                    auto ctx = game->context();
+                    auto ai = make_decision_source({}, opt.ai);
+                    tkw::game::GameSession session;
+                    if (tkw::game::start_session(ctx, session, "P0",
+                                                  opt.hand).is_err())
+                        return CliFailure{CliError("开局失败")};
+                    while (!tkw::game::session_over(ctx))
+                    {
+                        auto r = tkw::game::step_session(ctx, *ai, session);
+                        if (r.is_err())
+                        {
+                            const auto code = r.unwrap_err();
+                            if (code == tkw::game::LoopError::MaxRounds)
+                                break;  // 达回合上限按平局计
+                            return CliFailure{CliError(
+                                "对局失败 (LoopError=" +
+                                std::to_string(static_cast<int>(code)) + ")")};
+                        }
+                    }
+
+                    // 胜者空串 = 平局（达回合上限或同归于尽）。
+                    const std::string winner = tkw::game::session_winner(ctx);
+                    if (winner.empty())
+                        ++agg.draws;
+                    else
+                        ++agg.wins[winner];
+                    agg.turns_sum += session.turns;
+                }
+
+                // 汇总：头行（局数/人数/种子区间/AI 档）+ 逐座位胜场与平局 + 平均回合。
+                std::cout << "模拟 " << n << " 局（" << opt.players << " 人，种子 "
+                          << opt.seed << ".." << opt.seed + n - 1 << "，ai="
+                          << ai_level_name(opt.ai) << "）:\n";
+                std::string line;
+                for (int seat = 0; seat < opt.players; ++seat)
+                {
+                    const std::string id = "P" + std::to_string(seat);
+                    const auto it = agg.wins.find(id);
+                    const int w = it == agg.wins.end() ? 0 : it->second;
+                    line += (seat == 0 ? "" : "，") + id + " 胜 " +
+                            std::to_string(w);
+                }
+                line += "，平局 " + std::to_string(agg.draws);
+                std::cout << "  " << line << "\n";
+                std::cout << "  平均回合 " << (agg.turns_sum / n) << "\n";
+                return CliResult<void>::Ok();
+            }
+
             /** 把 "Usage: " 前缀换成中文，其余原样（帮助与 REPL 无匹配提示共用）。 */
             inline std::string zh_usage_prefix(std::string text)
             {
@@ -843,6 +954,7 @@ namespace tkw
                     "    tkw --ai aggressive deal 2 1  aggressive AI 跑一局\n"
                     "    tkw audit                审计牌堆\n"
                     "    tkw cards              列出牌表构成\n"
+                    "    tkw simulate 100 2     批量模拟 100 局（2 人）\n"
                     "  REPL 会话（先 tkw repl，再逐条输入）:\n"
                     "    new --players 2 --seed 1 开新局\n"
                     "    step                     执行一个回合\n"
@@ -980,6 +1092,29 @@ namespace tkw
                         opt.players > rules.max_players)
                         return CliFailure{CliError("玩家数超出允许范围")};
                     return detail::run_game(opt);
+                });
+
+            // simulate：批量模拟（全 AI 跨局聚合；玩家数缺省 4，可被 --players 覆盖）
+            auto &sim = app.add_leaf(
+                "simulate", "批量模拟：simulate <局数> [玩家数]");
+            detail::declare_common_options(sim, rules);
+            sim.arg<int, 0>("n", "局数（≥1）").required();
+            sim.arg<int, 1>("players", "玩家数");
+            sim.action(
+                [rules](ParseContext &ctx) -> CliResult<void>
+                {
+                    const int n = ctx.get<int, 0>();
+                    if (n < 1)
+                        return CliFailure{CliError("局数须为正整数")};
+                    Options opt = detail::options_from(ctx);
+                    opt.players = ctx.get_or<int, 1>(opt.players);
+                    if (opt.players < rules.min_players ||
+                        opt.players > rules.max_players)
+                        return CliFailure{CliError("玩家数超出允许范围")};
+                    // --seed 按 Options 缺省为 42；simulate 的基种子缺省 1（局种子 1..N）
+                    opt.seed = static_cast<std::uint32_t>(
+                        ctx.get_or<int, fixed_string("seed")>(1));
+                    return detail::simulate_games(opt, n);
                 });
 
             // new：开新对局（不立即跑），供 step/run/save 续用
