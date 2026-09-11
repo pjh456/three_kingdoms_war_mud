@@ -106,35 +106,44 @@ namespace tkw
              * @note pjh_cli 的选项查找沿父链（名与值都取最近声明处），故 leaf 不重
              *       声明也能解析祖先的选项；此处 per-leaf 重声明只为让 leaf 的帮助/
              *       用法行列出这些选项。未显式给的项仍由 options_from 沿父链或会话
-             *       启动选项回落，声明处一律不设默认值；标量「最近声明胜出」即期望
-             *       语义，故 per-leaf 重声明无副作用。--ai 走 enum 映射，值域外
-             *       输入在解析期报 enum_value_error（与未知选项同一 rc=2 错误面）。
+             *       启动选项回落；标量「最近声明胜出」即期望语义，故 per-leaf 重声明
+             *       无副作用。默认值只以描述文字标注，禁用 .default_value()：它会让
+             *       parse_finalizer 每次解析把默认值写进上下文，压过 REPL 启动选项
+             *       （session.base），破坏会话继承。--ai 走 enum 映射，值域外输入在
+             *       解析期报 enum_value_error（与未知选项同一 rc=2 错误面）。
              */
             inline void declare_common_options(
                 pjh::cli::BaseCommand &cmd, const tkw::game::RulesConfig &rules)
             {
                 cmd.option<fixed_string("deck")>(
-                       "--deck", 'd', "资源目录（含 deck.json 与 cards/）")
+                       "--deck", 'd',
+                       "资源目录（含 deck.json 与 cards/，默认 resources）")
                     .path();
-                cmd.option<fixed_string("players")>("--players", 'p', "玩家数")
+                cmd.option<fixed_string("players")>(
+                       "--players", 'p', "玩家数（2–8，默认 4）")
                     .integer()
                     .min(rules.min_players)
                     .max(rules.max_players);
-                cmd.option<fixed_string("hand")>("--hand", "初始手牌数")
+                cmd.option<fixed_string("hand")>(
+                       "--hand", "初始手牌数（默认 4）")
                     .integer()
                     .min(0)
                     .max(20);
-                cmd.option<fixed_string("seed")>("--seed", 's', "随机种子")
+                cmd.option<fixed_string("seed")>(
+                       "--seed", 's', "随机种子（默认 42）")
                     .integer()
                     .min(0);
                 cmd.option<fixed_string("verbose")>(
-                       "--verbose", 'v', "打印卡牌/死亡事件日志")
+                       "--verbose", 'v',
+                       "打印事件日志（摸牌/打出/弃置/伤害/体力/阵亡）")
                     .boolean();
                 cmd.option<fixed_string("autosave")>(
-                       "--autosave", "REPL 退出时自动存档路径（空串关闭）")
+                       "--autosave",
+                       "REPL 退出时自动存档路径（默认 tkw-autosave.json，空串关闭）")
                     .path();
                 cmd.option<fixed_string("ai")>(
-                       "--ai", "AI 难度：simple 贪心 / aggressive 伤害优先")
+                       "--ai",
+                       "AI 难度：simple 贪心 / aggressive 伤害优先（默认 simple）")
                     .enum_type<AiLevel>()
                     .mapping({{"simple", AiLevel::Simple},
                              {"aggressive", AiLevel::Aggressive}});
@@ -789,7 +798,7 @@ namespace tkw
                 "simulate", "批量模拟：simulate <局数> [玩家数]");
             detail::declare_common_options(sim, rules);
             sim.arg<int, 0>("n", "局数（≥1）").required();
-            sim.arg<int, 1>("players", "玩家数");
+            sim.arg<int, 1>("players", "玩家数（可选，默认 4）");
             sim.action(
                 [rules](ParseContext &ctx) -> CliResult<void>
                 {

@@ -217,6 +217,13 @@ add_test(NAME cli_help_subcommand_zh
 set_tests_properties(cli_help_subcommand_zh PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# 帮助选项描述标注默认值（纯文字，零解析行为）。断言取描述子串，避开全/半角括号差异。
+add_test(NAME cli_help_option_defaults_zh
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> new --help); printf '%s' \"$out\" | grep -q '默认 4' && printf '%s' \"$out\" | grep -q '默认 42' && printf '%s' \"$out\" | grep -q '默认 resources' && printf '%s' \"$out\" | grep -q '默认 simple' && printf '%s' \"$out\" | grep -q 'tkw-autosave.json'")
+set_tests_properties(cli_help_option_defaults_zh PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # REPL ? 应列命令并带中文描述；help <命令> 应走同一中文用法渲染，继承选项段同样中文化。
 add_test(NAME cli_repl_query_and_help_zh
          COMMAND sh -c
@@ -401,6 +408,13 @@ add_test(NAME cli_new_no_human_clears
          COMMAND sh -c
                  "out=$($<TARGET_FILE:tkw> --human P0 new --no-human --players 2 --seed 1 2>&1); printf '%s' \"$out\" | grep -q '真人座位: 无'")
 set_tests_properties(cli_new_no_human_clears PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# REPL 启动选项继承不被选项默认值压过：--players 2 启动后 new 应建 2 人局。
+add_test(NAME cli_repl_startup_options_inherited
+         COMMAND sh -c
+                 "out=$(printf 'new\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> --players 2 --seed 1 repl --autosave '' 2>&1); printf '%s' \"$out\" | grep -q '存活: 2'")
+set_tests_properties(cli_repl_startup_options_inherited PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # step 自身声明公共选项：本命令「选项」段（在「公共选项」之前）应含 --players。

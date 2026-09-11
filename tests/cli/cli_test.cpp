@@ -508,6 +508,20 @@ TEST_CASE("cli: --no-human clears human seats")
     CHECK(repl.session.humans.empty());
 }
 
+TEST_CASE("cli: repl startup options survive option defaults")
+{
+    Repl repl;
+
+    // 启动选项存为 session.base；REPL 每行命令都以 ctx 未命中回落 base。
+    // 若任一公共选项误加 .default_value()，默认值会写进 ctx 并压过 base，
+    // 此处 new 会建 4 人局而非 2 人。
+    repl.session.base.players = 2;
+    REQUIRE(repl.run("new").ok);
+    auto status = repl.run("status");
+    CHECK(status.ok);
+    CHECK(status.out.find("存活: 2") != std::string::npos);
+}
+
 TEST_CASE("cli: status shows ai level")
 {
     Repl repl;
