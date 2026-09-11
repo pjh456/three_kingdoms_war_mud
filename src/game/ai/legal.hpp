@@ -21,7 +21,7 @@
 #include "game/query/judge.hpp"
 #include "game/core/effect.hpp"
 #include "game/query/equip.hpp"
-#include "game/resolve/resolver.hpp"
+#include "game/resolve/validate.hpp"
 
 namespace tkw
 {

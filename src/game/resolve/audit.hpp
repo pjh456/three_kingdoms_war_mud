@@ -18,7 +18,7 @@
 #include "card/catalog.hpp"
 #include "card/def.hpp"
 #include "config/resource.hpp"
-#include "game/resolve/resolver.hpp"
+#include "game/core/effect.hpp"
 
 namespace tkw
 {
