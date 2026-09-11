@@ -140,7 +140,7 @@ namespace tkw
          *         - OutOfRange：目标超出攻击范围/距离；
          *         - InvalidTarget：目标数量不符 scope 或不在合法集合内。
          * @note 前置：def.effect.is_some()（结算入口与出牌动作校验两处均满足）。
-         *       借刀杀人特例（targets = {持武器者, 其攻击范围内角色}）在此统一校验。
+         *       借刀杀人特例（targets = {持武器者, 其攻击范围内另一名角色}）在此统一校验。
          *       方天画戟放宽：杀的目标为唯一目标且该杀消耗完手中全部牌时，
          *       OneOther 数量上限放宽为 3（额外至多 2 名，卡面）。
          */
@@ -170,12 +170,13 @@ namespace tkw
             // 目标合法性：数量须符合 scope，且每个目标都必须在合法集合内
             if (eff.kind == card::CardEffectKind::BorrowedSword)
             {
-                // 借刀杀人：targets = {A(持武器者), B(A攻击范围内角色)}
+                // 借刀杀人：targets = {A(持武器者), B(A攻击范围内另一名角色)}
                 if (targets.size() != 2)
                     return GameResult<void>::Err(EffectError::InvalidTarget);
                 const std::string &holder = targets[0];
                 const std::string &victim = targets[1];
-                if (holder == player || ctx.entities->find(holder).is_none() ||
+                if (holder == player || holder == victim ||
+                    ctx.entities->find(holder).is_none() ||
                     ctx.entities->find(victim).is_none())
                     return GameResult<void>::Err(EffectError::InvalidTarget);
                 if (!has_equip_slot(ctx, holder, card::EquipSlot::Weapon))

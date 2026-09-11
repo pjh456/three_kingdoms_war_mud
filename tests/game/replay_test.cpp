@@ -25,8 +25,8 @@ namespace
     // 攻击优先档自钉值（2p seed 1 / 4p seed 42，实跑钉入，见对应用例注释）
     constexpr std::size_t AGGRESSIVE_2P_LINES = 227;
     constexpr std::uint64_t AGGRESSIVE_2P_FP = 5211696238794449955ULL;
-    constexpr std::size_t AGGRESSIVE_4P_LINES = 677;
-    constexpr std::uint64_t AGGRESSIVE_4P_FP = 12577236196096550670ULL;
+    constexpr std::size_t AGGRESSIVE_4P_LINES = 336;
+    constexpr std::uint64_t AGGRESSIVE_4P_FP = 13493724924669352056ULL;
 
     /** 跑一局并返回完整事件日志（Ok 或 MaxRounds 都算完整对局）。 */
     std::vector<std::string> run_game(std::uint32_t seed, int players)
@@ -200,6 +200,12 @@ TEST_CASE("replay: golden fingerprints pin the rule semantics")
     // 闪电移送跳过判定区同名者后的核对（新旧日志逐行 diff 核对过）：两组固定
     // 种子对局均未进入「闪电判定失败且下家判定区已有闪电」的触发态，移送目标
     // 与修复前相同，故行数与指纹不变。
+    //
+    // 借刀杀人禁止 B==A 后的核对（新旧日志逐行 diff 核对过）：2 人 seed 1 与
+    // 4 人 seed 42 的 simple 线均逐字节不变——simple 线的借刀落子处，被指定
+    // 的受害者均未打出杀，取武器结果与旧的自目标选择同构（目标身份不进事件
+    // 日志，仅响应结果决定事件），故不重钉。4 人 seed 42 的 aggressive 线确有
+    // 漂移，口径见 aggressive 4 人用例。
     const auto two = run_game(1, 2);
     CHECK(two.size() == 79);
     CHECK(fingerprint(two) == 12977149775915994001ULL);
@@ -293,7 +299,18 @@ TEST_CASE("replay: aggressive ai is deterministic and pins its golden fingerprin
 TEST_CASE("replay: aggressive 4-player seed 42 is deterministic and pinned")
 {
     // 双种子模式镜像贪心档：4 人 seed 42 攻击优先档自钉。摸牌洗回口径统一后
-    // 该局由 MaxRounds 平局翻为分胜负，行数 302 → 677（漂移口径见黄金指纹用例）。
+    // 该局由 MaxRounds 平局翻为分胜负（行数 302 → 677）。
+    //
+    // 借刀杀人禁止 B==A 后的漂移（新旧日志逐行 diff 核对过）：677 → 336 行。
+    // 首个分叉在老第 256 行：P3 打借刀后的取武器结果由「取 P0 的诸葛连弩」
+    // 变为「取 P2 的寒冰剑」（move P0:equip->P3:hand liangnu → move
+    // P2:equip->P3:hand hanbing）。旧枚举含 {A=P0, B=A 自身} 且 AI 优先取
+    // 该自目标对；新枚举禁止 B==A，AI 在合法对中改选集火对象体力最低者——
+    // 此刻 P0 刚被救回仅 1 体力，故选定 {A=P2, B=P0}，P2 无杀响应，P3 得
+    // P2 的寒冰剑。所得武器不同导致后续出牌与死亡顺序级联，行数与指纹整体
+    // 改变。2 人 seed 1 的 simple/aggressive 两线均未进入借刀自目标态，逐字节
+    // 不变；4 人 seed 42 simple 线的借刀落子被指定者均未响应，事件流同构，亦
+    // 逐字节不变（故黄金指纹用例不重钉）。
     tkw::game::AggressiveAI aggr;
     const auto a = run_game_ai(aggr, 42, 4);
     const auto b = run_game_ai(aggr, 42, 4);

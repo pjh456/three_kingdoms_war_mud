@@ -164,8 +164,9 @@ namespace tkw
                  * @brief 出牌：取第一张可出的牌，再按贪心偏好选目标。
                  * @note legal_actions 已按手牌序产出；按牌分组以复现「首张可出」
                  *       语义。OneOther 集火最低体力（方天画戟取目标最多者），
-                 *       借刀取「B = A 自身」。丈八蛇矛两张当杀（legal 仅在无真杀
-                 *       时产出）按杀优先：先于锦囊打出，集火/多目标规则同杀。
+                 *       借刀对合法 {持武器者, 受害者} 对选集火对象体力最低者。
+                 *       丈八蛇矛两张当杀（legal 仅在无真杀时产出）按杀优先：
+                 *       先于锦囊打出，集火/多目标规则同杀。
                  */
                 static DecisionChoice decide_play(const DecisionRequest &req)
                 {
@@ -225,12 +226,8 @@ namespace tkw
                             continue;  // 满血不打桃
 
                         if (eff.kind == card::CardEffectKind::BorrowedSword)
-                        {
-                            for (const auto &a : opts)
-                                if (a.targets.size() == 2 &&
-                                    a.targets[0] == a.targets[1])
-                                    return pick_all(out, c.instance_id, a.targets);
-                        }
+                            return pick_borrowed_sword(
+                                req.view, out, c.instance_id, opts);
 
                         if (eff.scope.unwrap_or(card::Scope::Self) ==
                             card::Scope::OneOther)
@@ -288,6 +285,30 @@ namespace tkw
                     out.instance_id = Option<std::string>::Some(id);
                     out.targets = targets;
                     return out;
+                }
+
+                /**
+                 * @brief 借刀杀人：在合法 {持武器者, 受害者} 对里选集火对象
+                 *        体力最低者（同血取列表序），整对作为目标传回。
+                 * @note 目标是双元素对，不能走按 targets.front() 选目标的
+                 *       单目标路径（那会把持武器者本身当目标）。
+                 */
+                static DecisionChoice pick_borrowed_sword(
+                    const AiView &view, DecisionChoice out, const std::string &id,
+                    const std::vector<LegalAction> &opts)
+                {
+                    const LegalAction *best = &opts.front();
+                    int best_hp = hp_of(view, best->targets[1]);
+                    for (const auto &a : opts)
+                    {
+                        const int h = hp_of(view, a.targets[1]);
+                        if (h < best_hp)
+                        {
+                            best = &a;
+                            best_hp = h;
+                        }
+                    }
+                    return pick_all(out, id, best->targets);
                 }
 
                 static const card::CardDef *find_def(

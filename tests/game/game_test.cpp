@@ -645,6 +645,7 @@ TEST_CASE("game: jiedao forces holder to use sha")
     TestGame g("deck");
     g.add_player("a", 0, 4);
     auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
     g.equip("b", "qinglong", "e#0");  // b 持武器
     g.give("a", "jiedao", "j#0");
     g.give("b", "sha", "s#1");
@@ -652,9 +653,10 @@ TEST_CASE("game: jiedao forces holder to use sha")
     TestDecider decider;
     decider.respond = true;  // b 选择出杀
     const auto played = g.cards.hand("a")[0];
-    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "b"});  // A=b, B=b
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c"});  // A=b, B=c
     REQUIRE(r.is_ok());
-    CHECK(b->get_hp() == 3);             // b 对自己出杀，命中
+    CHECK(c->get_hp() == 3);             // b 对 c 出杀，命中
+    CHECK(b->get_hp() == 4);             // 持武器者自身不是目标
     CHECK(g.cards.hand_size("b") == 0);  // 杀已消耗
     CHECK(g.cards.equip_size("b") == 1); // 武器仍在
 }
@@ -664,13 +666,14 @@ TEST_CASE("game: jiedao takes weapon when holder does not respond")
     TestGame g("deck");
     g.add_player("a", 0, 4);
     g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
     g.equip("b", "qinglong", "e#0");
     g.give("a", "jiedao", "j#0");
     g.give("b", "sha", "s#1");
 
     TestDecider decider;  // 不出杀
     const auto played = g.cards.hand("a")[0];
-    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "b"});
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c"});
     REQUIRE(r.is_ok());
     CHECK(g.cards.equip_size("b") == 0);  // 武器被拿走
     CHECK(g.cards.hand_size("a") == 1);
@@ -682,11 +685,12 @@ TEST_CASE("game: jiedao requires holder to have a weapon")
     TestGame g("deck");
     g.add_player("a", 0, 4);
     g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
     g.give("a", "jiedao", "j#0");
 
     TestDecider decider;
     const auto played = g.cards.hand("a")[0];
-    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "b"});
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c"});
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == EffectError::InvalidTarget);
     CHECK(g.cards.hand_size("a") == 1);  // 未消耗
@@ -694,7 +698,7 @@ TEST_CASE("game: jiedao requires holder to have a weapon")
 
 TEST_CASE("game: validate_effect_targets pins the borrowed sword special case")
 {
-    // targets = {A(持武器者), B(A 攻击范围内角色)}
+    // targets = {A(持武器者), B(A 攻击范围内另一名角色)}
     TestGame g("deck");
     g.add_player("a", 0, 4);
     g.add_player("b", 1, 4);
@@ -705,11 +709,16 @@ TEST_CASE("game: validate_effect_targets pins the borrowed sword special case")
     g.equip("b", "qinggang", "e#0");  // b 持武器，攻击范围 2
     const CardDef &jiedao = *g.catalog.find("jiedao").unwrap();
 
-    // 持武器者 + 攻击范围内目标：合法
+    // 持武器者 + 攻击范围内另一名角色：合法
     CHECK(validate_effect_targets(g.ctx, "a", jiedao, {"b", "d"}).is_ok());
 
+    // 目标 B 不得为持武器者 A 自身
+    auto r = validate_effect_targets(g.ctx, "a", jiedao, {"b", "b"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+
     // 目标数量不符 scope
-    auto r = validate_effect_targets(g.ctx, "a", jiedao, {"b"});
+    r = validate_effect_targets(g.ctx, "a", jiedao, {"b"});
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == EffectError::InvalidTarget);
 
@@ -718,14 +727,37 @@ TEST_CASE("game: validate_effect_targets pins the borrowed sword special case")
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == EffectError::OutOfRange);
 
-    // 持武器者无武器
+    // 持武器者无武器：用合法 B 隔离，只余「无武器」一个拒绝原因
     TestGame h("deck");
     h.add_player("a", 0, 4);
     h.add_player("b", 1, 4);
+    h.add_player("c", 2, 4);
     const CardDef &jiedao2 = *h.catalog.find("jiedao").unwrap();
-    r = validate_effect_targets(h.ctx, "a", jiedao2, {"b", "b"});
+    r = validate_effect_targets(h.ctx, "a", jiedao2, {"b", "c"});
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+}
+
+TEST_CASE("game: legal_actions excludes self-targeted borrowed sword")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.equip("b", "qinglong", "e#0");  // b 持武器，攻击范围 3
+    g.give("a", "jiedao", "j#0");
+
+    const auto acts = legal_actions(g.ctx, "a", TurnContext{"a", 0, 1});
+    bool saw_jiedao = false;
+    for (const auto &act : acts)
+    {
+        if (act.card.def_id != "jiedao")
+            continue;
+        saw_jiedao = true;
+        REQUIRE(act.targets.size() == 2);
+        CHECK(act.targets[0] != act.targets[1]);
+    }
+    CHECK(saw_jiedao);  // 合法对确实产出（否则断言空转）
 }
 
 TEST_CASE("game: validate_play_action pins sha limit and corner order")
@@ -2548,7 +2580,7 @@ TEST_CASE("game: zhangba answers a borrowed sword with a virtual sha")
     CHECK(g.cards.hand_size("a") == 0);  // 未夺回武器
 }
 
-TEST_CASE("game: zhangba answers a borrowed sword on itself")
+TEST_CASE("game: zhangba borrowed sword rejects the holder as victim")
 {
     TestGame g("deck");
     g.add_player("a", 0, 4);
@@ -2556,17 +2588,18 @@ TEST_CASE("game: zhangba answers a borrowed sword on itself")
     g.equip("b", "zhangba", "e#0");  // b 的武器即丈八蛇矛
     g.give("a", "jiedao", "j#0");
     g.give("b", "wuzhong", "x#1");
-    g.give("b", "tao", "x#2");  // b 无真杀：两张手牌当杀，目标即自己
+    g.give("b", "tao", "x#2");  // b 无真杀：若目标合法可两张手牌当杀
 
     TestDecider decider;
     decider.respond = true;
     const auto played = g.cards.hand("a")[0];
-    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "b"});  // A=B=b
-    REQUIRE(r.is_ok());
-    CHECK(b->get_hp() == 3);             // 虚拟杀命中自身
-    CHECK(g.cards.hand_size("b") == 0); // 两张牌已消耗
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "b"});  // B 不得为 A
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+    CHECK(g.cards.hand_size("a") == 1);  // 借刀未消耗
+    CHECK(b->get_hp() == 4);             // 未结算
+    CHECK(g.cards.hand_size("b") == 2);  // 未响应
     CHECK(g.cards.equip_size("b") == 1); // 武器仍在
-    CHECK(g.cards.hand_size("a") == 0);  // 未夺回武器
 }
 
 TEST_CASE("game: zhangba response sha can still be jinked")

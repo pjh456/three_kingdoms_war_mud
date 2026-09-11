@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "game/ai/evaluator.hpp"
 #include "game/ai/human.hpp"
@@ -111,6 +112,24 @@ TEST_CASE("ai: simple choose_play only returns legal_actions")
             a.targets == chosen.unwrap().targets)
             found = true;
     CHECK(found);
+}
+
+TEST_CASE("ai: simple borrowed sword targets the lowest-hp victim")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.add_player("d", 3, 2);           // 最低体力，应被集火
+    g.equip("b", "qinglong", "e#0");   // b 持武器，攻击范围 3 够到 c、d
+    g.give("a", "jiedao", "j#0");
+
+    tkw::game::SimpleAI ai;
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    const auto chosen = ai.choose_play(g.ctx, turn);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().instance_id == "j#0");
+    CHECK(chosen.unwrap().targets == std::vector<std::string>{"b", "d"});
 }
 
 TEST_CASE("ai: RequestDecisionSource forwards choices to decider")

@@ -114,7 +114,7 @@ namespace tkw
 
                 if (kind == card::CardEffectKind::BorrowedSword)
                 {
-                    // targets = {A(持武器者), B(A攻击范围内角色，可为A)}
+                    // targets = {A(持武器者), B(A攻击范围内另一名角色)}
                     for (const auto &e : *ctx.entities)
                     {
                         const std::string &holder = e->get_id();
@@ -125,7 +125,8 @@ namespace tkw
                         for (const auto &b : *ctx.entities)
                         {
                             const std::string &victim = b->get_id();
-                            if (in_attack_range(ctx, holder, victim))
+                            if (victim != holder &&
+                                in_attack_range(ctx, holder, victim))
                                 out.push_back(LegalAction{c, {holder, victim}});
                         }
                     }
