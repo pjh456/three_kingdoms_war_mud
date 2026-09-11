@@ -331,35 +331,35 @@ namespace tkw
             return rr;
         }
 
-         /**
-          * @brief 结算「两张手牌当一张杀」（丈八蛇矛）。
-          * @param first_id/second_id 两张手牌的 instance_id。
-          * @param validate_targets 是否复验目标（最终闸门，含方天画戟放宽）；
-          *        结算目标由引擎固定时（杀响应窗口）传 false 跳过——目标在
-          *        打出时已以同一距离谓词校验，与真杀响应路径一致。
-          * @note 目标校验（最终闸门，含方天画戟放宽）与两牌在手检查先于消费，
-          *       失败不消耗牌；消费后两张各进弃牌堆并各发打出事件（防结算中
-          *       被再选），再逐目标按虚拟杀结算。虚拟杀无花色：仁王盾黑杀
-          *       判定不适用（经 resolve_sha 的 virtual 标记短路）。
-          */
-         inline GameResult<void> resolve_virtual_sha(
-             GameContext &ctx, DecisionSource &ai, const std::string &player,
-             const std::string &first_id, const std::string &second_id,
-             const std::vector<std::string> &targets, bool validate_targets = true)
-         {
-             const auto sha_def = find_sha_def(ctx);
-             if (sha_def.is_none())
-                 return GameResult<void>::Err(EffectError::UnsupportedKind);
-             const card::CardDef &sha = *sha_def.unwrap();
-             const card::CardEffect &eff = sha.effect.unwrap();
+        /**
+         * @brief 结算「两张手牌当一张杀」（丈八蛇矛）。
+         * @param first_id/second_id 两张手牌的 instance_id。
+         * @param validate_targets 是否复验目标（最终闸门，含方天画戟放宽）；
+         *        结算目标由引擎固定时（杀响应窗口）传 false 跳过——目标在
+         *        打出时已以同一距离谓词校验，与真杀响应路径一致。
+         * @note 目标校验（最终闸门，含方天画戟放宽）与两牌在手检查先于消费，
+         *       失败不消耗牌；消费后两张各进弃牌堆并各发打出事件（防结算中
+         *       被再选），再逐目标按虚拟杀结算。虚拟杀无花色：仁王盾黑杀
+         *       判定不适用（经 resolve_sha 的 virtual 标记短路）。
+         */
+        inline GameResult<void> resolve_virtual_sha(
+            GameContext &ctx, DecisionSource &ai, const std::string &player,
+            const std::string &first_id, const std::string &second_id,
+            const std::vector<std::string> &targets, bool validate_targets = true)
+        {
+            const auto sha_def = find_sha_def(ctx);
+            if (sha_def.is_none())
+                return GameResult<void>::Err(EffectError::UnsupportedKind);
+            const card::CardDef &sha = *sha_def.unwrap();
+            const card::CardEffect &eff = sha.effect.unwrap();
 
-             // 目标预校验（最终闸门；方天放宽按消耗两张手牌判定）
-             if (validate_targets)
-             {
-                 auto tr = validate_effect_targets(ctx, player, sha, targets, 2);
-                 if (tr.is_err())
-                     return tr;
-             }
+            // 目标预校验（最终闸门；方天放宽按消耗两张手牌判定）
+            if (validate_targets)
+            {
+                auto tr = validate_effect_targets(ctx, player, sha, targets, 2);
+                if (tr.is_err())
+                    return tr;
+            }
 
             // 两张牌都在手牌中（校验先于消费，失败不消耗）
             bool have_first = false;
@@ -402,13 +402,13 @@ namespace tkw
          *        给出结算目标（借刀的 B）时再按杀对其结算（真杀带花色、虚拟杀
          *        无花色），否则仅消费（决斗/南蛮无结算目标）。
          * @return 是否发生了有效杀响应；非法选择（幽灵引用/非杀的牌）按不响应
-          *         处理，不消耗牌。
-          * @note 响应侧不受出牌阶段杀次数限制（次数是出牌阶段「本回合已用杀」的
-          *         簿记，响应窗口不在出牌阶段簿记内）。结算目标由引擎固定（借刀
-          *         的 B，打出时已以同一距离谓词校验），响应侧不复核目标，与真杀
-          *         响应路径一致。借刀响应事件语法：对目标结算=打出、仅消费=弃置
-          *         （真杀与虚拟杀同口径）。
-          */
+         *         处理，不消耗牌。
+         * @note 响应侧不受出牌阶段杀次数限制（次数是出牌阶段「本回合已用杀」的
+         *         簿记，响应窗口不在出牌阶段簿记内）。结算目标由引擎固定（借刀
+         *         的 B，打出时已以同一距离谓词校验），响应侧不复核目标，与真杀
+         *         响应路径一致。借刀响应事件语法：对目标结算=打出、仅消费=弃置
+         *         （真杀与虚拟杀同口径）。
+         */
         inline bool respond_sha(
             GameContext &ctx, DecisionSource &ai,
             const std::string &entity, const std::string &victim)
