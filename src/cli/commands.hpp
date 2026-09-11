@@ -92,7 +92,7 @@ namespace tkw
             bool verbose = false;            /**< 本会话是否打印事件日志 */
             Options base;                    /**< REPL 启动选项（供行内命令继承） */
             bool active = false;
-            BattleStats stats; /**< 本会话累计的对局统计（new/load 时重置；对局结束时打印） */
+            BattleStats stats; /**< 本会话累计的对局统计（new 时重置、load 时从存档恢复；对局结束时打印） */
         };
 
         namespace detail
@@ -370,7 +370,7 @@ namespace tkw
              * @param winner 胜者 id；空串显示「无」（平局/同归于尽）。
              * @param turns  已执行回合数。
              * @note 玩家清单 = 存活实体 ∪ 阵亡记录，按 id 排序输出；统计以已发布事件
-             *       为准，存档恢复的会话只含读档后的事件，此前部分不计入。
+             *       为准，含存档恢复的部分与读档后新增的事件。
              */
             inline void print_battle_stats(
                 const BattleStats &stats, const tkw::game::Game &game,
