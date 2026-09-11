@@ -9,6 +9,7 @@
 #include <pjh_cli.hpp>
 
 #include "cli/commands.hpp"
+#include "cli/error_zh.hpp"
 
 int main(int argc, char **argv)
 {
@@ -20,7 +21,7 @@ int main(int argc, char **argv)
     auto parsed = app.parse_fuzzy(argc, argv);
     if (parsed.is_err())
     {
-        std::cerr << parsed.unwrap_err().what() << "\n";
+        std::cerr << tkw::cli::render_error_zh(parsed.unwrap_err()) << "\n";
         return 2;
     }
 

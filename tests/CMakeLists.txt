@@ -122,7 +122,7 @@ set_tests_properties(cli_deal_option_after_positional PROPERTIES
     PASS_REGULAR_EXPRESSION "胜者|平局"
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-# 执行错误（无会话）应只打印纯中文消息并退出 1，不得带框架统一的 Parse Error: 前缀。
+# 执行错误（无会话）应只打印纯中文消息并退出 1，不得带解析错误前缀（中文或英文）。
 add_test(NAME cli_step_without_session_plain_error
          COMMAND sh -c
                  "out=$($<TARGET_FILE:tkw> step 2>&1); rc=$?; [ \"$out\" = 没有进行中的对局 ] && [ $rc -eq 1 ]")
@@ -191,7 +191,7 @@ set_tests_properties(cli_alias_help_discoverable PROPERTIES
 # 命令面演进，钉「歧义关键词 + 退出 2」，不钉候选名单。
 add_test(NAME cli_ambiguous_prefix_still_errors
          COMMAND sh -c
-                 "out=$($<TARGET_FILE:tkw> card 2>&1); rc=$?; printf '%s' \"$out\" | grep -q 'ambiguous command' && [ $rc -eq 2 ]")
+                 "out=$($<TARGET_FILE:tkw> card 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '有歧义' && [ $rc -eq 2 ]")
 set_tests_properties(cli_ambiguous_prefix_still_errors PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
@@ -249,12 +249,21 @@ add_test(NAME cli_repl_subcommand_help_zh
 set_tests_properties(cli_repl_subcommand_help_zh PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-# REPL 无会话执行错误的打印路径（run() → print_error 默认 what()）只输出纯中文
-# 消息、不带 Parse Error 前缀；cli_tests 直调 process_line 不经过该路径，E2E 补上。
+# REPL 无会话执行错误的打印路径（run() → print_error → 注入的 error formatter）
+# 只输出纯中文消息、不带解析错误前缀；cli_tests 直调 process_line 不经过该路径，E2E 补上。
 add_test(NAME cli_repl_runtime_error_no_prefix
          COMMAND sh -c
-                 "out=$(printf 'step\\nquit\\n' | $<TARGET_FILE:tkw> repl 2>&1); printf '%s' \"$out\" | grep -q '没有进行中的对局' && ! printf '%s' \"$out\" | grep -q 'Parse Error'")
+                 "out=$(printf 'step\\nquit\\n' | $<TARGET_FILE:tkw> repl 2>&1); printf '%s' \"$out\" | grep -q '没有进行中的对局' && ! printf '%s' \"$out\" | grep -qE 'Parse Error|参数错误'")
 set_tests_properties(cli_repl_runtime_error_no_prefix PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# REPL 解析错误经注入的 error formatter 渲染为中文（批量侧已由
+# cli_parse_error_prefix_and_rc/cli_unknown_command_message 覆盖）。
+# REPL 内解析失败不改变进程 rc（仍 0），故钉 rc=0 + 中文 + 无英文正文。
+add_test(NAME cli_repl_parse_error_zh
+         COMMAND sh -c
+                 "out=$(printf 'new --bogus\\nquit\\n' | $<TARGET_FILE:tkw> repl 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '参数错误: ' && printf '%s' \"$out\" | grep -q '未知选项' && ! printf '%s' \"$out\" | grep -q 'unknown option' && [ $rc -eq 0 ]")
+set_tests_properties(cli_repl_parse_error_zh PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # verbose 日志可读性：卡牌事件用中文卡名，且补伤害/体力行（seed 固定，输出确定）。
@@ -300,18 +309,18 @@ add_test(NAME cli_autosave_failure_message
 set_tests_properties(cli_autosave_failure_message PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-# 解析错误保留框架统一前缀并退出 2（执行错误走另一路径，退出 1）。
+# 解析错误保留中文统一前缀并退出 2（执行错误走另一路径，退出 1）。
 add_test(NAME cli_parse_error_prefix_and_rc
          COMMAND sh -c
-                 "out=$($<TARGET_FILE:tkw> new --bogus 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '^Parse Error: ' && [ $rc -eq 2 ]")
+                 "out=$($<TARGET_FILE:tkw> new --bogus 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '^参数错误: ' && [ $rc -eq 2 ]")
 set_tests_properties(cli_parse_error_prefix_and_rc PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # 未知子命令落到框架 unknown command 文案并退出 2；近距手误已在更早的分派处纠错或
-# 报歧义，故该路径不会给出 did-you-mean 建议。文案由框架渲染，这里只钉关键词与退出码。
+# 报歧义，故该路径不会给出 did-you-mean 建议。文案由项目侧渲染为中文，这里只钉关键词与退出码。
 add_test(NAME cli_unknown_command_message
          COMMAND sh -c
-                 "out=$($<TARGET_FILE:tkw> nosuchcmd 2>&1); rc=$?; printf '%s' \"$out\" | grep -q 'unknown command' && [ $rc -eq 2 ]")
+                 "out=$($<TARGET_FILE:tkw> nosuchcmd 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '未知命令' && [ $rc -eq 2 ]")
 set_tests_properties(cli_unknown_command_message PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
@@ -348,7 +357,7 @@ set_tests_properties(cli_ai_aggressive_deal PROPERTIES
 # 值域校验：非法 --ai 值解析期拒绝（enum 映射外，Parse Error rc=2）。
 add_test(NAME cli_ai_bogus_value_rejected
          COMMAND sh -c
-                 "out=$($<TARGET_FILE:tkw> deal 2 1 --ai bogus 2>&1); rc=$?; printf '%s' \"$out\" | grep -q 'Parse Error' && [ $rc -eq 2 ]")
+                 "out=$($<TARGET_FILE:tkw> deal 2 1 --ai bogus 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '参数错误' && [ $rc -eq 2 ]")
 set_tests_properties(cli_ai_bogus_value_rejected PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 

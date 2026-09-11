@@ -11,6 +11,7 @@
 #include <pjh_cli.hpp>
 
 #include "cli/commands.hpp"
+#include "cli/error_zh.hpp"
 #include "cli/help_zh.hpp"
 #include "cli/render.hpp"
 
@@ -372,6 +373,47 @@ TEST_CASE("cli: --ai rejects an unmapped value")
     auto bad = repl.run("new --ai bogus");
     CHECK_FALSE(bad.ok);
     CHECK(bad.error.find("Parse Error") != std::string::npos);
+}
+
+TEST_CASE("cli: parse errors render in Chinese")
+{
+    using pjh::cli::ErrorFactory;
+
+    // 解析错误统一带中文前缀，正文不再泄漏框架英文关键词。
+    const auto check_parse = [](const pjh::cli::CliError &err,
+                                const std::string &needle)
+    {
+        const std::string text = tkw::cli::render_error_zh(err);
+        CHECK(text.starts_with("参数错误: "));
+        CHECK(text.find(needle) != std::string::npos);
+        CHECK(text.find("unknown option") == std::string::npos);
+        CHECK(text.find("unknown command") == std::string::npos);
+        CHECK(text.find("ambiguous command") == std::string::npos);
+        CHECK(text.find("out of range") == std::string::npos);
+        CHECK(text.find("invalid value") == std::string::npos);
+    };
+
+    check_parse(ErrorFactory::unknown_option("--bogus"), "未知选项");
+    check_parse(ErrorFactory::unknown_option("--bogus", {"--verbose"}),
+                "您是否要找");
+    check_parse(ErrorFactory::unknown_command("zzz", {}), "未知命令");
+    check_parse(ErrorFactory::unknown_command("zzz", {"new"}), "您是否要找");
+    check_parse(ErrorFactory::ambiguous_command("card", {"cards", "simulate"}),
+                "有歧义");
+    check_parse(ErrorFactory::value_out_of_range("--players", "99", 2, 8),
+                "超出范围");
+    check_parse(
+        ErrorFactory::enum_value_error("--ai", "bogus", {"simple", "aggressive"}),
+        "期望以下之一");
+    check_parse(ErrorFactory::missing_value("--players"), "需要一个值");
+    check_parse(ErrorFactory::missing_required_arg("file"), "缺少必需参数");
+    check_parse(ErrorFactory::type_conversion_error("--players", "abc", "integer"),
+                "整数");
+    check_parse(ErrorFactory::no_command_matched(), "没有匹配的命令");
+
+    // 运行时错误逐字返回消息，不加任何前缀（退出码契约不变）。
+    const auto runtime = ErrorFactory::runtime_error("没有进行中的对局");
+    CHECK(tkw::cli::render_error_zh(runtime) == "没有进行中的对局");
 }
 
 TEST_CASE("cli: all-dead session reports the mutual destruction draw label")

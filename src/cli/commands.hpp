@@ -25,6 +25,7 @@
 #include <pjh_cli/console/query_result.hpp>
 
 #include "card/catalog.hpp"
+#include "cli/error_zh.hpp"
 #include "cli/help_zh.hpp"
 #include "cli/render.hpp"
 #include "cli/session.hpp"
@@ -895,6 +896,7 @@ namespace tkw
                         { return render_query_zh(app, r); },
                         [](const pjh::cli::HelpNavigationResult &r)
                         { return render_help_nav_zh(r); });
+                    console.set_error_formatter(render_error_zh);
                     console.run();
                     const Options &opt = session.base;
                     if (session.active && session.game && !opt.autosave.empty())
