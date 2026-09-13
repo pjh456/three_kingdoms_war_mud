@@ -864,17 +864,90 @@ TEST_CASE("ai: human decider labels the target card zone")
     g.cards.add_to_judge(
         "b", tkw::card::Card{"d#1", "lesi", copy.suit, copy.number});
 
-    std::istringstream in("pick 1\n");
+    // 首槽 = 对手手牌：只渲染分区标签与遮挡占位，落子仍是真实牌
+    {
+        std::istringstream in("pick 1\n");
+        std::ostringstream out;
+        HumanDecider dec(in, out);
+        RequestDecisionSource src(dec);
+        const auto picked = src.pick_card_from_target(g.ctx, "a", "b");
+        REQUIRE(picked.is_some());
+        CHECK(picked.unwrap().instance_id == "s#2");
+
+        const std::string text = out.str();
+        CHECK(text.find("[手] （未知手牌）") != std::string::npos);
+        CHECK(text.find("s#2") == std::string::npos);
+        CHECK(text.find("杀") == std::string::npos);
+        // 装备/判定区明置，照常显示
+        CHECK(text.find("[装] 青龙偃月刀 e#1") != std::string::npos);
+        CHECK(text.find("[判] 乐不思蜀 d#1") != std::string::npos);
+    }
+    // 遮挡不破坏跨区索引：第 2/3 槽仍映射到装备/判定区的真实牌
+    {
+        std::istringstream in("pick 2\n");
+        std::ostringstream out;
+        HumanDecider dec(in, out);
+        RequestDecisionSource src(dec);
+        const auto picked = src.pick_card_from_target(g.ctx, "a", "b");
+        REQUIRE(picked.is_some());
+        CHECK(picked.unwrap().instance_id == "e#1");
+    }
+    {
+        std::istringstream in("pick 3\n");
+        std::ostringstream out;
+        HumanDecider dec(in, out);
+        RequestDecisionSource src(dec);
+        const auto picked = src.pick_card_from_target(g.ctx, "a", "b");
+        REQUIRE(picked.is_some());
+        CHECK(picked.unwrap().instance_id == "d#1");
+    }
+}
+
+TEST_CASE("ai: human decider hides target hand card text on card lookup")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("b", "sha", "s#2");
+    g.equip("b", "qinglong", "e#1");
+
+    // card 1 命中对手手牌：只出遮挡提示，不打印该牌效果文案
+    std::istringstream in("card 1\npick 1\n");
     std::ostringstream out;
     HumanDecider dec(in, out);
     RequestDecisionSource src(dec);
 
     const auto picked = src.pick_card_from_target(g.ctx, "a", "b");
     REQUIRE(picked.is_some());
-    // 三区混排时按来源分区标注，避免拿错区域
-    CHECK(out.str().find("[手] 杀 s#2") != std::string::npos);
-    CHECK(out.str().find("[装] 青龙偃月刀 e#1") != std::string::npos);
-    CHECK(out.str().find("[判] 乐不思蜀 d#1") != std::string::npos);
+    CHECK(picked.unwrap().instance_id == "s#2");
+
+    const std::string text = out.str();
+    CHECK(text.find("无法查看") != std::string::npos);
+    CHECK(text.find("出牌阶段限一次") == std::string::npos);
+    CHECK(text.find("s#2") == std::string::npos);
+}
+
+TEST_CASE("ai: human decider still shows revealed zone card text")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("b", "sha", "s#2");
+    g.equip("b", "qinglong", "e#1");
+
+    // card 2 命中明置装备区：照常打印装备效果文案与实例号
+    std::istringstream in("card 2\npick 2\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    const auto picked = src.pick_card_from_target(g.ctx, "a", "b");
+    REQUIRE(picked.is_some());
+    CHECK(picked.unwrap().instance_id == "e#1");
+
+    const std::string text = out.str();
+    CHECK(text.find("再使用一张") != std::string::npos);
+    CHECK(text.find("e#1") != std::string::npos);
 }
 
 TEST_CASE("ai: routed ai sends human actor to human and falls back")

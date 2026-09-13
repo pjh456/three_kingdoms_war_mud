@@ -245,6 +245,32 @@ namespace tkw
                          << "\n";
                 }
 
+                /** @brief 对手手牌候选项在候选列表中的遮挡占位文本。 */
+                static constexpr const char *kHiddenHandPlaceholder = "（未知手牌）";
+
+                /** @brief 查询对手手牌候选项牌文时的遮挡提示。 */
+                static constexpr const char *kHiddenHandCardHint =
+                    "（未知手牌，无法查看）";
+
+                /**
+                 * @brief 候选是否属于对手手牌、需向决策者遮挡内容。
+                 * @param req   当前决策请求。
+                 * @param index 候选的 0 基下标。
+                 * @return 仅 PickCard 的手牌候选返回 true；缺少分区标签时防御性
+                 *         返回 true（平行数组缺口不得导致漏遮）。
+                 * @note 装备区/判定区为明置信息，其余决策类别的候选均为决策者
+                 *       自己可见的牌，一律返回 false。此谓词是候选遮挡的唯一判据。
+                 */
+                static bool is_hidden_option(
+                    const DecisionRequest &req, std::size_t index)
+                {
+                    if (req.kind != DecisionKind::PickCard)
+                        return false;
+                    if (index >= req.zone_labels.size())
+                        return true;
+                    return req.zone_labels[index] == card::Zone::Hand;
+                }
+
                 /**
                  * @brief 处理窗口内 `card <序号>`：打印该候选牌的效果文案。
                  * @tparam Candidates 候选容器类型。
@@ -253,8 +279,9 @@ namespace tkw
                  * @param token      序号 token。
                  * @param candidates 候选容器，序号与窗口打印的 1 基编号一致。
                  * @param def_id_of  候选 → 定义 id 投影。
-                 * @note 序号非法时打印统一范围提示；合法时打印该牌效果文案。
-                 *       两种路径都不改变候选与窗口状态，调用点继续循环。
+                 * @note 序号非法时打印统一范围提示；合法时打印该牌效果文案，
+                 *       但对手手牌候选只打印遮挡提示，不泄漏牌名与效果文案。
+                 *       各路径都不改变候选与窗口状态，调用点继续循环。
                  */
                 template <typename Candidates, typename DefIdOf>
                 void show_card_or_hint(
@@ -265,6 +292,11 @@ namespace tkw
                     if (!parse_index(token, candidates.size(), index))
                     {
                         print_invalid(index_hint(candidates.size()));
+                        return;
+                    }
+                    if (is_hidden_option(req, static_cast<std::size_t>(index - 1)))
+                    {
+                        out_ << kHiddenHandCardHint << "\n";
                         return;
                     }
                     print_card_text(
@@ -291,7 +323,9 @@ namespace tkw
                 /**
                  * @brief 打印 1 基编号的牌候选列表。
                  * @note 候选带来源分区标签（选目标牌）时在牌名前标注
-                 *       `[手]/[装]/[判]`，其余决策无标签保持原样。
+                 *       `[手]/[装]/[判]`，其余决策无标签保持原样。选目标牌的
+                 *       手牌候选只打印分区标签与遮挡占位，不显示牌名与实例号；
+                 *       装备/判定区明置，照常显示。
                  */
                 void print_options(
                     const DecisionRequest &req,
@@ -303,6 +337,11 @@ namespace tkw
                         out_ << "  " << (i + 1) << ") ";
                         if (has_zones)
                             out_ << zone_tag(req.zone_labels[i]) << " ";
+                        if (is_hidden_option(req, i))
+                        {
+                            out_ << kHiddenHandPlaceholder << "\n";
+                            continue;
+                        }
                         out_ << card::display_name(req.catalog, options[i].def_id)
                              << " " << options[i].instance_id << "\n";
                     }
