@@ -86,6 +86,13 @@ target_include_directories(tkw_cli INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(tkw_cli INTERFACE tkw_core pjh_cli)
 
+# TUI 纯视图模型：无 FTXUI、无新外链，只读消费 cli/引擎只读接口。
+add_library(tkw_tui INTERFACE)
+
+target_include_directories(tkw_tui INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(tkw_tui INTERFACE tkw_cli)
+
 add_executable(tkw
     main.cpp
 )

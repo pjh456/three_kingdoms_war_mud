@@ -90,6 +90,16 @@ target_compile_definitions(
 
 doctest_discover_tests(cli_tests)
 
+add_executable(tui_tests test_main.cpp tui/visibility_test.cpp
+                        tui/snapshot_test.cpp tui/log_lines_test.cpp)
+
+target_link_libraries(tui_tests PRIVATE tkw_tui doctest)
+
+target_compile_definitions(
+    tui_tests PRIVATE TKW_TEST_RESOURCE_DIR="${CMAKE_SOURCE_DIR}/resources")
+
+doctest_discover_tests(tui_tests)
+
 # CLI 端到端：选项可置于子命令名之后，前置写法与未知选项行为不变。
 add_test(NAME cli_option_after_subcommand
          COMMAND tkw new --human P0 --players 2 --seed 1)
