@@ -601,6 +601,11 @@ TEST_CASE("cli: parse errors render in Chinese")
                 "整数");
     check_parse(ErrorFactory::no_command_matched(), "没有匹配的命令");
 
+    // RawMessage 负载（Parse 类别）同样按 tag 分派：带中文前缀 + 原消息。
+    const pjh::cli::CliError raw{
+        pjh::cli::ErrorInfo{pjh::cli::RawMessageError{"自定义解析失败"}}};
+    CHECK(tkw::cli::render_error_zh(raw) == "参数错误: 自定义解析失败");
+
     // 运行时错误逐字返回消息，不加任何前缀（退出码契约不变）。
     const auto runtime = ErrorFactory::runtime_error("没有进行中的对局");
     CHECK(tkw::cli::render_error_zh(runtime) == "没有进行中的对局");
