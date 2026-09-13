@@ -346,8 +346,16 @@ set_tests_properties(cli_repl_parse_error_zh PROPERTIES
 # verbose 日志可读性：卡牌事件用中文卡名，且补伤害/体力行（seed 固定，输出确定）。
 add_test(NAME cli_verbose_log_zh
          COMMAND sh -c
-                 "out=$($<TARGET_FILE:tkw> --verbose deal 2 1 2>&1); printf '%s' \"$out\" | grep -q '\\[打出\\] P0 杀' && printf '%s' \"$out\" | grep -q '\\[伤害\\] P0 -> P1 1' && printf '%s' \"$out\" | grep -q '\\[体力\\] P1 4->3/4'")
+                 "out=$($<TARGET_FILE:tkw> --verbose deal 2 1 2>&1); printf '%s' \"$out\" | grep -q '\\[打出\\] P0 杀' && printf '%s' \"$out\" | grep -q '\\[伤害\\] P0 -> P1 1' && printf '%s' \"$out\" | grep -q '\\[体力\\] P1 4->3/4' && ! printf '%s' \"$out\" | grep -q '\\[弃置\\]  '")
 set_tests_properties(cli_verbose_log_zh PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 青龙偃月刀续杀只发一条打出日志：seed 5 实跑含「P0 杀 → P1 闪 → P0 杀」续杀
+# 三连；打出的续杀进弃牌堆不另发弃置事件，故该三连后不得紧跟同角色 [弃置] 杀。
+add_test(NAME cli_verbose_qinglong_single_line
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> --verbose deal 2 5 2>&1); printf '%s' \"$out\" | awk '{ if (p2 ~ /^\\[打出\\] P[0-9]+ 杀$/ && p1 ~ /^\\[打出\\] P[0-9]+ 闪$/ && $0 ~ /^\\[打出\\] P[0-9]+ 杀$/) triple=1; if (waiting && $0 == \"[弃置] \" attacker \" 杀\") bad=1; waiting=0; if ($0 ~ /^\\[打出\\] P[0-9]+ 杀$/) { attacker=$2; waiting=1 } p2=p1; p1=$0 } END { exit !(triple && !bad) }'")
+set_tests_properties(cli_verbose_qinglong_single_line PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # verbose 移牌行覆盖区域转移：seed 固定，deal 4 42 含装备/顺手/借刀/延时/闪电/五谷。

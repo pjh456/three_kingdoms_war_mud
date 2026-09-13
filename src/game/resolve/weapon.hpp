@@ -237,8 +237,8 @@ namespace tkw
             {
                 card::Card extra_card = std::move(removed).unwrap();
                 sc.ctx.cards->discard(extra_card);
+                // 打出的牌只发打出事件；进弃牌堆是打出的必然后果，不另发弃置事件
                 emit_card_played(sc.ctx, sc.attacker, extra_card);
-                emit_card_discarded(sc.ctx, sc.attacker, extra_card);
             }
             resolve_sha(
                 sc.ctx, sc.ai, sc.attacker, extra.unwrap(), sc.target, sc.amount);

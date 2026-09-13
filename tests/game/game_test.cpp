@@ -3526,12 +3526,30 @@ TEST_CASE("game: qinglong follows up with another sha after jink")
     TestDecider decider;
     decider.respond = true;   // 第一刀被闪，第二刀无闪可出
     decider.triggers = {Ability::ExtraShaAfterJink};
+    EventLog log(g.bus);
     const auto played = g.cards.hand("a")[0];
     auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 3);            // 续杀命中
     CHECK(g.cards.hand_size("a") == 0); // 两张杀都打出去了
     CHECK(g.cards.hand_size("b") == 0); // 闪已消耗
+
+    // 首杀与续杀各发一条打出事件；打出的牌进弃牌堆不再另发弃置事件
+    int played_sha = 0;
+    int discarded_sha = 0;
+    int discarded_shan = 0;
+    for (const auto &line : log.lines())
+    {
+        if (line == "play a sha")
+            ++played_sha;
+        else if (line == "discard a sha")
+            ++discarded_sha;
+        else if (line == "discard b shan")
+            ++discarded_shan;
+    }
+    CHECK(played_sha == 2);
+    CHECK(discarded_sha == 0);
+    CHECK(discarded_shan == 1);
 }
 
 TEST_CASE("game: fangtian adds extra sha targets when it is the last hand card")

@@ -55,7 +55,8 @@ namespace tkw
 
             /**
              * @brief [弃置] 行：进弃牌堆的标签按来源语义区分。
-             * @note Judgement → [判定]、Response → [打出]，其余 → [弃置]。
+             * @note Judgement → [判定]、Response → [打出]，其余 → [弃置]；
+             *       空 entity（无主/亮牌来源）渲染为 (无)，避免空段。
              */
             inline std::string card_discarded_line(
                 const tkw::card::CardDefCatalog &catalog,
@@ -66,7 +67,9 @@ namespace tkw
                     label = "[判定] ";
                 else if (event.kind == tkw::DiscardKind::Response)
                     label = "[打出] ";
-                return std::string(label) + event.entity + " " +
+                const std::string entity =
+                    event.entity.empty() ? "(无)" : event.entity;
+                return std::string(label) + entity + " " +
                        tkw::card::display_name(catalog, event.def_id);
             }
 

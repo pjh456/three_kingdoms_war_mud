@@ -58,6 +58,9 @@ TEST_CASE("tui: log formatters render labels verbatim")
     discarded.kind = tkw::DiscardKind::Normal;
     CHECK(tkw::cli::detail::card_discarded_line(catalog, discarded) ==
           "[弃置] P1 杀");
+    discarded.entity = "";
+    CHECK(tkw::cli::detail::card_discarded_line(catalog, discarded) ==
+          "[弃置] (无) 杀");
 
     tkw::CardDrawnEvent drawn;
     drawn.entity = "P1";
