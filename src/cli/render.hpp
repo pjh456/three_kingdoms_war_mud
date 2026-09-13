@@ -11,11 +11,11 @@
 #include <map>
 #include <set>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #include "card/catalog.hpp"
 #include "card/def.hpp"
+#include "cli/log_lines.hpp"
 #include "entity/event.hpp"
 #include "event/event_bus.hpp"
 #include "event/handler.hpp"
@@ -62,26 +62,6 @@ namespace tkw
                 return def.text.empty() ? "（无说明）" : def.text;
             }
 
-            /** 卡牌区域 → 中文展示（事件日志移牌行用；Limbo 为正在转移）。 */
-            inline constexpr const char *zone_name_zh(const tkw::Zone z)
-            {
-                switch (z)
-                {
-                case tkw::Zone::Draw:
-                    return "摸牌堆";
-                case tkw::Zone::Discard:
-                    return "弃牌堆";
-                case tkw::Zone::Hand:
-                    return "手牌";
-                case tkw::Zone::Equip:
-                    return "装备区";
-                case tkw::Zone::Judge:
-                    return "判定区";
-                default:
-                    return "临时区";
-                }
-            }
-
             /**
              * @brief 订阅本局事件日志：verbose 为真时打印摸牌（含击杀奖励）/打牌/弃牌/移牌/伤害/体力/阵亡。
              * @return 订阅句柄；verbose 为假时为空，句柄析构即退订。
@@ -91,84 +71,11 @@ namespace tkw
             inline std::vector<tkw::EventBus::Handle> subscribe_event_log(
                 tkw::game::Game &game, bool verbose)
             {
-                std::vector<tkw::EventBus::Handle> handles;
                 if (!verbose)
-                    return handles;
-                handles.push_back(game.bus.subscribe(tkw::Handler<tkw::CardPlayedEvent>(
-                    [&catalog = game.catalog](tkw::HandlerContext<tkw::CardPlayedEvent> &c)
-                    {
-                        std::cout << "[打出] " << c.event.user << " "
-                                  << tkw::card::display_name(catalog, c.event.def_id)
-                                  << "\n";
-                    })));
-                handles.push_back(
-                    game.bus.subscribe(tkw::Handler<tkw::CardDiscardedEvent>(
-                        [&catalog = game.catalog](
-                            tkw::HandlerContext<tkw::CardDiscardedEvent> &c) {
-                            // 判定翻牌/响应打出与真实弃置同走弃置事件，标签按来源语义区分。
-                            const char *label = "[弃置] ";
-                            if (c.event.kind == tkw::DiscardKind::Judgement)
-                                label = "[判定] ";
-                            else if (c.event.kind == tkw::DiscardKind::Response)
-                                label = "[打出] ";
-                            std::cout << label << c.event.entity << " "
-                                      << tkw::card::display_name(
-                                             catalog, c.event.def_id)
-                                      << "\n";
-                        })));
-                handles.push_back(game.bus.subscribe(tkw::Handler<tkw::CardDrawnEvent>(
-                    [&catalog = game.catalog](
-                        tkw::HandlerContext<tkw::CardDrawnEvent> &c) {
-                        // 击杀奖惩摸牌与常规摸牌同走摸牌事件，标签按来源语义区分。
-                        const char *label =
-                            c.event.kind == tkw::DrawKind::KillReward
-                                ? "[击杀奖励] "
-                                : "[摸牌] ";
-                        std::cout << label << c.event.entity << " "
-                                  << tkw::card::display_name(catalog, c.event.def_id)
-                                  << "\n";
-                    })));
-                handles.push_back(
-                    game.bus.subscribe(tkw::Handler<tkw::CardMovedEvent>(
-                        [&catalog = game.catalog](
-                            tkw::HandlerContext<tkw::CardMovedEvent> &c) {
-                            // 空实体 = 亮牌等非玩家来源/去向，渲染为 (无) 避免空段。
-                            std::string_view from = c.event.from_entity;
-                            if (from.empty())
-                                from = "(无)";
-                            std::string_view to = c.event.to_entity;
-                            if (to.empty())
-                                to = "(无)";
-                            std::cout << "[移牌] " << from << "("
-                                      << zone_name_zh(c.event.from) << ") -> "
-                                      << to << "(" << zone_name_zh(c.event.to)
-                                      << ") "
-                                      << tkw::card::display_name(catalog, c.event.def_id)
-                                      << "\n";
-                        })));
-                handles.push_back(
-                    game.bus.subscribe(tkw::Handler<tkw::EntityDamagedEvent>(
-                        [](tkw::HandlerContext<tkw::EntityDamagedEvent> &c) {
-                            // 无来源 = 闪电等非玩家来源，渲染为 (无来源) 避免空段。
-                            std::string_view src = c.event.source;
-                            if (src.empty())
-                                src = "(无来源)";
-                            std::cout << "[伤害] " << src << " -> "
-                                      << c.event.target << " " << c.event.amount
-                                      << "\n";
-                        })));
-                handles.push_back(
-                    game.bus.subscribe(tkw::Handler<tkw::EntityHpChangedEvent>(
-                        [](tkw::HandlerContext<tkw::EntityHpChangedEvent> &c) {
-                            std::cout << "[体力] " << c.event.entity_id << " "
-                                      << c.event.old_cur << "->" << c.event.new_cur
-                                      << "/" << c.event.max << "\n";
-                        })));
-                handles.push_back(
-                    game.bus.subscribe(tkw::Handler<tkw::EntityDiedEvent>(
-                        [](tkw::HandlerContext<tkw::EntityDiedEvent> &c)
-                        { std::cout << "[阵亡] " << c.event.entity_id << "\n"; })));
-                return handles;
+                    return {};
+                return subscribe_event_log_to(
+                    game,
+                    [](const std::string &line) { std::cout << line << "\n"; });
             }
 
             /**
