@@ -1,0 +1,17 @@
+{
+    "id": "bingliang",
+    "name": "兵粮寸断",
+    "type": "trick",
+    "subtype": "delayed",
+    "copies": [
+        { "suit": "spade", "number": 10 },
+        { "suit": "club", "number": 4 }
+    ],
+    "text": "出牌阶段，对距离1以内的一名其他角色使用，置于其判定区。其判定阶段进行判定，结果为梅花则本牌弃置；否则跳过其摸牌阶段。",
+    "judge": {
+        "trigger": "not_club",
+        "success": "skip_draw",
+        "scope": "one_other",
+        "range": 1
+    }
+}

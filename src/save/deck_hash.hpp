@@ -89,6 +89,9 @@ namespace tkw
                     detail::hash_int(h, j.amount);
                     detail::hash_int(
                         h, j.scope.is_some() ? static_cast<int>(j.scope.unwrap()) : -1);
+                    // 仅显式距离限制参与哈希：默认无限制不写字段，标准牌表指纹逐位不变
+                    if (j.range > 0)
+                        detail::hash_int(h, j.range);
                     // 同 effect：仅显式属性参与哈希，标准牌表指纹不变
                     if (j.damage_type != card::DamageType::Normal)
                         detail::hash_int(h, static_cast<int>(j.damage_type));

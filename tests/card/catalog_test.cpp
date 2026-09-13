@@ -116,6 +116,26 @@ TEST_CASE("card: judge descriptor parses")
     CHECK(j.scope.contains(Scope::OneOther));
 }
 
+TEST_CASE("card: bingliang judge descriptor parses not_club and skip_draw")
+{
+    auto d = parse_card_def(
+        doc(R"({
+            "id": "bingliang", "name": "兵粮寸断", "type": "trick", "subtype": "delayed",
+            "copies": [ {"suit": "spade", "number": 10}, {"suit": "club", "number": 4} ],
+            "judge": {"trigger": "not_club", "success": "skip_draw",
+                      "scope": "one_other", "range": 1}
+        })").root(), "bingliang");
+    REQUIRE(d.is_ok());
+    REQUIRE(d.unwrap().judge.is_some());
+    const auto &j = d.unwrap().judge.unwrap();
+    CHECK(j.trigger == JudgeTrigger::NotClub);
+    CHECK(j.success == JudgeAction::SkipDraw);
+    CHECK(j.failure == JudgeAction::Nothing);
+    CHECK(j.amount == 0);
+    CHECK(j.scope.contains(Scope::OneOther));
+    CHECK(j.range == 1);
+}
+
 TEST_CASE("card: parse_card_def default set / missing optionals")
 {
     const auto d = doc(R"({
@@ -512,9 +532,9 @@ TEST_CASE("card: junzheng skeleton deck loads elemental slashes")
     auto r = CardDefCatalog::load(store, "deck");
     REQUIRE(r.is_ok());
     const auto &cat = r.unwrap();
-    CHECK(cat.size() == 11);
-    // 杀 30 + 火杀 5 + 雷杀 9 + 藤甲 2 + 丈八 1 + 青釭 1 + 南蛮 3 + 万箭 1 + 无中 4 + 桃 8 + 酒 5
-    CHECK(cat.total_copies() == 69);
+    CHECK(cat.size() == 12);
+    // 杀 30 + 火杀 5 + 雷杀 9 + 藤甲 2 + 丈八 1 + 青釭 1 + 南蛮 3 + 万箭 1 + 无中 4 + 桃 8 + 酒 5 + 兵粮寸断 2
+    CHECK(cat.total_copies() == 71);
 
     auto huosha = cat.find("huosha");
     REQUIRE(huosha.is_some());
@@ -553,10 +573,24 @@ TEST_CASE("card: junzheng skeleton deck loads elemental slashes")
     REQUIRE(jiu.unwrap()->copies.size() == 5);
     CHECK(jiu.unwrap()->copies[0] == CardCopy{Suit::Diamond, 9});
 
-    // 容错扫描与严格加载同源：十一卡均为已知机制名
+    // 兵粮寸断：延时锦囊，非梅花跳摸牌；距离 1 限制进数据
+    auto bingliang = cat.find("bingliang");
+    REQUIRE(bingliang.is_some());
+    CHECK(bingliang.unwrap()->name == "兵粮寸断");
+    CHECK(bingliang.unwrap()->type == CardType::Trick);
+    REQUIRE(bingliang.unwrap()->judge.is_some());
+    CHECK(bingliang.unwrap()->judge.unwrap().trigger == JudgeTrigger::NotClub);
+    CHECK(bingliang.unwrap()->judge.unwrap().success == JudgeAction::SkipDraw);
+    CHECK(bingliang.unwrap()->judge.unwrap().scope.contains(Scope::OneOther));
+    CHECK(bingliang.unwrap()->judge.unwrap().range == 1);
+    REQUIRE(bingliang.unwrap()->copies.size() == 2);
+    CHECK(bingliang.unwrap()->copies[0] == CardCopy{Suit::Spade, 10});
+    CHECK(bingliang.unwrap()->copies[1] == CardCopy{Suit::Club, 4});
+
+    // 容错扫描与严格加载同源：十二卡均为已知机制名
     auto raws = scan_mechanisms(store, "deck");
     REQUIRE(raws.is_ok());
-    CHECK(raws.unwrap().size() == 11);
+    CHECK(raws.unwrap().size() == 12);
 }
 
 TEST_CASE("card: scan_mechanisms reads raw names and shares the name table")

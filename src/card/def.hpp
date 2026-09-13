@@ -115,6 +115,7 @@ namespace tkw
             Heart,     /**< 红桃 */
             NotHeart,  /**< 非红桃 */
             Spade2to9, /**< 黑桃 2~9 */
+            NotClub,   /**< 非梅花（兵粮寸断） */
         };
 
         /** @brief 判定结果动作（触发/未触发各一个）。 */
@@ -125,6 +126,7 @@ namespace tkw
             Damage,     /**< 造成 amount 点伤害（闪电） */
             Jink,       /**< 视为打出闪（八卦阵） */
             PassToNext, /**< 移入下家判定区（闪电未劈中） */
+            SkipDraw,   /**< 跳过摸牌阶段（兵粮寸断非梅花） */
         };
 
         /** @brief 延时锦囊/防具的判定描述：条件、成功动作、失败动作。 */
@@ -138,6 +140,7 @@ namespace tkw
                 DamageType::Normal; /**< 伤害属性；仅火焰/雷电显式标注 */
             Option<Scope> scope =
                 Option<Scope>::None(); /**< 打出时的目标范围（延时锦囊用） */
+            int range = 0; /**< 打出时的目标距离上限；0 = 不限制（乐不思蜀/闪电） */
 
             bool operator==(const JudgeEffect &) const = default;
         };

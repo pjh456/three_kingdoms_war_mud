@@ -278,7 +278,7 @@ namespace tkw
             case PlayClass::DelayedTrick:
                 if (targets.size() != 1)
                     return GameResult<void>::Err(EffectError::InvalidTarget);
-                if (!is_delayed_scope_target(player, def, targets.front()))
+                if (!is_delayed_scope_target(ctx, player, def, targets.front()))
                     return GameResult<void>::Err(EffectError::InvalidTarget);
                 if (has_same_delayed(ctx, targets.front(), def.id))
                     return GameResult<void>::Err(EffectError::DelayedDuplicate);

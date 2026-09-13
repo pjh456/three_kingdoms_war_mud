@@ -1707,6 +1707,164 @@ TEST_CASE("game: delayed trick can be nullified at resolution")
     CHECK(g.cards.judge_size("a") == 0);
 }
 
+TEST_CASE("game: bingliang non-club skips draw phase")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 3);
+    g.give("a", "sha", "s#1");
+    g.cards.add_to_judge("a", Card{"B#0", "bingliang", Suit::Spade, 10});
+
+    // 堆顶为判定牌（黑桃8 → 非梅花跳过摸牌），其下两张供摸牌
+    g.cards.add_to_draw(Card{"d#0", "sha", Suit::Club, 2});
+    g.cards.add_to_draw(Card{"d#1", "shan", Suit::Diamond, 2});
+    g.cards.add_to_draw(Card{"j#0", "sha", Suit::Spade, 8});
+
+    TestDecider decider;  // 无出牌脚本
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.hand_size("a") == 1);  // 摸牌被跳过，只剩手牌杀
+    CHECK(g.cards.judge_size("a") == 0);
+}
+
+TEST_CASE("game: bingliang club judge draws normally")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 3);
+    g.give("a", "sha", "s#1");
+    g.cards.add_to_judge("a", Card{"B#0", "bingliang", Suit::Club, 4});
+
+    g.cards.add_to_draw(Card{"d#0", "sha", Suit::Club, 2});
+    g.cards.add_to_draw(Card{"d#1", "shan", Suit::Diamond, 2});
+    g.cards.add_to_draw(Card{"j#0", "shan", Suit::Club, 5});  // 梅花 → 不跳过
+
+    TestDecider decider;
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.hand_size("a") == 3);  // 手牌杀 + 正常摸 2 张
+    CHECK(g.cards.judge_size("a") == 0);
+}
+
+TEST_CASE("game: bingliang skips draw but leaves play phase intact")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 3);
+    auto *b = g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+    g.cards.add_to_judge("a", Card{"B#0", "bingliang", Suit::Spade, 10});
+
+    g.cards.add_to_draw(Card{"d#0", "tao", Suit::Heart, 5});
+    g.cards.add_to_draw(Card{"d#1", "tao", Suit::Heart, 6});
+    g.cards.add_to_draw(Card{"j#0", "sha", Suit::Diamond, 7});  // 方块 → 非梅花
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"s#1", {"b"}}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);             // 出牌阶段照常
+    CHECK(g.cards.hand_size("a") == 0);  // 摸牌被跳过，杀已打出
+    CHECK(g.cards.judge_size("a") == 0);
+}
+
+TEST_CASE("game: bingliang and lesi stack in one judgement phase")
+{
+    // 军争骨架牌表不含乐不思蜀：临时牌表让两张延时锦囊同场
+    const auto dir = pjh::platform::Fs::temp_directory() / "tkw_bingliang_stack";
+    std::filesystem::remove_all(dir);
+    REQUIRE(pjh::platform::Fs::create_directories(dir / "cards").is_ok());
+    CHECK(tkw::io::write_text(dir / "deck.json",
+                              R"({"name": "mix", "cards": ["lesi", "bingliang"]})")
+              .is_ok());
+    CHECK(tkw::io::write_text(dir / "cards" / "lesi.json", R"({
+        "id": "lesi", "name": "乐不思蜀", "type": "trick", "subtype": "delayed",
+        "copies": [ {"suit": "spade", "number": 6} ],
+        "judge": {"trigger": "not_heart", "success": "skip_play", "scope": "one_other"}
+    })").is_ok());
+    CHECK(tkw::io::write_text(dir / "cards" / "bingliang.json", R"({
+        "id": "bingliang", "name": "兵粮寸断", "type": "trick", "subtype": "delayed",
+        "copies": [ {"suit": "spade", "number": 10} ],
+        "judge": {"trigger": "not_club", "success": "skip_draw", "scope": "one_other"}
+    })").is_ok());
+
+    const std::string root = dir.string();
+    TestGame g("deck", 1, root.c_str());
+    g.add_player("a", 0, 3);
+    auto *b = g.add_player("b", 1, 4);
+    g.give("a", "bingliang", "s#1");
+    // 判定区顺序：乐不思蜀先于兵粮寸断
+    g.cards.add_to_judge("a", Card{"L#0", "lesi", Suit::Spade, 6});
+    g.cards.add_to_judge("a", Card{"B#0", "bingliang", Suit::Spade, 10});
+
+    // 堆顶两张依次为乐、兵粮的判定牌；均触发跳过，其下备用
+    g.cards.add_to_draw(Card{"d#0", "tao", Suit::Heart, 5});
+    g.cards.add_to_draw(Card{"d#1", "tao", Suit::Heart, 6});
+    g.cards.add_to_draw(Card{"b#j", "sha", Suit::Heart, 3});   // 兵粮判定非梅花
+    g.cards.add_to_draw(Card{"l#j", "shan", Suit::Spade, 4});  // 乐判定非红桃
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"s#1", {"b"}}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 4);             // 出牌被跳过
+    CHECK(g.cards.hand_size("a") == 1);  // 摸牌被跳过，杀仍在手
+    CHECK(g.cards.judge_size("a") == 0);
+}
+
+TEST_CASE("game: bingliang can be played onto another player within distance")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "bingliang", "B#0");
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"B#0", {"b"}}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.judge_size("b") == 1);
+    CHECK(g.cards.judge("b")[0].def_id == "bingliang");
+    CHECK(g.cards.hand_size("a") == 2);  // 打出 1 张 + 摸 2 张
+}
+
+TEST_CASE("game: bingliang rejects out-of-range target")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.add_player("d", 3, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "bingliang", "B#0");
+
+    const CardDef &bingliang = *g.catalog.find("bingliang").unwrap();
+    // 座次环上 a 到 c 距离 2 不合法；b/d 距离 1 合法
+    CHECK((delayed_legal_targets(g.ctx, "a", bingliang) ==
+           std::vector<std::string>{"b", "d"}));
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"B#0", {"c"}}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == TurnError::InvalidTarget);
+    CHECK(g.cards.judge_size("c") == 0);
+}
+
+TEST_CASE("game: duplicate bingliang is rejected")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "bingliang", "B#0");
+    g.cards.add_to_judge("b", Card{"B#9", "bingliang", Suit::Club, 4});
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"B#0", {"b"}}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == TurnError::DelayedDuplicate);
+}
+
 TEST_CASE("game: lightning strikes on spade 2-9")
 {
     TestGame g("deck");

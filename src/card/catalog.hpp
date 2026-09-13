@@ -290,7 +290,8 @@ namespace tkw
                      {"black", JudgeTrigger::Black},
                      {"heart", JudgeTrigger::Heart},
                      {"not_heart", JudgeTrigger::NotHeart},
-                     {"spade_2_9", JudgeTrigger::Spade2to9}});
+                     {"spade_2_9", JudgeTrigger::Spade2to9},
+                     {"not_club", JudgeTrigger::NotClub}});
                 if (trigger.is_err())
                     return cfg::ConfigResult<JudgeEffect>::Err(trigger.unwrap_err());
                 j.trigger = trigger.unwrap();
@@ -301,7 +302,8 @@ namespace tkw
                         {"skip_play", JudgeAction::SkipPlay},
                         {"damage", JudgeAction::Damage},
                         {"jink", JudgeAction::Jink},
-                        {"pass_to_next", JudgeAction::PassToNext}};
+                        {"pass_to_next", JudgeAction::PassToNext},
+                        {"skip_draw", JudgeAction::SkipDraw}};
 
                 auto success =
                     require_enum<JudgeAction>(obj, "success", path, action_table);
@@ -324,6 +326,11 @@ namespace tkw
                 if (scope.is_err())
                     return cfg::ConfigResult<JudgeEffect>::Err(scope.unwrap_err());
                 j.scope = scope.unwrap();
+
+                auto range = cfg::opt_int_range(obj, "range", 0, path);
+                if (range.is_err())
+                    return cfg::ConfigResult<JudgeEffect>::Err(range.unwrap_err());
+                j.range = range.unwrap();
 
                 auto dtype =
                     opt_enum<DamageType>(obj, "damage_type", path, damage_type_table);

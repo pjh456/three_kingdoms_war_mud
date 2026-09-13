@@ -12,6 +12,7 @@
 
 #include "card/def.hpp"
 #include "game/core/context.hpp"
+#include "game/query/distance.hpp"
 
 namespace tkw
 {
@@ -47,15 +48,20 @@ namespace tkw
 
         /**
          * @brief 目标是否在该延时锦囊 judge.scope 的合法集合内（纯谓词）。
-         * @note scope=Self → 目标须为 player 本人；否则 → 目标须为他人。
+         * @note scope=Self → 目标须为 player 本人；否则 → 目标须为他人，
+         *       judge.range > 0 时还须在距离上限内（兵粮寸断距离 1）。
          */
         inline bool is_delayed_scope_target(
-            const std::string &player, const card::CardDef &def,
-            const std::string &target)
+            const ReadOnlyContext &ctx, const std::string &player,
+            const card::CardDef &def, const std::string &target)
         {
-            const auto scope =
-                def.judge.unwrap().scope.unwrap_or(card::Scope::Self);
-            return scope == card::Scope::Self ? target == player : target != player;
+            const auto &judge = def.judge.unwrap();
+            const auto scope = judge.scope.unwrap_or(card::Scope::Self);
+            if (scope == card::Scope::Self)
+                return target == player;
+            if (target == player)
+                return false;
+            return judge.range <= 0 || distance_le(ctx, player, target, judge.range);
         }
 
         /**
@@ -67,7 +73,7 @@ namespace tkw
             const card::CardDef &def)
         {
             std::vector<std::string> out;
-            if (is_delayed_scope_target(player, def, player) &&
+            if (is_delayed_scope_target(ctx, player, def, player) &&
                 !has_same_delayed(ctx, player, def.id))
                 out.push_back(player);
             for (const auto *e : ctx.entities->const_view())
@@ -75,7 +81,7 @@ namespace tkw
                 const std::string &t = e->get_id();
                 if (t == player)
                     continue;
-                if (is_delayed_scope_target(player, def, t) &&
+                if (is_delayed_scope_target(ctx, player, def, t) &&
                     !has_same_delayed(ctx, t, def.id))
                     out.push_back(t);
             }

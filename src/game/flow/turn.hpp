@@ -3,6 +3,7 @@
  * @brief 回合流程：判定 → 摸牌 → 出牌（含杀次数限制/装备）→ 弃牌。
  * @note 规则约定：
  *       - 判定阶段按判定区顺序结算延时锦囊；乐不思蜀判定非红桃跳过出牌，
+ *         兵粮寸断判定非梅花跳过摸牌，
  *         闪电判定黑桃2~9 则造成雷伤、否则移入判定区无同名闪电的下家；
  *       - 杀每回合限一次，装备诸葛连弩后不限制；
  *       - 弃牌阶段手牌上限 = 当前体力值。
@@ -61,6 +62,7 @@ namespace tkw
         {
             Normal,          /**< 判定后无特殊效果（乐不思蜀为红桃） */
             SkipPlay,        /**< 跳过出牌阶段（乐不思蜀非红桃） */
+            SkipDraw,        /**< 跳过摸牌阶段（兵粮寸断非梅花） */
             LightningStruck, /**< 闪电劈中 */
             PassedToNext,    /**< 闪电未劈中，移至下家判定区 */
         };
@@ -121,6 +123,10 @@ namespace tkw
             case card::JudgeAction::SkipPlay:
                 discard_and_emit(ctx, player, delayed_card);
                 return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::SkipPlay);
+
+            case card::JudgeAction::SkipDraw:
+                discard_and_emit(ctx, player, delayed_card);
+                return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::SkipDraw);
 
             case card::JudgeAction::Damage:
                 discard_and_emit(ctx, player, delayed_card);
@@ -227,7 +233,7 @@ namespace tkw
             if (targets.size() != 1)
                 return TurnResult<void>::Err(TurnError::InvalidTarget);
             const std::string &target = targets.front();
-            if (!is_delayed_scope_target(player, def, target))
+            if (!is_delayed_scope_target(ctx, player, def, target))
                 return TurnResult<void>::Err(TurnError::InvalidTarget);
             if (has_same_delayed(ctx, target, def.id))
                 return TurnResult<void>::Err(TurnError::DelayedDuplicate);
@@ -277,27 +283,38 @@ namespace tkw
             return ctx.entities->find(player).is_some();
         }
 
+        /** @brief 判定阶段汇总的「跳过阶段」集合：乐不思蜀跳 play、兵粮寸断跳 draw。 */
+        struct TurnSkips
+        {
+            bool skip_play = false; /**< 跳过出牌阶段（乐不思蜀非红桃） */
+            bool skip_draw = false; /**< 跳过摸牌阶段（兵粮寸断非梅花） */
+        };
+
         /**
          * @brief 判定阶段：按判定区顺序结算延时锦囊。
-         * @return 是否跳过出牌阶段（乐不思蜀判定非红桃）；角色中途死亡时调用方
-         *         经 is_alive 判断，本函数不再继续结算。
+         * @return 本回合需跳过的阶段集合（乐不思蜀非红桃 → skip_play，
+         *         兵粮寸断非梅花 → skip_draw）；角色中途死亡时调用方经
+         *         is_alive 判断，本函数不再继续结算。
          */
-        inline TurnResult<bool> run_judgement_phase(
+        inline TurnResult<TurnSkips> run_judgement_phase(
             GameContext &ctx, DecisionSource &ai, const std::string &player)
         {
-            bool skip_play = false;
+            TurnSkips skips;
             const auto judge_zone = ctx.cards->judge(player);  // 拷贝
             for (const auto &delayed : judge_zone)
             {
                 auto r = resolve_delayed(ctx, ai, player, delayed);
                 if (r.is_err())
-                    return TurnResult<bool>::Err(r.unwrap_err());
-                if (r.unwrap() == DelayedOutcome::SkipPlay)
-                    skip_play = true;
+                    return TurnResult<TurnSkips>::Err(r.unwrap_err());
+                const DelayedOutcome outcome = r.unwrap();
+                if (outcome == DelayedOutcome::SkipPlay)
+                    skips.skip_play = true;
+                else if (outcome == DelayedOutcome::SkipDraw)
+                    skips.skip_draw = true;
                 if (!is_alive(ctx, player))
                     break;  // 闪电劈死 → 回合终止
             }
-            return TurnResult<bool>::Ok(skip_play);
+            return TurnResult<TurnSkips>::Ok(skips);
         }
 
         /** @brief 摸牌阶段：摸 rules.draw_per_turn 张。 */
@@ -463,15 +480,16 @@ namespace tkw
             auto jr = run_judgement_phase(ctx, ai, player);
             if (jr.is_err())
                 return TurnResult<void>::Err(jr.unwrap_err());
-            const bool skip_play = jr.unwrap();
+            const TurnSkips skips = jr.unwrap();
             if (!is_alive(ctx, player))
                 return TurnResult<void>::Ok();
 
             // 2. 摸牌阶段
-            run_draw_phase(ctx, player);
+            if (!skips.skip_draw)
+                run_draw_phase(ctx, player);
 
             // 3. 出牌阶段
-            if (!skip_play)
+            if (!skips.skip_play)
             {
                 auto pr = run_play_phase(ctx, ai, player);
                 if (pr.is_err())

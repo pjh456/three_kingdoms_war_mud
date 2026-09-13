@@ -50,6 +50,8 @@ namespace tkw
                 return c.suit != card::Suit::Heart;
             case card::JudgeTrigger::Spade2to9:
                 return c.suit == card::Suit::Spade && c.number >= 2 && c.number <= 9;
+            case card::JudgeTrigger::NotClub:
+                return c.suit != card::Suit::Club;
             }
             return false;
         }
