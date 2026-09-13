@@ -252,6 +252,7 @@ tkw heroes
 #   马超(machao) 4体力 男 技能: 马术
 #   黄月英(huangyueying) 3体力 女 技能: 奇才
 #   赵云(zhaoyun) 4体力 男 技能: 龙胆
+#   甄姬(zhenji) 3体力 女 技能: 倾国
 ```
 
 用 `--hero <座位>=<武将>` 指定（可重复）；`status` 逐座展示武将，存档保留选择：
@@ -262,6 +263,7 @@ tkw --hero P0=zhouyu deal 2 1       # P0 周瑜：英姿锁定技，摸牌阶段
 tkw --hero P0=machao deal 4 1       # P0 马超：马术锁定技，计算距离 -1
 tkw --hero P0=huangyueying deal 4 1 # P0 黄月英：奇才锁定技，锦囊无距离限制
 tkw --hero P0=zhaoyun deal 2 1      # P0 赵云：龙胆转化技，闪当杀、杀当闪
+tkw --hero P0=zhenji deal 2 1       # P0 甄姬：倾国转化技，黑色牌当闪
 tkw --hero P0=zhangfei repl         # 或进 REPL：new --hero P0=zhangfei --players 2 --seed 1
 ```
 

@@ -1,0 +1,8 @@
+{
+  "id": "zhenji",
+  "name": "甄姬",
+  "gender": "female",
+  "hp": 3,
+  "skills": ["qingguo"],
+  "text": "倾国：你可以将一张黑色牌当【闪】使用或打出。"
+}

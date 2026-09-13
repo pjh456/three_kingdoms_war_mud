@@ -5826,6 +5826,78 @@ TEST_CASE("game: simple ai uses longdan sha as jink when holding no jink")
     CHECK(g.cards.hand_size("b") == 0);
 }
 
+// ── 倾国：黑色牌当闪（响应侧）──────────────────────────────────────────
+
+TEST_CASE("game: has_response_card includes qingguo black cards")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Female, "zhenji");
+    g.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Spade, 3});  // 黑桃非闪
+    CHECK(has_response_card(g.ctx, "a", ResponseKind::Jink));
+
+    // 红牌不可当闪
+    TestGame red("deck");
+    red.load_heroes();
+    red.add_player("a", 0, 4, Gender::Female, "zhenji");
+    red.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Heart, 3});
+    CHECK_FALSE(has_response_card(red.ctx, "a", ResponseKind::Jink));
+
+    // 无武将同牌不响应
+    TestGame plain("deck");
+    plain.add_player("a", 0, 4);
+    plain.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Spade, 3});
+    CHECK_FALSE(has_response_card(plain.ctx, "a", ResponseKind::Jink));
+}
+
+TEST_CASE("game: qingguo consume_response accepts black and rejects red")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Female, "zhenji");
+    g.cards.add_to_hand("a", Card{"x#1", "sha", Suit::Club, 7});  // 黑杀当闪
+
+    TestDecider decider;
+    decider.response_id = "x#1";
+    auto r = consume_response(g.ctx, decider, "a", ResponseKind::Jink,
+                              ResponsePrompt{});
+    REQUIRE(r.is_some());
+    CHECK(g.cards.hand_size("a") == 0);
+    CHECK(g.cards.discard_size() == 1);
+
+    // 红牌被拒并退回手牌
+    TestGame bad("deck");
+    bad.load_heroes();
+    bad.add_player("a", 0, 4, Gender::Female, "zhenji");
+    bad.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Diamond, 12});
+    TestDecider d2;
+    d2.response_id = "x#1";
+    CHECK(consume_response(bad.ctx, d2, "a", ResponseKind::Jink,
+                           ResponsePrompt{})
+              .is_none());
+    CHECK(bad.cards.hand_size("a") == 1);
+    CHECK(bad.cards.discard_size() == 0);
+}
+
+TEST_CASE("game: qingguo answers a real sha with a black card")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4, Gender::Female, "zhenji");
+    g.give("a", "sha", "a#1");
+    g.cards.add_to_hand("b", Card{"b#1", "tao", Suit::Spade, 3});  // 黑桃桃当闪
+
+    TestDecider decider;
+    decider.response_id = "b#1";
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 4);            // 黑桃桃当闪抵消
+    CHECK(g.cards.hand_size("b") == 0);
+    CHECK(g.cards.discard_size() == 2);
+}
+
 // ── 铁索连环：横置/重置与属性伤害传导 ─────────────────────────────────
 
 namespace

@@ -109,19 +109,22 @@ namespace tkw
         }
 
         /**
-         * @brief 该手牌能否被实体转化为虚拟「闪」（龙胆杀）。
+         * @brief 该手牌能否被实体转化为虚拟「闪」（龙胆杀 / 倾国黑牌）。
+         * @param c 手牌对象（倾国按花色判定）。
          * @param def 该手牌的目录定义（龙胆按效果类别判定）。
-         * @return 拥有龙胆且该牌为「杀」→ true；否则 false。
+         * @return 拥有对应转化技能且牌面满足来源条件 → true；否则 false。
          * @note 转化来源的唯一判定入口：Jink 响应窗口的存在性、候选与消费共用，
          *       保证「哪些牌可当闪」各处口径一致。
          */
         inline bool can_convert_card_to_jink(
             const ReadOnlyContext &ctx, const std::string &entity_id,
-            const card::Card &, const card::CardDef &def)
+            const card::Card &c, const card::CardDef &def)
         {
-            return has_hero_skill(ctx, entity_id, hero::HeroSkill::LongDan) &&
-                   def.effect.is_some() &&
-                   is_sha_kind(def.effect.unwrap().kind);
+            if (has_hero_skill(ctx, entity_id, hero::HeroSkill::LongDan) &&
+                def.effect.is_some() && is_sha_kind(def.effect.unwrap().kind))
+                return true;
+            return has_hero_skill(ctx, entity_id, hero::HeroSkill::QingGuo) &&
+                   is_black_suit(c.suit);
         }
 
         /**

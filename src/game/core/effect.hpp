@@ -119,6 +119,8 @@ namespace tkw
                 return {true};
             case H::LongDan:
                 return {true};
+            case H::QingGuo:
+                return {true};
             }
             return {};
         }

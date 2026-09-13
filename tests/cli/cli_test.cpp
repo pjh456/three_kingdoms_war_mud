@@ -2012,6 +2012,11 @@ TEST_CASE("cli: heroes lines list catalog and mark implemented skills")
     CHECK(out.find("赵云(zhaoyun)") != std::string::npos);
     CHECK(out.find("技能: 龙胆") != std::string::npos);
     CHECK(out.find("龙胆（未实现）") == std::string::npos);
+    // 甄姬倾国：黑色牌当闪，列出且已实现
+    CHECK(out.find("甄姬(zhenji)") != std::string::npos);
+    CHECK(out.find("3体力") != std::string::npos);
+    CHECK(out.find("技能: 倾国") != std::string::npos);
+    CHECK(out.find("倾国（未实现）") == std::string::npos);
 
     // 无 heroes.json 的目录回落空数据而不报错
     const std::filesystem::path empty_dir =
