@@ -141,10 +141,30 @@ TEST_CASE("cli: status shows human own hand but keeps opponents as counts")
     auto status = repl.run("status");
     REQUIRE(status.ok);
     CHECK(status.out.find("真人座位: P0") != std::string::npos);
-    CHECK(status.out.find("P0 体力 4/4 手牌 无懈可击/五谷丰登/无中生有/闪 装备 0 "
-                          "判定 0") != std::string::npos);
-    CHECK(status.out.find("P1 体力 4/4 手牌 4 装备 0 判定 0") != std::string::npos);
+    CHECK(status.out.find("P0 体力 4/4 手牌 无懈可击/五谷丰登/无中生有/闪 装备 无 "
+                          "判定 无") != std::string::npos);
+    CHECK(status.out.find("P1 体力 4/4 手牌 4 装备 无 判定 无") != std::string::npos);
     CHECK(status.out.find("P1 体力 4/4 手牌 无懈") == std::string::npos);
+}
+
+TEST_CASE("cli: status expands public equip and judge zone names")
+{
+    Repl repl;
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+
+    // 装备区/判定区为明置信息：任何座位均展开牌名，空区回落「无」。
+    auto ctx = repl.session.game->context();
+    ctx.cards->add_to_equip(
+        "P1", tkw::card::Card{"e#0", "bagua", tkw::card::Suit::Spade, 2});
+    ctx.cards->add_to_judge(
+        "P0", tkw::card::Card{"j#0", "lesi", tkw::card::Suit::Heart, 6});
+
+    auto status = repl.run("status");
+    REQUIRE(status.ok);
+    CHECK(status.out.find("P0 体力 4/4 手牌 4 装备 无 判定 乐不思蜀") !=
+          std::string::npos);
+    CHECK(status.out.find("P1 体力 4/4 手牌 4 装备 八卦阵 判定 无") !=
+          std::string::npos);
 }
 
 TEST_CASE("cli: status shows each human seat own hand")
@@ -895,7 +915,7 @@ TEST_CASE("cli: identity human status hides non-lord non-self roles")
               count_substr(status.out, "角色 反贼") +
               count_substr(status.out, "角色 内奸") ==
           1);
-    CHECK(status.out.find("P1 体力 4/4 手牌 4 装备 0 判定 0 角色 未知") ==
+    CHECK(status.out.find("P1 体力 4/4 手牌 4 装备 无 判定 无 角色 未知") ==
           std::string::npos);
 }
 
@@ -918,7 +938,9 @@ TEST_CASE("cli: identity new rejects too few players")
 
     auto created = repl.run("new --mode identity --players 2");
     CHECK_FALSE(created.ok);
-    CHECK(created.error.find("身份模式至少 4 人") != std::string::npos);
+    CHECK(created.error.find("身份模式人数须为 4–8 人（当前 2）") !=
+          std::string::npos);
+    CHECK(created.error.find("请用 --players 4") != std::string::npos);
     CHECK_FALSE(repl.session.active);
 }
 
@@ -1027,14 +1049,19 @@ TEST_CASE("cli: audit/cards/simulate reject --human")
 {
     Repl repl;
 
-    // 三命令都不运行真人参与的对局：给出 --human 即硬拒绝（纯中文错误）。
-    for (const std::string &line :
-         {"audit --human P0", "cards --human P0", "rules --human P0",
-          "simulate 1 --human P0"})
+    // 三命令都不运行真人参与的对局：给出 --human 即硬拒绝（纯中文错误），
+    // 并给出可复制的「直接运行 tkw <cmd>」替代出口。
+    const std::vector<std::pair<std::string, std::string>> reject_cases = {
+        {"audit", "audit --human P0"},
+        {"cards", "cards --human P0"},
+        {"rules", "rules --human P0"},
+        {"simulate", "simulate 1 --human P0"}};
+    for (const auto &c : reject_cases)
     {
-        auto r = repl.run(line);
+        auto r = repl.run(c.second);
         CHECK_FALSE(r.ok);
         CHECK(r.error.find("不支持 --human") != std::string::npos);
+        CHECK(r.error.find("请直接运行 tkw " + c.first) != std::string::npos);
     }
 
     // 不带 --human 时行为不变（只读/批量命令继承启动牌表，显式 --deck 仍覆盖）

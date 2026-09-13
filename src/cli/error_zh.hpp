@@ -419,8 +419,14 @@ namespace tkw
                 if (e.kind == game::BuildError::Kind::CreatePlayer)
                     return "创建玩家失败: P" + std::to_string(e.player_index);
                 if (e.kind == game::BuildError::Kind::IdentityPlayerCount)
-                    return "身份模式至少 4 人、至多 8 人: " +
-                           std::to_string(e.player_index);
+                {
+                    // 身份局配比只覆盖 4–8 人（roles_for_count）；人数越界时按越界
+                    // 方向给出最近的合法值，使「下一步」具体可复制。
+                    const int n = e.player_index;
+                    const int suggested = n < 4 ? 4 : 8;
+                    return "身份模式人数须为 4–8 人（当前 " + std::to_string(n) +
+                           "）；请用 --players " + std::to_string(suggested);
+                }
                 return format_load_error(e.config);
             }
         }  // namespace detail

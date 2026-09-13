@@ -1,6 +1,6 @@
 /**
  * @file commands.hpp
- * @brief CLI 命令树与命令执行体：声明公共选项、注册 11 个命令、共享 Session。
+ * @brief CLI 命令树与命令执行体：声明公共选项、注册 12 个命令、共享 Session。
  * @note 与 main.cpp 分离，使命令树可由测试直接构建并驱动 REPL。命令的
  *       action 写标准输出（用户可见），框架侧输出（?/help）走 InteractiveConsole
  *       注入的流。
@@ -218,7 +218,8 @@ namespace tkw
                        "资源目录（含 deck.json 与 cards/，默认 resources）")
                     .path();
                 cmd.option<fixed_string("players")>(
-                       "--players", 'p', "玩家数（2–8，默认 4）")
+                       "--players", 'p',
+                       "玩家数（2–8；REPL 内缺省继承启动 --players，否则默认 4）")
                     .integer()
                     .min(rules.min_players)
                     .max(rules.max_players);
@@ -389,13 +390,20 @@ namespace tkw
                 return {};
             }
 
-            /** 不支持真人的命令统一拒绝非空 humans；返回空串表示通过。 */
+            /**
+             * @brief 不支持真人的命令统一拒绝非空 humans；返回空串表示通过。
+             * @param humans 解析/继承得到的真人座位集合。
+             * @param cmd    命令名，用于给出可复制的替代出口。
+             * @return 空串表示通过；否则为带「直接运行 tkw <cmd>」下一步的中文错误。
+             */
             inline std::string reject_humans(
                 const std::vector<std::string> &humans, const std::string &cmd)
             {
                 if (humans.empty())
                     return {};
-                return cmd + " 不支持 --human（该命令不运行真人参与的对局）";
+                return cmd +
+                       " 不支持 --human（该命令不运行真人参与的对局）；请直接运行 tkw " +
+                       cmd;
             }
 
             /** AI 难度档 → 命令行/存档值域字符串。 */
@@ -523,25 +531,26 @@ namespace tkw
             }
 
             /**
-             * @brief 把一手牌渲染为「卡名/卡名」；空手牌回落「无」。
+             * @brief 把一个牌区渲染为「卡名/卡名」；空区回落「无」。
              * @param ctx  只读上下文，经目录解析展示名（目录可空则回落 def_id）。
-             * @param hand 待渲染的手牌副本。
-             * @return 斜杠分隔的中文展示名；hand 为空返回「无」。
-             * @note 纯展示，不读对手手牌；调用方只对己方座位传入手牌。
+             * @param zone 待渲染的牌区副本（手牌/装备区/判定区）。
+             * @return 斜杠分隔的中文展示名；zone 为空返回「无」。
+             * @note 纯展示，与决策窗口 zone_names 同口径；装备区/判定区为明置信息
+             *       可直接传，手牌仅限己方座位传入，不得用于对手手牌。
              */
-            inline std::string hand_names(
+            inline std::string zone_names(
                 const tkw::game::ReadOnlyContext &ctx,
-                const std::vector<tkw::card::Card> &hand)
+                const std::vector<tkw::card::Card> &zone)
             {
-                if (hand.empty())
+                if (zone.empty())
                     return "无";
 
                 std::string out;
-                for (std::size_t i = 0; i < hand.size(); ++i)
+                for (std::size_t i = 0; i < zone.size(); ++i)
                 {
                     if (i > 0)
                         out += "/";
-                    out += tkw::card::display_name(ctx.catalog, hand[i].def_id);
+                    out += tkw::card::display_name(ctx.catalog, zone[i].def_id);
                 }
                 return out;
             }
@@ -556,7 +565,8 @@ namespace tkw
              *       角色，乱斗分支不新增任何行；有真人参与且未终局时角色收敛为
              *       主公与真人座位可见、其余占位「未知」，全 AI 局与终局公开
              *       全部角色。局面段中 `s.humans` 命中的座位手牌字段经与决策窗口
-             *       同一边界展开为己方牌名，其余座位仍只给数量。
+             *       同一边界展开为己方牌名，其余座位仍只给数量；装备区/判定区为
+             *       明置信息，任何座位均展开牌名，空区回落「无」。
              */
             inline void print_status(const Session &s)
             {
@@ -614,12 +624,12 @@ namespace tkw
                     std::cout << "    " << id << " 体力 " << e->get_hp() << "/"
                               << e->get_hp_bar().get_max() << " 手牌 ";
                     if (human_seats.count(id) != 0)
-                        std::cout << hand_names(
+                        std::cout << zone_names(
                             ctx, tkw::game::ai::make_view(ctx, id).hand);
                     else
                         std::cout << ctx.cards->hand_size(id);
-                    std::cout << " 装备 " << ctx.cards->equip_size(id)
-                              << " 判定 " << ctx.cards->judge_size(id);
+                    std::cout << " 装备 " << zone_names(ctx, ctx.cards->equip(id))
+                              << " 判定 " << zone_names(ctx, ctx.cards->judge(id));
                     if (tkw::game::mode_of(ctx) == tkw::game::GameMode::Identity)
                     {
                         const tkw::game::Role role =
@@ -1213,12 +1223,14 @@ namespace tkw
                     return detail::run_game(opt);
                 });
 
-            // simulate：批量模拟（全 AI 跨局聚合；玩家数缺省 4，可被 --players 覆盖）
+            // simulate：批量模拟（全 AI 跨局聚合；玩家数缺省取启动 --players，否则 4）
             auto &sim = app.add_leaf(
                 "simulate", "批量模拟：simulate <局数> [玩家数]");
             detail::declare_common_options(sim, rules);
             sim.arg<int, 0>("n", "局数（≥1）").required();
-            sim.arg<int, 1>("players", "玩家数（可选，默认 4）");
+            sim.arg<int, 1>(
+                "players",
+                "玩家数（可选；缺省取启动 --players，否则 4）");
             sim.action(
                 [rules, &session](ParseContext &ctx) -> CliResult<void>
                 {

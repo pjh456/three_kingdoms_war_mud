@@ -106,7 +106,7 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 | 选项 | 说明 |
 |---|---|
 | `-d, --deck <dir>` | 资源目录（含 `deck.json` 与 `cards/`），默认 `resources` |
-| `-p, --players <n>` | 玩家数（2–8，默认 4） |
+| `-p, --players <n>` | 玩家数（2–8；REPL 内缺省继承启动 `--players`，否则默认 4） |
 | `--hand <n>` | 初始手牌数（默认 4） |
 | `-s, --seed <n>` | 随机种子（默认 42） |
 | `-v, --verbose` | 打印事件日志（摸牌/击杀奖励、打/弃牌、判定翻牌、移牌、伤害、体力、阵亡；真人局默认开启，`--no-verbose` 关闭） |

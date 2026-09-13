@@ -206,7 +206,7 @@ namespace tkw
                     "    tkw --ai aggressive deal 2 1  aggressive AI 跑一局\n"
                     "    tkw --mode identity deal 4 1  身份局跑一局（4–8 人）\n"
                     "    tkw audit                审计牌堆\n"
-                    "    tkw cards              列出牌表构成\n"
+                    "    tkw cards                列出牌表构成\n"
                     "    tkw rules 过河拆桥      查询卡牌效果说明\n"
                     "    tkw simulate 100 2     批量模拟 100 局（2 人）\n"
                     "  REPL 会话（先 tkw repl，再逐条输入）:\n"

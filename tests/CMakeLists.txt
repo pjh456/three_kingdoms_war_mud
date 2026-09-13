@@ -384,11 +384,13 @@ set_tests_properties(cli_repl_human_default_verbose PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # new 自身的初始发牌也走真人默认日志：脚本只 new 不 step，直接钉初始发牌行，
-# 避免与 step 摸牌混同；显式 --no-verbose 与全 AI 仍静默。
+# 避免与 step 摸牌混同；非真人座位 P1 的摸牌遮挡为「未知牌」，钉 new 把真人
+# 座位集合透传给日志订阅；显式 --no-verbose 与全 AI 仍静默。
 add_test(NAME cli_repl_new_human_default_verbose
          COMMAND sh -c
                  "out=$(printf 'new --players 2 --seed 1\\nquit\\n' | $<TARGET_FILE:tkw> --human P0 repl --autosave '' 2>&1) && \
                   printf '%s' \"$out\" | grep -q '\\[摸牌\\] P0 ' && \
+                  printf '%s' \"$out\" | grep -q '\\[摸牌\\] P1 未知牌' && \
                   quiet=$(printf 'new --players 2 --seed 1\\nquit\\n' | $<TARGET_FILE:tkw> --human P0 --no-verbose repl --autosave '' 2>&1) && \
                   ! printf '%s' \"$quiet\" | grep -q '\\[摸牌\\]' && \
                   ai=$(printf 'new --players 2 --seed 1\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1) && \
@@ -670,16 +672,16 @@ add_test(NAME cli_simulate_bad_deck
 set_tests_properties(cli_simulate_bad_deck PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-# audit/simulate 不支持真人：--human 硬拒绝为纯中文错误并退出 1。
+# audit/simulate 不支持真人：--human 硬拒绝为纯中文错误、给出替代出口并退出 1。
 add_test(NAME cli_audit_rejects_human
          COMMAND sh -c
-                 "out=$($<TARGET_FILE:tkw> --human P0 audit 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '不支持 --human' && [ $rc -eq 1 ]")
+                 "out=$($<TARGET_FILE:tkw> --human P0 audit 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '不支持 --human' && printf '%s' \"$out\" | grep -q '请直接运行 tkw audit' && [ $rc -eq 1 ]")
 set_tests_properties(cli_audit_rejects_human PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_test(NAME cli_simulate_rejects_human
          COMMAND sh -c
-                 "out=$($<TARGET_FILE:tkw> simulate 1 2 --human P0 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '不支持 --human' && [ $rc -eq 1 ]")
+                 "out=$($<TARGET_FILE:tkw> simulate 1 2 --human P0 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '不支持 --human' && printf '%s' \"$out\" | grep -q '请直接运行 tkw simulate' && [ $rc -eq 1 ]")
 set_tests_properties(cli_simulate_rejects_human PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
@@ -743,16 +745,16 @@ set_tests_properties(cli_status_finished PROPERTIES
 add_test(NAME cli_status_human_hand
          COMMAND sh -c
                  "out=$(printf 'new --players 2 --seed 1\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> --human P0 repl --autosave '' 2>&1); rc=$?; \
-                  printf '%s' \"$out\" | grep -q 'P0 体力 4/4 手牌 无懈可击/五谷丰登/无中生有/闪 装备 0 判定 0' && \
-                  printf '%s' \"$out\" | grep -q 'P1 体力 4/4 手牌 4 装备 0 判定 0' && \
+                  printf '%s' \"$out\" | grep -q 'P0 体力 4/4 手牌 无懈可击/五谷丰登/无中生有/闪 装备 无 判定 无' && \
+                  printf '%s' \"$out\" | grep -q 'P1 体力 4/4 手牌 4 装备 无 判定 无' && \
                   ! printf '%s' \"$out\" | grep -q 'P1 体力 4/4 手牌 无懈' && [ $rc -eq 0 ]")
 set_tests_properties(cli_status_human_hand PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-# 身份局人数不足：建局期可操作文案（含人数）并退出 1。
+# 身份局人数不足：建局期文案含当前值与可复制的 --players 建议，退出 1。
 add_test(NAME cli_identity_too_few_players
          COMMAND sh -c
-                 "out=$($<TARGET_FILE:tkw> new --mode identity --players 2 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '身份模式至少 4 人' && printf '%s' \"$out\" | grep -q '2' && [ $rc -eq 1 ]")
+                 "out=$($<TARGET_FILE:tkw> new --mode identity --players 2 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '身份模式人数须为' && printf '%s' \"$out\" | grep -q '当前 2' && printf '%s' \"$out\" | grep -q -- '请用 --players 4' && [ $rc -eq 1 ]")
 set_tests_properties(cli_identity_too_few_players PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
