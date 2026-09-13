@@ -483,6 +483,9 @@ namespace tkw
                 }
 
                 post_snapshot();
+                // MaxRounds 分支已自行输出平局与统计块；置位后不得再落入下方正常
+                // 终局块，否则乱斗同归于尽且越上限时统计块会被写第二遍。
+                bool drew = false;
                 while (!cancel_.load() && !tkw::game::session_over(ctx))
                 {
                     log_.push(tkw::cli::detail::turn_header_text(session_.state));
@@ -498,6 +501,7 @@ namespace tkw
                         {
                             log_.push("平局（达到最大回合数）");
                             append_battle_stats({});
+                            drew = true;
                         }
                         else
                             log_.push(tkw::cli::detail::format_turn_failure(
@@ -509,8 +513,8 @@ namespace tkw
                     if (!to_end)
                         break;
                 }
-                // 正常终局补结束行与统计块（取消/失败路径各自已有提示）。
-                if (!cancel_.load() && tkw::game::session_over(ctx))
+                // 正常终局补结束行与统计块（取消/失败/回合上限路径各自已有提示）。
+                if (!drew && !cancel_.load() && tkw::game::session_over(ctx))
                 {
                     log_.push("对局结束，胜者: " +
                               make_snapshot(session_, viewer_).winner_label);
