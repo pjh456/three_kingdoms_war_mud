@@ -87,7 +87,7 @@ namespace tkw
                     case DecisionKind::Response:
                         return decide_response(req);
                     case DecisionKind::Peach:
-                        return decide_first_id(req);
+                        return decide_peach(req);
                     case DecisionKind::Counter:
                         return decide_counter(req);
                     case DecisionKind::Trigger:
@@ -102,17 +102,56 @@ namespace tkw
                 }
 
                 /**
-                 * @brief 无懈窗口：自己的锦囊不自我抵消；锦囊目标含决策者
-                 *        （敌人锦囊冲我 / 我判定区的延时锦囊）时出第一张无懈；
-                 *        其余（敌人自益锦囊、第三方锦囊）不出。
+                 * @brief 无懈窗口：乱斗或无角色时回落旧口径（仅当锦囊冲自己
+                 *        时出）；身份局按阵营判断——使用者为空（判定窗）或为
+                 *        敌方时，敌方锦囊冲自己必出、冲友方时仅窗内首位保护者
+                 *        出；友方锦囊一律不出（不拆自家人的牌）。
                  * @note 候选已由适配器滤为无懈牌且窗口询问前保证非空；直调
-                 *       decide 时按不出处理空候选。
+                 *       decide 时按不出处理空候选。多目标窗（借刀等）与使用者
+                 *       角色未知时回落旧口径，避免误读奇偶链。
                  */
                 static DecisionChoice decide_counter(const DecisionRequest &req)
                 {
                     DecisionChoice out;
                     if (req.counter_user == req.actor)
                         return out;
+
+                    const AiView &view = req.view;
+                    if (view.mode != GameMode::Identity ||
+                        view.self_role == Role::None ||
+                        (!req.counter_user.empty() &&
+                         role_in_view(view, req.counter_user) == Role::None) ||
+                        req.counter_targets.size() != 1)
+                        return legacy_counter(req);
+                    if (req.options.empty())
+                        return out;
+
+                    const std::string &t = req.counter_targets.front();
+                    const bool hostile =
+                        req.counter_user.empty() ||
+                        is_enemy(view.self_role,
+                                 role_in_view(view, req.counter_user));
+                    const std::string start =
+                        req.counter_user.empty() ? t : req.counter_user;
+
+                    // 冲自己或友方：使用者敌对且本决策者是窗内首位保护者时
+                    // 出一张，保证同一无懈窗至多一张，避免目标本人与更早的
+                    // 保护者同窗各出一张导致偶数相抵
+                    if (hostile && protects(view, t) &&
+                        is_first_protector(view, t, start))
+                        out.instance_id = Option<std::string>::Some(
+                            req.options.front().instance_id);
+                    return out;
+                }
+
+                /**
+                 * @brief 旧无懈口径：锦囊目标含决策者时出第一张候选，其余不出。
+                 * @note 乱斗、身份局角色缺失、多目标窗与未知使用者时的回退，
+                 *       保持既有逐字节行为。
+                 */
+                static DecisionChoice legacy_counter(const DecisionRequest &req)
+                {
+                    DecisionChoice out;
                     if (std::find(req.counter_targets.begin(),
                                   req.counter_targets.end(), req.actor) ==
                         req.counter_targets.end())
@@ -122,6 +161,49 @@ namespace tkw
                     out.instance_id = Option<std::string>::Some(
                         req.options.front().instance_id);
                     return out;
+                }
+
+                /**
+                 * @brief 濒死救场：乱斗或无角色回落旧口径（有救场牌就出）；
+                 *        身份局按自身与濒死者的阵营决定是否救。
+                 * @note 濒死者身份公开，角色经既有观察取得，不新增隐藏信息面。
+                 */
+                static DecisionChoice decide_peach(const DecisionRequest &req)
+                {
+                    if (!should_save(req.view, req.dying))
+                        return DecisionChoice{};
+                    return decide_first_id(req);
+                }
+
+                /**
+                 * @brief 是否应救濒死者：乱斗/无角色恒救；身份局主公阵营救
+                 *        主公与忠臣，反贼只救反贼，内奸救自己并（有反贼存活时）
+                 *        救主公以维持制衡。
+                 * @param view 救者观察（含自身与其他角色）。
+                 * @param dying 濒死者 id。
+                 * @return true = 打出救场牌。
+                 */
+                static bool should_save(const AiView &view, const std::string &dying)
+                {
+                    if (view.mode != GameMode::Identity ||
+                        view.self_role == Role::None)
+                        return true;
+
+                    const Role r = role_in_view(view, dying);
+                    switch (view.self_role)
+                    {
+                    case Role::Lord:
+                    case Role::Loyalist:
+                        return r == Role::Lord || r == Role::Loyalist;
+                    case Role::Rebel:
+                        return r == Role::Rebel;
+                    case Role::Traitor:
+                        return dying == view.self ||
+                               (r == Role::Lord && any_rebel_alive(view));
+                    case Role::None:
+                        return true;
+                    }
+                    return true;
                 }
 
                 /**
@@ -240,7 +322,7 @@ namespace tkw
                     const std::vector<LegalAction> &opts)
                 {
                     out.instance_id = Option<std::string>::Some(id);
-                    out.targets = {lowest_hp_action(view, opts)};
+                    out.targets = {best_single_target(view, opts)};
                     return out;
                 }
 
@@ -315,6 +397,213 @@ namespace tkw
                     return 0;
                 }
 
+                // ── 身份局阵营判定 ──────────────────────────────────────────
+
+                /**
+                 * @brief 同阵营（对称）：主公/忠臣互认，反贼互认，内奸无友。
+                 * @param self 决策者角色；other 待判角色。
+                 * @return true = 同阵营；任一方 None 或内奸恒 false。
+                 */
+                static bool is_friend(Role self, Role other)
+                {
+                    switch (self)
+                    {
+                    case Role::Lord:
+                    case Role::Loyalist:
+                        return other == Role::Lord || other == Role::Loyalist;
+                    case Role::Rebel:
+                        return other == Role::Rebel;
+                    case Role::Traitor:
+                    case Role::None:
+                        return false;
+                    }
+                    return false;
+                }
+
+                /**
+                 * @brief 敌对（非对称）：主公/忠臣视反贼与内奸为敌，反贼视
+                 *        主公与忠臣为敌，内奸只视反贼为敌（需借主公制衡反贼）。
+                 * @return true = 敌对；None 恒 false。
+                 */
+                static bool is_enemy(Role self, Role other)
+                {
+                    switch (self)
+                    {
+                    case Role::Lord:
+                    case Role::Loyalist:
+                        return other == Role::Rebel || other == Role::Traitor;
+                    case Role::Rebel:
+                        return other == Role::Lord || other == Role::Loyalist;
+                    case Role::Traitor:
+                        return other == Role::Rebel;
+                    case Role::None:
+                        return false;
+                    }
+                    return false;
+                }
+
+                /**
+                 * @brief 是否仍有存活反贼（内奸保主制衡的开关）。
+                 * @note 观察的 others 只含存活者，已阵亡者不在此列。
+                 */
+                static bool any_rebel_alive(const AiView &view)
+                {
+                    if (view.self_role == Role::Rebel)
+                        return true;
+                    for (const auto &e : view.others)
+                        if (e.role == Role::Rebel)
+                            return true;
+                    return false;
+                }
+
+                /**
+                 * @brief 是否应保护/避让该目标：自己、同阵营友方；内奸在有反贼
+                 *        存活时额外包含主公。
+                 * @note 乱斗/无角色只保护自己，其余恒 false。
+                 */
+                static bool protects(const AiView &view, const std::string &id)
+                {
+                    if (id == view.self)
+                        return true;
+                    if (view.mode != GameMode::Identity ||
+                        view.self_role == Role::None)
+                        return false;
+
+                    const Role r = role_in_view(view, id);
+                    if (is_friend(view.self_role, r))
+                        return true;
+                    return view.self_role == Role::Traitor && r == Role::Lord &&
+                           any_rebel_alive(view);
+                }
+
+                /** @brief 避让档：应保护目标记 1，其余记 0（小者优先）。 */
+                static int avoid_rank(const AiView &view, const std::string &id)
+                {
+                    return protects(view, id) ? 1 : 0;
+                }
+
+                /**
+                 * @brief 复刻结算侧的座位序（从 start 起环绕），仅用观察中的
+                 *        自身与其他存活角色的座位号。
+                 * @note 与 EntityManager::order_from 同口径（按座位稳定排序后
+                 *       旋转到 start）；start 不在观察中时保持原序。
+                 */
+                static std::vector<std::string> window_order(
+                    const AiView &view, const std::string &start)
+                {
+                    std::vector<std::pair<int, std::string>> tmp;
+                    tmp.reserve(view.others.size() + 1);
+                    tmp.emplace_back(view.self_seat, view.self);
+                    for (const auto &e : view.others)
+                        tmp.emplace_back(e.seat, e.id);
+                    std::stable_sort(
+                        tmp.begin(), tmp.end(),
+                        [](const auto &a, const auto &b)
+                        { return a.first < b.first; });
+                    std::vector<std::string> ids;
+                    ids.reserve(tmp.size());
+                    for (auto &p : tmp)
+                        ids.push_back(std::move(p.second));
+
+                    const auto it = std::find(ids.begin(), ids.end(), start);
+                    if (it != ids.end())
+                        std::rotate(ids.begin(), it, ids.end());
+                    return ids;
+                }
+
+                /**
+                 * @brief candidate 是否是 target 的保护者：本人、同阵营友方，
+                 *        或（有反贼存活时）保主的内奸。
+                 */
+                static bool is_protector_of(
+                    const AiView &view, const std::string &candidate,
+                    const std::string &target)
+                {
+                    if (candidate == target)
+                        return true;
+                    if (view.mode != GameMode::Identity)
+                        return false;
+
+                    const Role cr = role_in_view(view, candidate);
+                    const Role tr = role_in_view(view, target);
+                    if (is_friend(cr, tr))
+                        return true;
+                    return cr == Role::Traitor && tr == Role::Lord &&
+                           any_rebel_alive(view);
+                }
+
+                /**
+                 * @brief 决策者是否是 target 在窗口序中的首位保护者：只有首位
+                 *        出手，保证同一无懈窗至多一张，不会多友同窗偶数相抵。
+                 */
+                static bool is_first_protector(
+                    const AiView &view, const std::string &target,
+                    const std::string &start)
+                {
+                    for (const auto &c : window_order(view, start))
+                        if (is_protector_of(view, c, target))
+                            return c == view.self;
+                    return false;
+                }
+
+                // ── 有害出牌组过滤 ────────────────────────────────────────
+
+                /**
+                 * @brief 是否是对单一目标有害的效果：伤害/决斗/弃牌/顺牌与
+                 *        延时锦囊；自益（摸牌/回复）、群体与借刀不算。
+                 */
+                static bool is_harmful_def(const card::CardDef &def)
+                {
+                    if (def.effect.is_none())
+                        return def.judge.is_some();
+
+                    switch (def.effect.unwrap().kind)
+                    {
+                    case card::CardEffectKind::Damage:
+                    case card::CardEffectKind::Duel:
+                    case card::CardEffectKind::DiscardTarget:
+                    case card::CardEffectKind::Steal:
+                        return true;
+                    case card::CardEffectKind::Jink:
+                    case card::CardEffectKind::Heal:
+                    case card::CardEffectKind::Draw:
+                    case card::CardEffectKind::AoeDamage:
+                    case card::CardEffectKind::RevealPick:
+                    case card::CardEffectKind::BorrowedSword:
+                        return false;
+                    }
+                    return false;
+                }
+
+                /**
+                 * @brief 组内动作是否全部只打应保护目标：身份局下用于整组跳过
+                 *        （无目标动作与对自己使用的牌不参与过滤，直接判否）。
+                 * @note 乱斗/无角色恒 false，保证乱斗逐字节不变。
+                 */
+                static bool group_avoids_all_targets(
+                    const DecisionRequest &req, const std::vector<LegalAction> &opts)
+                {
+                    if (req.view.mode != GameMode::Identity ||
+                        req.view.self_role == Role::None)
+                        return false;
+
+                    for (const auto &a : opts)
+                    {
+                        if (a.targets.empty())
+                            return false;
+                        for (const auto &t : a.targets)
+                        {
+                            // 对自己用的牌（如闪电置于自身判定区）由决策者自担，
+                            // 不属避让友方范畴
+                            if (t == req.view.self)
+                                return false;
+                            if (!protects(req.view, t))
+                                return false;
+                        }
+                    }
+                    return true;
+                }
+
                 /**
                  * @brief 阵营目标优先度：身份局按决策者阵营给敌对目标降档，
                  *        数值小者优先；乱斗或无角色时全目标恒 0（退回最低体力）。
@@ -365,6 +654,41 @@ namespace tkw
                         if (rank < best_rank || (rank == best_rank && h < best_hp))
                         {
                             best = t;
+                            best_rank = rank;
+                            best_hp = h;
+                        }
+                    }
+                    return best;
+                }
+
+                /**
+                 * @brief 单目标选择：身份局先避开应保护目标（同阵营友方与
+                 *        内奸保主），再按阵营优先度、体力最低（同档同血取列表序）。
+                 * @note 乱斗/无角色时避让档恒 0，比较器退化为原「阵营优先度 +
+                 *       最低体力」；丈八 pair 的组内目标不经过本函数，保持既有
+                 *       集火/最低血口径。
+                 */
+                static std::string best_single_target(
+                    const AiView &view, const std::vector<LegalAction> &opts)
+                {
+                    const std::string &first = opts.front().targets.front();
+                    std::string best = first;
+                    int best_avoid = avoid_rank(view, first);
+                    int best_rank = target_priority(view, first);
+                    int best_hp = hp_of(view, first);
+                    for (const auto &a : opts)
+                    {
+                        const std::string &t = a.targets.front();
+                        const int avoid = avoid_rank(view, t);
+                        const int rank = target_priority(view, t);
+                        const int h = hp_of(view, t);
+                        if (avoid < best_avoid ||
+                            (avoid == best_avoid && rank < best_rank) ||
+                            (avoid == best_avoid && rank == best_rank &&
+                             h < best_hp))
+                        {
+                            best = t;
+                            best_avoid = avoid;
                             best_rank = rank;
                             best_hp = h;
                         }

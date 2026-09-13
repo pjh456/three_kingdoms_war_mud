@@ -7,7 +7,9 @@
  *       无懈不抵消自己的锦囊；敌人锦囊冲自己或自己判定区有延时锦囊时出第一张，
  *       其余不出；武器效果按代价可付性决定是否发动。弃牌按牌价值升序取（先弃
  *       最低价值，同价值保持手牌序）。响应窗口取第一张真响应牌，杀响应无真杀
- *       时用两张手牌当杀（丈八蛇矛）。
+ *       时用两张手牌当杀（丈八蛇矛）。身份局在以上基础上叠加阵营意识：无懈只挡
+ *       敌方冲自己/友方、不拆友方锦囊，救桃按阵营取舍，出牌避开同阵营友方
+ *       （内奸另在有反贼时避让主公）；乱斗与无角色时全部回落上述旧口径。
  */
 
 #ifndef INCLUDE_TKW_GAME_SIMPLE_HPP
@@ -93,6 +95,12 @@ namespace tkw
                         const card::Card &c = opts.front().card;
                         const card::CardDef *def = find_def(req, c.def_id);
                         if (!def)
+                            continue;
+
+                        // 身份局避让：有害组全部候选只打友方时整组跳过，
+                        // 继续看下一组；乱斗/无角色该谓词恒 false，行为不变
+                        if (is_harmful_def(*def) &&
+                            group_avoids_all_targets(req, opts))
                             continue;
 
                         // 满血自疗：跳过本组，继续看下一组（档位分歧，留派生）

@@ -168,6 +168,22 @@ TEST_CASE("aggressive: identity targets the hostile camp")
     CHECK(chosen.unwrap().targets == std::vector<std::string>{"c"});
 }
 
+TEST_CASE("aggressive: identity passes when only allies are reachable")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Rebel},
+               {"b", tkw::game::Role::Rebel}};
+
+    tkw::game::AggressiveAI ai;
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    // 有害组全部候选只打友方：整组跳过，无牌可出即结束出牌阶段
+    CHECK(ai.choose_play(g.ctx, turn).is_none());
+}
+
 TEST_CASE("aggressive: pick_card_from_target cannot identify hidden hand cards")
 {
     TestGame g("deck");

@@ -1239,6 +1239,217 @@ TEST_CASE("ai: simple counter plays on a delayed trick judged on self")
     CHECK(ai.play_counter(g.ctx, "a", "", {"b"}, "").is_none());
 }
 
+TEST_CASE("ai: identity counter protects self from an enemy trick")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.give("a", "wuxie", "w#0");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Lord},
+               {"b", tkw::game::Role::Loyalist},
+               {"c", tkw::game::Role::Rebel}};
+
+    tkw::game::SimpleAI ai;
+    const auto chosen = ai.play_counter(g.ctx, "a", "c", {"a"}, "");
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap() == "w#0");
+}
+
+TEST_CASE("ai: identity counter protects the first ally in window order")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.give("a", "wuxie", "w#a");
+    g.give("b", "wuxie", "w#b");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Lord},
+               {"b", tkw::game::Role::Loyalist},
+               {"c", tkw::game::Role::Rebel}};
+
+    tkw::game::SimpleAI ai;
+    // 窗口序 c→a→b：a 是 b 的首位保护者，出无懈；目标本人 b 不重复出
+    const auto first = ai.play_counter(g.ctx, "a", "c", {"b"}, "");
+    REQUIRE(first.is_some());
+    CHECK(first.unwrap() == "w#a");
+    CHECK(ai.play_counter(g.ctx, "b", "c", {"b"}, "").is_none());
+}
+
+TEST_CASE("ai: identity counter declines an ally trick targeting self")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "wuxie", "w#0");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Lord},
+               {"b", tkw::game::Role::Loyalist}};
+
+    tkw::game::SimpleAI ai;
+    // 友方对我用锦囊不自我抵消（旧口径锦囊冲自己就出）
+    CHECK(ai.play_counter(g.ctx, "a", "b", {"a"}, "").is_none());
+}
+
+TEST_CASE("ai: identity counter handles the judgement window by camp")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.give("a", "wuxie", "w#a");
+    g.give("b", "wuxie", "w#b");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Lord},
+               {"b", tkw::game::Role::Loyalist},
+               {"c", tkw::game::Role::Rebel}};
+
+    tkw::game::SimpleAI ai;
+    // 判定窗口（使用者空串哨兵）：被判定者 b 自己出；第三方 a 不代出
+    const auto judged = ai.play_counter(g.ctx, "b", "", {"b"}, "shandian");
+    REQUIRE(judged.is_some());
+    CHECK(judged.unwrap() == "w#b");
+    CHECK(ai.play_counter(g.ctx, "a", "", {"b"}, "shandian").is_none());
+}
+
+TEST_CASE("ai: identity counter declines an enemy self-benefit trick")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.give("a", "wuxie", "w#0");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Lord},
+               {"b", tkw::game::Role::Loyalist},
+               {"c", tkw::game::Role::Rebel}};
+
+    tkw::game::SimpleAI ai;
+    // 敌方自益锦囊窗口目标 = 使用者本人：不无懈（另案协调口径）
+    CHECK(ai.play_counter(g.ctx, "a", "c", {"c"}, "wuzhong").is_none());
+}
+
+TEST_CASE("ai: identity rescue saves only own camp")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "tao", "t#0");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Lord},
+               {"b", tkw::game::Role::Rebel}};
+
+    tkw::game::SimpleAI ai;
+    CHECK(ai.play_peach(g.ctx, "a", "b").is_none());  // 不救反贼
+    g.roles["b"] = tkw::game::Role::Loyalist;
+    const auto saved = ai.play_peach(g.ctx, "a", "b");
+    REQUIRE(saved.is_some());
+    CHECK(saved.unwrap() == "t#0");
+}
+
+TEST_CASE("ai: identity rebel rescue spares the lord")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "tao", "t#0");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Rebel},
+               {"b", tkw::game::Role::Lord}};
+
+    tkw::game::SimpleAI ai;
+    CHECK(ai.play_peach(g.ctx, "a", "b").is_none());  // 不救主公
+    g.roles["b"] = tkw::game::Role::Rebel;
+    CHECK(ai.play_peach(g.ctx, "a", "b").is_some());
+}
+
+TEST_CASE("ai: identity traitor saves the lord while rebels live")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.give("a", "tao", "t#0");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Traitor},
+               {"b", tkw::game::Role::Lord},
+               {"c", tkw::game::Role::Rebel}};
+
+    tkw::game::SimpleAI ai;
+    CHECK(ai.play_peach(g.ctx, "a", "b").is_some());  // 有反贼在：救主公制衡
+    g.entities.remove("c");
+    CHECK(ai.play_peach(g.ctx, "a", "b").is_none());  // 反贼尽灭：不救
+}
+
+TEST_CASE("ai: brawl rescue keeps first card")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "tao", "t#0");
+
+    tkw::game::SimpleAI ai;
+    const auto saved = ai.play_peach(g.ctx, "a", "b");
+    REQUIRE(saved.is_some());
+    CHECK(saved.unwrap() == "t#0");
+}
+
+TEST_CASE("ai: identity rebel passes when only allies are reachable")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Rebel},
+               {"b", tkw::game::Role::Rebel}};
+
+    tkw::game::SimpleAI ai;
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    CHECK(ai.choose_play(g.ctx, turn).is_none());
+}
+
+TEST_CASE("ai: identity lord camp passes when only loyalists are reachable")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Lord},
+               {"b", tkw::game::Role::Loyalist}};
+
+    tkw::game::SimpleAI ai;
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    CHECK(ai.choose_play(g.ctx, turn).is_none());
+}
+
+TEST_CASE("ai: identity traitor spares the lord while a rebel lives")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.give("a", "sha", "s#1");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Traitor},
+               {"b", tkw::game::Role::Lord},
+               {"c", tkw::game::Role::Rebel}};
+
+    tkw::game::SimpleAI ai;
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    const auto sparing = ai.choose_play(g.ctx, turn);
+    REQUIRE(sparing.is_some());
+    CHECK(sparing.unwrap().targets == std::vector<std::string>{"c"});
+
+    g.entities.remove("c");
+    const auto striking = ai.choose_play(g.ctx, turn);
+    REQUIRE(striking.is_some());
+    CHECK(striking.unwrap().targets == std::vector<std::string>{"b"});
+}
+
 TEST_CASE("ai: human decider counter window renders context and reads play")
 {
     TestGame g("deck");

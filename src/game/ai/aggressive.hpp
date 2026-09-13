@@ -7,7 +7,9 @@
  *       kPlayPriority* 常量，同分取 legal 序靠前者）；选牌分支
  *       （PickCard/PickRevealed）取最高牌价值而非首张；PickCard 的对手手牌为
  *       无身份占位槽，仅按期望常量参与比较，不读取真实身份。其余六个分支
- *       （响应/救桃/无懈/触发/弃牌/丈八组目标）与贪心档同逻辑。无随机、无隐藏
+ *       （响应/救桃/无懈/触发/弃牌/丈八组目标）与贪心档同逻辑。身份局叠加阵营
+ *       意识：出牌跳过只打友方的有害组，无懈只挡敌方冲自己/友方，救桃按阵营
+ *       取舍；乱斗与无角色时全部回落旧口径。无随机、无隐藏
  *       状态，确定性可回放。
  */
 
@@ -168,6 +170,12 @@ namespace tkw
                     const card::CardDef *def =
                         find_def(req, opts.front().card.def_id);
                     if (!def)
+                        return kPlayPrioritySkip;
+
+                    // 身份局避让：有害组全部候选只打友方时跳过该组；
+                    // 乱斗/无角色该谓词恒 false，行为不变
+                    if (is_harmful_def(*def) &&
+                        group_avoids_all_targets(req, opts))
                         return kPlayPrioritySkip;
                     return play_priority(req, *def);
                 }
