@@ -418,6 +418,8 @@ namespace tkw
          * @brief 执行 player 的一个完整回合：判定 → 摸2 → 出牌 → 弃牌。
          * @note 各阶段见 run_*_phase；角色在任意阶段死亡即终止本回合（死亡实体
          *       已被移除，阶段函数内均重新 find 以免悬垂指针）。
+         * @note 失败时不会回滚已落子的部分（判定/摸牌/出牌可能已结算），调用方
+         *       须消费该回合（推进行程），不得以同一角色重入。
          */
         inline TurnResult<void> execute_turn(
             GameContext &ctx,

@@ -398,13 +398,13 @@ set_tests_properties(cli_repl_human_decision_help PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # 弃牌 EOF：窗口吃 quit 非法后 EOF，打印按放弃处理，引擎报弃牌不足并给
-# 「重新 new 开局」恢复引导（失败回合不推进，不可原地重试）。
+# 「可继续推进」恢复引导（失败回合已被引擎消费并推进，下次 step 换角色）。
 add_test(NAME cli_repl_human_discard_eof_recovery
          COMMAND sh -c
                  "out=$(printf 'new --players 2 --seed 1\\nstep\\npass\\nquit\\n' | $<TARGET_FILE:tkw> --human P0 repl --autosave '' 2>&1); \
                   printf '%s' \"$out\" | grep -q '弃牌数量不足' && \
                   printf '%s' \"$out\" | grep -q '输入已结束，按放弃处理' && \
-                  printf '%s' \"$out\" | grep -q '重新 new 开局'")
+                  printf '%s' \"$out\" | grep -q '可继续推进'")
 set_tests_properties(cli_repl_human_discard_eof_recovery PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 

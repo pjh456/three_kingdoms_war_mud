@@ -342,12 +342,12 @@ namespace tkw
              * @brief 回合失败 → 带中文根因标签的用户可见文案。
              * @param code  step/run 循环返回的错误类别。
              * @param root  根因出参写回的回合错误；仅 `TurnFailed` 有效。
-             * @param actor 失败回合的角色 id（失败时未推进，即当回合角色）。
+             * @param actor 失败回合的角色 id（调用方在推进前捕获）。
              * @return 「回合执行失败（角色 <actor>，<标签>）」；`NoPlayers`
              *         表示会话角色已不存在，标签回落「角色不存在」。
              * @note 仅 `TurnFailed` 消费 `root`；`MaxRounds` 由调用方映射为平局，
-             *       不进入本函数。弃牌数量不足时追加「重新 new 开局」引导：失败
-             *       回合可能已部分结算，会话不推进，不可原地重试。
+             *       不进入本函数。`TurnFailed` 追加恢复引导：失败回合已部分结算，
+             *       但引擎已消费该回合并推进，可继续 step/run。
              */
             inline std::string format_turn_failure(
                 tkw::game::LoopError code, tkw::game::TurnError root,
@@ -358,9 +358,8 @@ namespace tkw
                 std::string text =
                     "回合执行失败（角色 " + actor + "，" +
                     std::string(turn_error_label_zh(root));
-                if (code == tkw::game::LoopError::TurnFailed &&
-                    root == tkw::game::TurnError::DiscardInsufficient)
-                    text += "；本回合未完成，可重新 new 开局";
+                if (code == tkw::game::LoopError::TurnFailed)
+                    text += "；本回合已终止并跳过（已部分结算），可继续推进";
                 text += "）";
                 return text;
             }
@@ -502,6 +501,8 @@ namespace tkw
              * @param session 会话进度，原地推进。
              * @param root    非空时透传给 step_session，在回合失败时写回根因。
              * @param show_turn_headers 为真时每个回合执行前打印回合头（仅过程可见路径）。
+             * @param failed_actor 非空时每轮调用前写入当前角色；回合失败时留下的即
+             *        失败角色（失败会推进会话，调用方须在推进前捕获）。
              * @return Ok(Finished) 会话结束；Ok(MaxRounds) 达回合上限平局；
              *         Err 其它 LoopError 原样上抛。
              * @note 只驱动循环，不订阅事件；回合头是唯一可选的打印（默认关闭）。
@@ -510,12 +511,15 @@ namespace tkw
                 tkw::game::GameContext &ctx, tkw::game::DecisionSource &ai,
                 tkw::game::GameSession &session,
                 tkw::game::TurnError *root = nullptr,
-                bool show_turn_headers = false)
+                bool show_turn_headers = false,
+                std::string *failed_actor = nullptr)
             {
                 while (!tkw::game::session_over(ctx))
                 {
                     if (show_turn_headers)
                         print_turn_header(session);
+                    if (failed_actor)
+                        *failed_actor = session.current;
                     auto r = tkw::game::step_session(ctx, ai, session, root);
                     if (r.is_ok())
                         continue;
@@ -685,6 +689,7 @@ namespace tkw
                 if (verbose)
                     print_turn_header(s.state);
                 tkw::game::TurnError root = tkw::game::TurnError::PlayRejected;
+                const std::string actor = s.state.current;  // 失败会推进，须先捕获
                 auto r = tkw::game::step_session(ctx, *ai, s.state, &root);
                 if (r.is_err())
                 {
@@ -694,7 +699,7 @@ namespace tkw
                         return CliResult<void>::Ok();
                     }
                     return CliFailure{CliError(
-                        format_turn_failure(r.unwrap_err(), root, s.state.current))};
+                        format_turn_failure(r.unwrap_err(), root, actor))};
                 }
                 if (tkw::game::session_over(ctx))
                 {
@@ -718,10 +723,12 @@ namespace tkw
                 // 进入循环前判定：true 表示本次命令至少会推进（用于末尾统计门控）。
                 const bool advanced = !tkw::game::session_over(ctx);
                 tkw::game::TurnError root = tkw::game::TurnError::PlayRejected;
-                auto rr = run_to_completion(ctx, *ai, s.state, &root, verbose);
+                std::string actor = s.state.current;  // 出参每轮更新为失败角色
+                auto rr =
+                    run_to_completion(ctx, *ai, s.state, &root, verbose, &actor);
                 if (rr.is_err())
                     return CliFailure{CliError(
-                        format_turn_failure(rr.unwrap_err(), root, s.state.current))};
+                        format_turn_failure(rr.unwrap_err(), root, actor))};
                 if (rr.unwrap() == RunOutcome::MaxRounds)
                 {
                     print_max_rounds_draw(s.stats, *s.game, s.state.turns);

@@ -234,6 +234,9 @@ namespace tkw
          * @param root 非空时仅在 `TurnFailed` 分支写入回合根因；成功、`NoPlayers`
          *             与 `MaxRounds` 路径不写，由调用方按 code 分流。
          * @note 存档恢复后直接调用即可续跑；回合失败/超上限返回 Err。
+         *       回合失败不等于状态未变：`execute_turn` 各阶段已就地落子且不可回滚，
+         *       因此失败回合同样被消费并推进（下一个角色 + 回合数 +1），仅在推进后
+         *       返回 `TurnFailed`，避免再次调用重跑同一角色、重放本回合效果。
          */
         inline LoopResult<void> step_session(
             GameContext &ctx, DecisionSource &ai, GameSession &session,
@@ -245,19 +248,21 @@ namespace tkw
             const int seat = actor.unwrap()->get_seat();
 
             auto r = execute_turn(ctx, ai, session.current);
-            if (r.is_err())
-            {
-                if (root)
-                    *root = r.unwrap_err();
-                return LoopResult<void>::Err(LoopError::TurnFailed);
-            }
+            const bool failed = r.is_err();
+            if (failed && root)
+                *root = r.unwrap_err();
 
+            // 失败回合已部分结算且不可回滚：无论成败都消费该回合并推进到下一角色，
+            // 避免再次 step 重跑同一角色、重放判定/摸牌/出牌效果。
             if (ctx.entities->find(session.current).is_some())
                 session.current = next_player(ctx, session.current);
             else
                 session.current = next_after_seat(ctx, seat);  // 回合中死亡
 
             ++session.turns;
+
+            if (failed)
+                return LoopResult<void>::Err(LoopError::TurnFailed);
 
             // 终局判定先于回合上限：本回合已终局则上限不再适用。乱斗逐字保留
             // 「唯一存活」表达式（0 存活且越上限仍报 MaxRounds）；身份局用

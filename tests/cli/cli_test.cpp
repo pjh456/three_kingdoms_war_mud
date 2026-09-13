@@ -205,6 +205,9 @@ TEST_CASE("cli: human session defaults event log on")
     // 真人 step 会进入决策窗口；无输入时以回合失败收场，但摸牌事件已可见。
     auto stepped = repl.run("step");
     CHECK(stepped.out.find("[摸牌]") != std::string::npos);
+    // 失败回合被消费：推进到下一角色并计入回合数，重入不再重跑 P0。
+    CHECK(repl.session.state.current == "P1");
+    CHECK(repl.session.state.turns == 1);
 
     // 启动 --no-verbose 是显式选择，能关闭真人默认。
     Repl quiet;
@@ -1184,13 +1187,13 @@ TEST_CASE("cli: resource and loop failures render Chinese reason labels")
           "判定时牌堆已空");
 
     // 合成文案：根因经出参渲染进「回合执行失败」；NoPlayers 回落角色不存在。
-    // 弃牌数量不足另给恢复引导（失败回合已部分结算，不可原地重试）。
+    // TurnFailed 追加恢复引导：失败回合可能已部分结算，但已被引擎消费并推进。
     CHECK(tkw::cli::detail::format_turn_failure(
               LoopError::TurnFailed, TurnError::DiscardInsufficient, "P0") ==
-          "回合执行失败（角色 P0，弃牌数量不足；本回合未完成，可重新 new 开局）");
+          "回合执行失败（角色 P0，弃牌数量不足；本回合已终止并跳过（已部分结算），可继续推进）");
     CHECK(tkw::cli::detail::format_turn_failure(
               LoopError::TurnFailed, TurnError::PlayRejected, "P0") ==
-          "回合执行失败（角色 P0，出牌被拒绝）");
+          "回合执行失败（角色 P0，出牌被拒绝；本回合已终止并跳过（已部分结算），可继续推进）");
     CHECK(tkw::cli::detail::format_turn_failure(
               LoopError::NoPlayers, TurnError::PlayRejected, "P1") ==
           "回合执行失败（角色 P1，角色不存在）");

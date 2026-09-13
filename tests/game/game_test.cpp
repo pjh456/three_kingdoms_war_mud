@@ -2644,7 +2644,70 @@ TEST_CASE("game: step_session writes the turn root cause to the optional out par
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == LoopError::TurnFailed);
     CHECK(root == TurnError::CardNotInHand);
-    CHECK(session.current == "a");  // 失败回合不推进
+    CHECK(session.current == "b");  // 失败回合被消费，推进到下一角色
+    CHECK(session.turns == 1);
+}
+
+TEST_CASE("game: failed turn is consumed so re-entry does not re-draw")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 1);  // 体力 1 → 手牌上限 1
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+    for (int i = 0; i < 4; ++i)
+        g.cards.add_to_draw(Card{"d#" + std::to_string(i), "sha", Suit::Spade, 7});
+
+    TestDecider decider;
+    decider.decline_discards = true;  // 弃牌阶段返回空 → DiscardInsufficient
+
+    GameSession session;
+    session.current = "a";
+    session.started = true;
+
+    auto r1 = step_session(g.ctx, decider, session);
+    REQUIRE(r1.is_err());
+    CHECK(r1.unwrap_err() == LoopError::TurnFailed);
+    CHECK(g.cards.hand_size("a") == 3);  // 摸牌阶段已部分结算（1 张原有 + 摸 2）
+    CHECK(session.current == "b");       // 消费：轮到下一角色
+    CHECK(session.turns == 1);
+
+    auto r2 = step_session(g.ctx, decider, session);
+    REQUIRE(r2.is_ok());
+    CHECK(g.cards.hand_size("a") == 3);  // 不再为 a 重复摸牌
+    CHECK(session.current == "a");       // b 之后回到 a
+    CHECK(session.turns == 2);
+}
+
+TEST_CASE("game: failed turn is consumed so re-entry does not replay a play")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 1);
+    auto *b = g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+    for (int i = 0; i < 4; ++i)
+        g.cards.add_to_draw(Card{"d#" + std::to_string(i), "sha", Suit::Spade, 7});
+
+    TestDecider decider;
+    decider.replay_plays = true;
+    decider.plays = {PlayAction{"s#1", {"b"}}};
+    decider.decline_discards = true;
+
+    GameSession session;
+    session.current = "a";
+    session.started = true;
+
+    auto r1 = step_session(g.ctx, decider, session);
+    REQUIRE(r1.is_err());
+    CHECK(b->get_hp() == 3);         // 出牌已生效（部分结算）
+    CHECK(session.current == "b");   // 失败回合被消费
+    CHECK(session.turns == 1);
+
+    auto r2 = step_session(g.ctx, decider, session);
+    REQUIRE(r2.is_ok());
+    CHECK(b->get_hp() == 3);             // 不再被 a 重放杀
+    CHECK(g.cards.hand_size("a") == 2);  // 也不再为 a 重放摸牌
+    CHECK(session.current == "a");
+    CHECK(session.turns == 2);
 }
 
 TEST_CASE("game: step_session leaves the root out param untouched on success")

@@ -100,6 +100,8 @@ namespace tkw
             std::size_t revealed_calls = 0; /**< 亮牌选择已询问次数（脚本计数） */
             std::size_t valid_revealed_first = 0; /**< 前 N 次亮牌选择先返回合法牌，其后按 bogus_revealed 处理 */
             bool decline_discards = false; /**< 弃牌选择返回空（雌雄二选一的放弃分支） */
+            bool replay_plays = false; /**< 出牌恒请求 plays.front()，且该牌仍在手牌时重复返回
+                                            （模拟无状态决策源在失败重入后重放同一出牌） */
             std::size_t revealed_pick = 0; /**< pick_from_revealed 返回的候选下标（越界回落首张） */
             std::string response_id;  /**< 非空时响应窗口固定打出该牌 */
             std::string response_second_id; /**< 非空时与 response_id 成对（两张当杀） */
@@ -215,8 +217,17 @@ namespace tkw
             }
 
             Option<PlayAction> choose_play(
-                const ReadOnlyContext &, const TurnContext &) override
+                const ReadOnlyContext &ctx, const TurnContext &turn) override
             {
+                if (replay_plays)
+                {
+                    if (plays.empty())
+                        return Option<PlayAction>::None();
+                    for (const auto &c : ctx.cards->hand(turn.player))
+                        if (c.instance_id == plays.front().instance_id)
+                            return Option<PlayAction>::Some(plays.front());
+                    return Option<PlayAction>::None();
+                }
                 if (play_cursor >= plays.size())
                     return Option<PlayAction>::None();
                 return Option<PlayAction>::Some(plays[play_cursor++]);
