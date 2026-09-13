@@ -185,17 +185,24 @@ namespace tkw
                        triggers.end();
             }
 
-            Option<card::Card> pick_card_from_target(
+            Option<TargetPick> pick_card_from_target(
                 const ReadOnlyContext &ctx, const std::string &,
                 const std::string &target, PickCardScope) override
             {
+                // 测试逃逸口：直接回传具体手牌（card 非空），不消费 rng，保持既有
+                // game 用例确定性；生产适配器对隐藏手牌只回槽位，随机暗抽见
+                // resolve_target_pick 的独立用例。
                 if (bogus_pick)
-                    return Option<card::Card>::Some(
-                        Card{"ghost#0", "sha", tkw::card::Suit::Spade, 7});
+                    return Option<TargetPick>::Some(
+                        TargetPick{tkw::card::Zone::Hand, 0,
+                                   Option<card::Card>::Some(Card{
+                                       "ghost#0", "sha", tkw::card::Suit::Spade, 7})});
                 const auto &hand = ctx.cards->hand(target);
                 if (hand.empty())
-                    return Option<card::Card>::None();
-                return Option<card::Card>::Some(hand.front());
+                    return Option<TargetPick>::None();
+                return Option<TargetPick>::Some(
+                    TargetPick{tkw::card::Zone::Hand, 0,
+                               Option<card::Card>::Some(hand.front())});
             }
 
             Option<card::Card> pick_from_revealed(

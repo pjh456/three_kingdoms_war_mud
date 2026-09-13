@@ -8,6 +8,7 @@
 #ifndef INCLUDE_TKW_GAME_DECISION_HPP
 #define INCLUDE_TKW_GAME_DECISION_HPP
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -69,6 +70,21 @@ namespace tkw
         };
 
         /**
+         * @brief 目标区域选牌结果：明置牌携带身份；隐藏手牌由引擎随机暗抽。
+         * @note zone/index 始终是候选槽位坐标；card 仅在明置区（装备/判定）非空。
+         *       对手手牌属隐藏信息，不进入决策面身份，引擎按 index 槽位结合当前
+         *       手牌快照暗抽（见 resolve_target_pick）。
+         */
+        struct TargetPick
+        {
+            card::Zone zone = card::Zone::Hand; /**< 选中牌所在区域 */
+            std::size_t index = 0;              /**< 候选槽位（无 rng 时确定性回落） */
+            Option<card::Card> card = Option<card::Card>::None(); /**< 明置牌；隐藏手牌为 None */
+
+            bool operator==(const TargetPick &) const = default;
+        };
+
+        /**
          * @class DecisionSource
          * @brief 结算/回合期间的玩家决策接口。
          * @note 只读：收到的 ReadOnlyContext 只聚合 const 容器指针，决策源
@@ -96,10 +112,10 @@ namespace tkw
              * @brief 从目标区域选一张牌（过河拆桥弃置 / 顺手牵羊获得 / 寒冰剑弃置）。
              * @param scope 候选范围：顺手牵羊/过河拆桥取手牌+装备+判定区；寒冰剑
              *              仅取手牌+装备区（判定区延时锦囊不可取）。
-             * @return 选中的牌；None = 放弃/无可选（结算器按规则处理，不再
-             *         依赖默认构造的牌）。
+             * @return 选中的区域与槽位；明置牌（装备/判定）直接携带 card，隐藏
+             *         手牌 card == None，由引擎按槽位随机暗抽；None = 放弃/无可选。
              */
-            virtual Option<card::Card> pick_card_from_target(
+            virtual Option<TargetPick> pick_card_from_target(
                 const ReadOnlyContext &ctx,
                 const std::string &source,
                 const std::string &target,

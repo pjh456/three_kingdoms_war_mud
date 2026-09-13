@@ -21,6 +21,7 @@ namespace tkw
             inline constexpr int kCardValueOffense = 40;       /**< 伤害/拆/决斗 */
             inline constexpr int kCardValueJink = 35;          /**< 闪 */
             inline constexpr int kCardValueBorrowedSword = 35; /**< 借刀杀人 */
+            inline constexpr int kCardValueHiddenHand = 35;    /**< 隐藏手牌期望价值（无身份，取中档） */
             inline constexpr int kCardValueEquipment = 30;     /**< 装备 */
             inline constexpr int kCardValueLow = 10;           /**< 无主动效果/未知效果兜底 */
 

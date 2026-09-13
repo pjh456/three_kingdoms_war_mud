@@ -946,6 +946,38 @@ TEST_CASE("game: shunshou steals target card to hand")
     CHECK(g.cards.hand("a")[0].def_id == "tao");
 }
 
+TEST_CASE("game: hidden hand draw is rng-driven and reproducible")
+{
+    // 生产适配器（SimpleAI）对隐藏手牌只回槽位，真实牌由引擎 rng 暗抽；
+    // TestDecider 的逃逸口不消费 rng，故随机路径需覆盖在引擎层。
+    auto remaining_after_guohe = [](std::uint32_t seed)
+    {
+        TestGame g("deck", seed);
+        g.add_player("a", 0, 4);
+        g.add_player("b", 1, 4);
+        g.give("a", "guohe", "g#0");
+        g.give("b", "shan", "s#1");  // 手牌首张
+        g.give("b", "tao", "t#2");   // 手牌次张
+        tkw::game::SimpleAI ai;
+        const auto played = g.cards.hand("a")[0];
+        auto r = resolve_play(g.ctx, ai, "a", played, {"b"});
+        REQUIRE(r.is_ok());
+        REQUIRE(g.cards.hand_size("b") == 1);
+        return g.cards.hand("b")[0].instance_id;  // 留下的那张（被弃的是另一张）
+    };
+
+    // 同 seed 可复现
+    CHECK(remaining_after_guohe(1) == remaining_after_guohe(1));
+    CHECK(remaining_after_guohe(2) == remaining_after_guohe(2));
+
+    // 多 seed 扫描：至少一个 seed 弃的不是 hand.front()（确定性首张已让位随机暗抽）
+    bool saw_non_first = false;
+    for (std::uint32_t seed = 1; seed <= 32; ++seed)
+        if (remaining_after_guohe(seed) == "s#1")
+            saw_non_first = true;
+    CHECK(saw_non_first);
+}
+
 TEST_CASE("game: nanman hits all others without sha")
 {
     TestGame g("deck");

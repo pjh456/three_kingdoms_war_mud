@@ -31,6 +31,7 @@ namespace
         DecisionKind last = DecisionKind::Play;
         std::size_t legal_count = 0;
         std::size_t pick_index = 0;     /**< 选中的 legal 动作下标（默认首个） */
+        std::size_t option_index = 0;   /**< PickCard/PickRevealed 选中的候选下标 */
         std::string second_instance_id; /**< 最近一次透传的第二张手牌 */
         std::vector<tkw::card::Card> options;     /**< 最近一次请求的候选牌 */
         std::vector<tkw::card::Zone> zone_labels; /**< 与 options 等长的来源分区 */
@@ -51,6 +52,9 @@ namespace
                 out.second_instance_id = act.second_instance_id;
                 second_instance_id = act.second_instance_id;
             }
+            if (req.kind == DecisionKind::PickCard ||
+                req.kind == DecisionKind::PickRevealed)
+                out.option_index = tkw::Option<std::size_t>::Some(option_index);
             return out;
         }
     };
@@ -840,7 +844,7 @@ TEST_CASE("ai: human decider treats eof as decline")
               .empty());
 }
 
-TEST_CASE("ai: human decider picks card from target")
+TEST_CASE("ai: human decider picks the hidden hand slot")
 {
     TestGame g("deck");
     g.add_player("a", 0, 4);
@@ -855,7 +859,8 @@ TEST_CASE("ai: human decider picks card from target")
     const auto picked = src.pick_card_from_target(
         g.ctx, "a", "b", tkw::game::PickCardScope::HandEquipJudge);
     REQUIRE(picked.is_some());
-    CHECK(picked.unwrap().instance_id == "s#2");
+    CHECK(picked.unwrap().zone == tkw::card::Zone::Hand);
+    CHECK(picked.unwrap().card.is_none());  // 隐藏手牌身份不由决策源回传
 }
 
 TEST_CASE("ai: pick_card_from_target filters the judgement zone by scope")
@@ -874,23 +879,48 @@ TEST_CASE("ai: pick_card_from_target filters the judgement zone by scope")
     RecordingDecider dec;
     RequestDecisionSource src(dec);
 
-    // 寒冰剑范围：判定区不进候选，手牌/装备相对序不变
-    (void)src.pick_card_from_target(
+    // 寒冰剑范围：判定区不进候选，手牌/装备相对序不变；手牌为无身份占位槽
+    dec.option_index = 0;
+    const auto hand = src.pick_card_from_target(
         g.ctx, "a", "b", tkw::game::PickCardScope::HandEquip);
+    REQUIRE(hand.is_some());
+    CHECK(hand.unwrap().zone == tkw::card::Zone::Hand);
+    CHECK(hand.unwrap().card.is_none());  // 脱敏：不回传对手手牌身份
     REQUIRE(dec.zone_labels.size() == 2);
     CHECK(dec.zone_labels[0] == tkw::card::Zone::Hand);
     CHECK(dec.zone_labels[1] == tkw::card::Zone::Equip);
     REQUIRE(dec.options.size() == 2);
-    CHECK(dec.options[0].instance_id == "s#2");
+    CHECK(dec.options[0].def_id.empty());
+    CHECK(dec.options[0].instance_id.empty());
     CHECK(dec.options[1].instance_id == "e#1");
 
-    // 顺手牵羊/过河拆桥范围：判定区照常进入候选
-    (void)src.pick_card_from_target(
+    // 明置装备槽仍按真实牌回传身份（槽位映射不受脱敏影响）
+    dec.option_index = 1;
+    const auto equip = src.pick_card_from_target(
+        g.ctx, "a", "b", tkw::game::PickCardScope::HandEquip);
+    REQUIRE(equip.is_some());
+    CHECK(equip.unwrap().zone == tkw::card::Zone::Equip);
+    REQUIRE(equip.unwrap().card.is_some());
+    CHECK(equip.unwrap().card.unwrap().instance_id == "e#1");
+
+    // 顺手牵羊/过河拆桥范围：判定区照常进入候选，槽位映射到真实牌
+    dec.option_index = 2;
+    const auto judge = src.pick_card_from_target(
         g.ctx, "a", "b", tkw::game::PickCardScope::HandEquipJudge);
+    REQUIRE(judge.is_some());
+    CHECK(judge.unwrap().zone == tkw::card::Zone::Judge);
+    REQUIRE(judge.unwrap().card.is_some());
+    CHECK(judge.unwrap().card.unwrap().instance_id == "d#1");
     REQUIRE(dec.zone_labels.size() == 3);
     CHECK(dec.zone_labels[2] == tkw::card::Zone::Judge);
     REQUIRE(dec.options.size() == 3);
     CHECK(dec.options[2].instance_id == "d#1");
+
+    // 槽位越界：适配器返回 None，不产生越界访问
+    dec.option_index = 99;
+    CHECK(src.pick_card_from_target(
+              g.ctx, "a", "b", tkw::game::PickCardScope::HandEquip)
+              .is_none());
 }
 
 TEST_CASE("ai: human decider labels the target card zone")
@@ -915,7 +945,8 @@ TEST_CASE("ai: human decider labels the target card zone")
         const auto picked = src.pick_card_from_target(
             g.ctx, "a", "b", tkw::game::PickCardScope::HandEquipJudge);
         REQUIRE(picked.is_some());
-        CHECK(picked.unwrap().instance_id == "s#2");
+        CHECK(picked.unwrap().zone == tkw::card::Zone::Hand);
+        CHECK(picked.unwrap().card.is_none());  // 隐藏手牌落子由引擎暗抽
 
         const std::string text = out.str();
         CHECK(text.find("[手] （未知手牌）") != std::string::npos);
@@ -934,7 +965,9 @@ TEST_CASE("ai: human decider labels the target card zone")
         const auto picked = src.pick_card_from_target(
             g.ctx, "a", "b", tkw::game::PickCardScope::HandEquipJudge);
         REQUIRE(picked.is_some());
-        CHECK(picked.unwrap().instance_id == "e#1");
+        CHECK(picked.unwrap().zone == tkw::card::Zone::Equip);
+        REQUIRE(picked.unwrap().card.is_some());
+        CHECK(picked.unwrap().card.unwrap().instance_id == "e#1");
     }
     {
         std::istringstream in("pick 3\n");
@@ -944,7 +977,9 @@ TEST_CASE("ai: human decider labels the target card zone")
         const auto picked = src.pick_card_from_target(
             g.ctx, "a", "b", tkw::game::PickCardScope::HandEquipJudge);
         REQUIRE(picked.is_some());
-        CHECK(picked.unwrap().instance_id == "d#1");
+        CHECK(picked.unwrap().zone == tkw::card::Zone::Judge);
+        REQUIRE(picked.unwrap().card.is_some());
+        CHECK(picked.unwrap().card.unwrap().instance_id == "d#1");
     }
 }
 
@@ -965,7 +1000,7 @@ TEST_CASE("ai: human decider hides target hand card text on card lookup")
     const auto picked = src.pick_card_from_target(
         g.ctx, "a", "b", tkw::game::PickCardScope::HandEquipJudge);
     REQUIRE(picked.is_some());
-    CHECK(picked.unwrap().instance_id == "s#2");
+    CHECK(picked.unwrap().card.is_none());  // 隐藏手牌不回传身份
 
     const std::string text = out.str();
     CHECK(text.find("无法查看") != std::string::npos);
@@ -990,7 +1025,8 @@ TEST_CASE("ai: human decider still shows revealed zone card text")
     const auto picked = src.pick_card_from_target(
         g.ctx, "a", "b", tkw::game::PickCardScope::HandEquipJudge);
     REQUIRE(picked.is_some());
-    CHECK(picked.unwrap().instance_id == "e#1");
+    REQUIRE(picked.unwrap().card.is_some());
+    CHECK(picked.unwrap().card.unwrap().instance_id == "e#1");
 
     const std::string text = out.str();
     CHECK(text.find("再使用一张") != std::string::npos);

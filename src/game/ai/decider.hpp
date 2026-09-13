@@ -10,6 +10,7 @@
 #ifndef INCLUDE_TKW_GAME_DECIDER_HPP
 #define INCLUDE_TKW_GAME_DECIDER_HPP
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -59,6 +60,8 @@ namespace tkw
                 std::vector<LegalAction> legal; /**< Play 合法出牌动作；Response 两张当杀 pair 候选（丈八） */
 
                 // Response / Peach / Counter / PickCard / PickRevealed / Discard
+                // PickCard 的对手手牌候选为无身份占位槽（def_id/instance_id 空，
+                // zone_labels 仍标 Hand）；其余类别均为决策者可见牌或公开亮牌。
                 std::vector<card::Card> options;
 
                 // PickRevealed
@@ -95,7 +98,8 @@ namespace tkw
             {
                 bool accepted = false; /**< Trigger：是否发动 */
                 Option<std::string> instance_id = Option<std::string>::None();
-                Option<card::Card> card = Option<card::Card>::None();
+                Option<std::size_t> option_index =
+                    Option<std::size_t>::None(); /**< PickCard/PickRevealed：选中的候选下标 */
                 std::vector<std::string> targets;  /**< Play：目标 */
                 std::vector<std::string> discards; /**< Discard：要弃的牌 */
                 std::string second_instance_id;   /**< Play/Response：第二张手牌（丈八蛇矛两张当杀；空 = 普通） */
@@ -184,16 +188,20 @@ namespace tkw
                     return decider_->decide(req).accepted;
                 }
 
-                Option<card::Card> pick_card_from_target(
+                Option<TargetPick> pick_card_from_target(
                     const ReadOnlyContext &ctx, const std::string &source,
                     const std::string &target, PickCardScope scope) override
                 {
                     DecisionRequest req = base_request(ctx, source);
                     req.kind = DecisionKind::PickCard;
                     req.target = target;
-                    append_zone(
-                        req.options, req.zone_labels, ctx.cards->hand(target),
-                        card::Zone::Hand);
+
+                    // 隐藏手牌：只放无身份占位槽，数量与真实手牌一致，绝不拷贝身份
+                    for (std::size_t i = 0; i < ctx.cards->hand_size(target); ++i)
+                    {
+                        req.options.push_back(card::Card{});
+                        req.zone_labels.push_back(card::Zone::Hand);
+                    }
                     append_zone(
                         req.options, req.zone_labels, ctx.cards->equip(target),
                         card::Zone::Equip);
@@ -201,7 +209,21 @@ namespace tkw
                         append_zone(
                             req.options, req.zone_labels, ctx.cards->judge(target),
                             card::Zone::Judge);
-                    return decider_->decide(req).card;
+
+                    const auto choice = decider_->decide(req);
+                    if (choice.option_index.is_none())
+                        return Option<TargetPick>::None();
+                    const std::size_t i = choice.option_index.unwrap();
+                    if (i >= req.options.size())
+                        return Option<TargetPick>::None();
+
+                    const card::Zone zone = req.zone_labels[i];
+                    // 隐藏手牌只回传槽位，真实身份由引擎随机暗抽
+                    if (zone == card::Zone::Hand)
+                        return Option<TargetPick>::Some(
+                            TargetPick{card::Zone::Hand, i, Option<card::Card>::None()});
+                    return Option<TargetPick>::Some(
+                        TargetPick{zone, i, Option<card::Card>::Some(req.options[i])});
                 }
 
                 Option<card::Card> pick_from_revealed(
@@ -213,7 +235,14 @@ namespace tkw
                     req.kind = DecisionKind::PickRevealed;
                     req.options = options;
                     req.reveal_source = source;
-                    return decider_->decide(req).card;
+
+                    const auto choice = decider_->decide(req);
+                    if (choice.option_index.is_none())
+                        return Option<card::Card>::None();
+                    const std::size_t i = choice.option_index.unwrap();
+                    if (i >= req.options.size())
+                        return Option<card::Card>::None();
+                    return Option<card::Card>::Some(req.options[i]);
                 }
 
                 Option<PlayAction> choose_play(

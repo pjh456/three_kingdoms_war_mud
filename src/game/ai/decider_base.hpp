@@ -293,11 +293,14 @@ namespace tkw
                 /**
                  * @brief 单牌价值：弃牌排序「先弃最低价值」与选牌「取最高价值」
                  *        共用的估价。
-                 * @note 目录缺失或 def 未命中时回 0。
+                 * @note 空 def_id 为隐藏手牌占位槽（身份不可知），按期望常量估值，
+                 *       不得据真实牌面排序；目录缺失或 def 未命中时回 0。
                  */
                 static int card_value_of(
                     const DecisionRequest &req, const card::Card &c)
                 {
+                    if (c.def_id.empty())  // 隐藏手牌占位：不可知，按期望估值
+                        return kCardValueHiddenHand;
                     const card::CardDef *def = find_def(req, c.def_id);
                     return def ? card_value(*def) : 0;
                 }

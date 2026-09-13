@@ -10,7 +10,8 @@
  *       - 八卦阵：需出闪时可判定，判定描述来自装备数据（当前为红色=闪）；
  *       - 青龙偃月刀：被闪后可再对同一目标使用一张杀；
  *       - 贯石斧：被闪后可弃两张牌令杀依然命中；
- *       - 寒冰剑：命中前可防止伤害改为弃置目标两张牌（仅手牌/装备区）；
+ *       - 寒冰剑：命中前可防止伤害改为弃置目标两张牌（仅手牌/装备区；对手手牌
+ *         不可见，由引擎随机暗抽）；
  *       - 麒麟弓：造成伤害后可弃置目标一匹坐骑（由使用者选哪一匹）；
  *       - 方天画戟：杀为最后一张手牌时可额外指定至多两名目标
  *         （作用于目标集合，经目标数校验放宽实现，不走本表钩子）；
@@ -90,7 +91,10 @@ namespace tkw
                     ctx, attacker, target, PickCardScope::HandEquip);
                 if (picked.is_none())
                     break;
-                if (remove_any_and_discard(ctx, target, picked.unwrap().instance_id)
+                const auto chosen = resolve_target_pick(ctx, target, picked.unwrap());
+                if (chosen.is_none())
+                    break;
+                if (remove_any_and_discard(ctx, target, chosen.unwrap().instance_id)
                         .is_some())
                     ++discarded;
             }

@@ -16,6 +16,7 @@
 #include "entity/manager.hpp"
 #include "game/core/card_event.hpp"
 #include "game/core/context.hpp"
+#include "game/core/decision.hpp"
 #include "util/types.hpp"
 
 namespace tkw
@@ -253,6 +254,31 @@ namespace tkw
         inline Option<card::Card> perform_judgement(GameContext &ctx)
         {
             return draw_with_refill(ctx);
+        }
+
+        /**
+         * @brief 落地目标区域选牌：明置牌直接返回，隐藏手牌经 rng 均匀暗抽。
+         * @param target 被选牌的目标实体 id。
+         * @param pick   决策源回传的区域/槽位/明置牌；隐藏手牌 card == None。
+         * @return Some(选中的真实手牌/明置牌)；None = 目标手牌为空且无可选明置牌。
+         * @note 每次调用按当前手牌快照重算，不缓存槽位（寒冰剑连取时手牌持续收缩）。
+         *       ctx.rng 为空时回落候选槽位（无随机源测试）；手牌仅 1 张时
+         *       uniform_below 因 bound <= 1 不消费随机流。
+         */
+        inline Option<card::Card> resolve_target_pick(
+            GameContext &ctx, const std::string &target, const TargetPick &pick)
+        {
+            if (pick.card.is_some())
+                return pick.card;
+
+            const auto hand = ctx.cards->hand(target);
+            if (hand.empty())
+                return Option<card::Card>::None();
+
+            std::size_t i = pick.index < hand.size() ? pick.index : 0;
+            if (ctx.rng)
+                i = uniform_below(*ctx.rng, static_cast<std::uint32_t>(hand.size()));
+            return Option<card::Card>::Some(hand[i]);
         }
     }
 }

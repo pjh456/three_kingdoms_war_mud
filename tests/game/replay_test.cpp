@@ -23,10 +23,10 @@ namespace
     using tkw::test::TestGame;
 
     // 攻击优先档自钉值（2p seed 1 / 4p seed 42，实跑钉入，见对应用例注释）
-    constexpr std::size_t AGGRESSIVE_2P_LINES = 229;
-    constexpr std::uint64_t AGGRESSIVE_2P_FP = 3431812885667532740ULL;
-    constexpr std::size_t AGGRESSIVE_4P_LINES = 391;
-    constexpr std::uint64_t AGGRESSIVE_4P_FP = 5816388611200269218ULL;
+    constexpr std::size_t AGGRESSIVE_2P_LINES = 73;
+    constexpr std::uint64_t AGGRESSIVE_2P_FP = 4647716859109022064ULL;
+    constexpr std::size_t AGGRESSIVE_4P_LINES = 378;
+    constexpr std::uint64_t AGGRESSIVE_4P_FP = 7802608474367805529ULL;
 
     /** 跑一局并返回完整事件日志（Ok 或 MaxRounds 都算完整对局）。 */
     std::vector<std::string> run_game(std::uint32_t seed, int players)
@@ -237,13 +237,30 @@ TEST_CASE("replay: golden fingerprints pin the rule semantics")
     //   响应顺序由 P0 → P2 → P3（创建/座位升序）变为 P2 → P3 → P0（使用者
     //   P1 的下家 P2 起按座位环绕）。三方均以杀响应免伤、无状态级联，故仅
     //   弃置行顺序变化，行数不变。
+    //
+    // 目标手牌改「引擎随机暗抽 + Aggressive 去全知」后的漂移（新旧日志逐行
+    // diff 核对过）：顺手牵羊/过河拆桥/寒冰剑取对手手牌不再携带真实身份，由引擎
+    // resolve_target_pick 经 rng 均匀暗抽（手牌仅 1 张时 uniform_below 不消费
+    // 随机流）；Aggressive 对手牌占位槽只按期望常量估值、不再按真实牌价值点名。
+    // - 2 人 seed 1：逐字节不变、指纹不重钉。首个隐藏暗抽在 P0 顺手牵羊取 P1
+    //   手牌（5 张），rng 抽中槽位 0（万箭齐发），与旧的 hand.front() 同牌；
+    //   本局另一处隐藏暗抽（P1 过河拆桥取 P0）亦抽中槽位 0，此后无其它 rng
+    //   消费点，故日志逐行一致。
+    // - 4 人 seed 42：404 → 549 行。首个分叉在 P0 过河拆桥取 P1 手牌：旧线取
+    //   首张杀，新线暗抽命中顺手牵羊；被拆牌不同导致 P1 出牌/弃牌/装备/死亡
+    //   序列整体级联。
+    // - Aggressive 2 人 seed 1：229 → 73 行；4 人 seed 42：391 → 378 行。两条
+    //   线首个分叉均落在首个隐藏暗抽（P0 顺手牵羊取对手手牌）：旧档按真实牌
+    //   价值点名最优牌，新档只能对无身份占位槽按期望常量估值并接受引擎暗抽，
+    //   起手被抢的牌不再最优，后续死亡/装备级联改变。这是有意消除全知信息优势
+    //   的规则保真取舍（强度下调）。
     const auto two = run_game(1, 2);
     CHECK(two.size() == 69);
     CHECK(fingerprint(two) == 9283070076194552029ULL);
 
     const auto four = run_game(42, 4);
-    CHECK(four.size() == 404);
-    CHECK(fingerprint(four) == 11718862908669055177ULL);
+    CHECK(four.size() == 549);
+    CHECK(fingerprint(four) == 3786026515969191070ULL);
 }
 
 TEST_CASE("replay: four-player seed 42 reaches a decisive result")
@@ -327,6 +344,12 @@ TEST_CASE("replay: aggressive ai is deterministic and pins its golden fingerprin
     // 229 行不变、指纹更新。首个分叉在 P0 的桃园：scope=All 含使用者，使用者
     // P0 的下家 P1 先回血、P0 排最后；旧按创建/座位升序为 P0 → P1。两人各回
     // 1 点、无状态级联，仅回血事件顺序变化。
+    //
+    // 目标手牌改引擎随机暗抽 + 去全知后的漂移（新旧日志逐行 diff 核对过）：
+    // 229 → 73 行。首个分叉在 P0 顺手牵羊取 P1 手牌（首个隐藏暗抽）：旧档按
+    // 真实牌价值取走万箭齐发，新档对无身份占位槽只按期望常量估值并接受引擎
+    // 暗抽，取到杀，后续出牌/伤害/死亡序列级联改变。规则保真取舍：Aggressive
+    // 不再能精确抢走对手高价值手牌。
     tkw::game::AggressiveAI aggr;
     const auto a = run_game_ai(aggr, 1, 2);
     const auto b = run_game_ai(aggr, 1, 2);
@@ -357,6 +380,11 @@ TEST_CASE("replay: aggressive 4-player seed 42 is deterministic and pinned")
     // 336 → 391 行。首个分叉在 P1 弃牌阶段：P1 当前体力 1（被 P0 的杀 2→1），
     // 旧上限 4 不弃牌，新上限 1 弃八卦阵；此后防御/濒死/死亡顺序级联，行数
     // 增加 55。
+    //
+    // 目标手牌改引擎随机暗抽 + 去全知后的漂移（新旧日志逐行 diff 核对过）：
+    // 391 → 378 行。首个分叉在 P0 顺手牵羊取 P1 手牌（首个隐藏暗抽）：旧档
+    // 按真实牌价值取走南蛮入侵，新档暗抽取到过河拆桥，后续出牌/装备/死亡级联
+    // 改变。
     tkw::game::AggressiveAI aggr;
     const auto a = run_game_ai(aggr, 42, 4);
     const auto b = run_game_ai(aggr, 42, 4);

@@ -46,7 +46,7 @@ namespace tkw
                 {
                     DecisionChoice out;
                     if (!req.options.empty())
-                        out.card = Option<card::Card>::Some(req.options.front());
+                        out.option_index = Option<std::size_t>::Some(0);
                     return out;
                 }
 

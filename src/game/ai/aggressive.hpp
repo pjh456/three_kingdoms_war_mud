@@ -5,8 +5,10 @@
  *       把它经 RequestDecisionSource 适配成引擎可用的 DecisionSource。相对贪心档
  *       的难度定位：出牌阶段按「卡类优先级」选组打出（小者先打，顺序见
  *       kPlayPriority* 常量，同分取 legal 序靠前者）；选牌分支
- *       （PickCard/PickRevealed）取最高牌价值而非首张。其余六个分支（响应/救桃/
- *       无懈/触发/弃牌/丈八组目标）与贪心档同逻辑。无随机、无隐藏状态，确定性可回放。
+ *       （PickCard/PickRevealed）取最高牌价值而非首张；PickCard 的对手手牌为
+ *       无身份占位槽，仅按期望常量参与比较，不读取真实身份。其余六个分支
+ *       （响应/救桃/无懈/触发/弃牌/丈八组目标）与贪心档同逻辑。无随机、无隐藏
+ *       状态，确定性可回放。
  */
 
 #ifndef INCLUDE_TKW_GAME_AGGRESSIVE_HPP
@@ -55,9 +57,10 @@ namespace tkw
 
                 /**
                  * @brief 选牌（PickCard/PickRevealed）：取牌价值最高者；同值保持
-                 *        候选序靠前者；空候选返回 None。
-                 * @note 顺手牵羊/过河拆桥抢高价值牌（桃 > 杀 > 闪 > 装备）；
-                 *        五谷丰登高价值优先。
+                 *        候选序靠前者；空候选返回 None，仅回传候选下标。
+                 * @note PickCard 的对手手牌为无身份占位槽，按期望常量估值，无法
+                 *       识别/挑选具体手牌；装备/判定区等明置牌按真实牌价值比较，
+                 *       五谷丰登亮牌高价值优先。
                  */
                 static DecisionChoice decide_best_card(const DecisionRequest &req)
                 {
@@ -65,18 +68,18 @@ namespace tkw
                     if (req.options.empty())
                         return out;
 
-                    const card::Card *best = &req.options.front();
-                    int best_value = card_value_of(req, *best);
+                    std::size_t best = 0;
+                    int best_value = card_value_of(req, req.options.front());
                     for (std::size_t i = 1; i < req.options.size(); ++i)
                     {
                         const int v = card_value_of(req, req.options[i]);
                         if (v > best_value)
                         {
                             best_value = v;
-                            best = &req.options[i];
+                            best = i;
                         }
                     }
-                    out.card = Option<card::Card>::Some(*best);
+                    out.option_index = Option<std::size_t>::Some(best);
                     return out;
                 }
 

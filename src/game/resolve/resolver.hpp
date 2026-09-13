@@ -76,10 +76,13 @@ namespace tkw
                     continue;
                 const auto picked = ai.pick_card_from_target(
                     ctx, player, t, PickCardScope::HandEquipJudge);
-                if (picked.is_none() ||
-                    !ctx.cards->has_card(t, picked.unwrap().instance_id))
+                if (picked.is_none())
                     return GameResult<TargetPicks>::Err(EffectError::InvalidChoice);
-                picks.emplace_back(t, picked.unwrap());
+                const auto chosen = resolve_target_pick(ctx, t, picked.unwrap());
+                if (chosen.is_none() ||
+                    !ctx.cards->has_card(t, chosen.unwrap().instance_id))
+                    return GameResult<TargetPicks>::Err(EffectError::InvalidChoice);
+                picks.emplace_back(t, chosen.unwrap());
             }
             return GameResult<TargetPicks>::Ok(std::move(picks));
         }

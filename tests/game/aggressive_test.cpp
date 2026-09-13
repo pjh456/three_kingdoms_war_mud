@@ -168,7 +168,7 @@ TEST_CASE("aggressive: identity targets the hostile camp")
     CHECK(chosen.unwrap().targets == std::vector<std::string>{"c"});
 }
 
-TEST_CASE("aggressive: pick_card_from_target prefers the highest value")
+TEST_CASE("aggressive: pick_card_from_target cannot identify hidden hand cards")
 {
     TestGame g("deck");
     g.add_player("a", 0, 4);
@@ -180,7 +180,27 @@ TEST_CASE("aggressive: pick_card_from_target prefers the highest value")
     const auto picked = ai.pick_card_from_target(
         g.ctx, "a", "b", tkw::game::PickCardScope::HandEquipJudge);
     REQUIRE(picked.is_some());
-    CHECK(picked.unwrap().instance_id == "t#2");  // 贪心档取首张（闪）
+    CHECK(picked.unwrap().zone == tkw::card::Zone::Hand);
+    CHECK(picked.unwrap().card.is_none());  // 旧为桃 t#2：隐藏手牌不可点名
+}
+
+TEST_CASE("aggressive: pick_card_from_target still picks a higher-value revealed card")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("b", "tao", "t#2");  // 隐藏手牌期望 35
+    // 判定区明置无懈可击价值 55，高于隐藏手牌期望：明置牌仍可点名取走
+    g.cards.add_to_judge(
+        "b", tkw::card::Card{"d#1", "wuxie", tkw::card::Suit::Heart, 2});
+
+    tkw::game::AggressiveAI ai;
+    const auto picked = ai.pick_card_from_target(
+        g.ctx, "a", "b", tkw::game::PickCardScope::HandEquipJudge);
+    REQUIRE(picked.is_some());
+    CHECK(picked.unwrap().zone == tkw::card::Zone::Judge);
+    REQUIRE(picked.unwrap().card.is_some());
+    CHECK(picked.unwrap().card.unwrap().instance_id == "d#1");
 }
 
 TEST_CASE("aggressive: pick_card_from_target ignores the judgement zone for ice sword")
@@ -197,7 +217,9 @@ TEST_CASE("aggressive: pick_card_from_target ignores the judgement zone for ice 
     const auto picked = ai.pick_card_from_target(
         g.ctx, "a", "b", tkw::game::PickCardScope::HandEquip);
     REQUIRE(picked.is_some());
-    CHECK(picked.unwrap().instance_id == "e#1");
+    CHECK(picked.unwrap().zone == tkw::card::Zone::Equip);
+    REQUIRE(picked.unwrap().card.is_some());
+    CHECK(picked.unwrap().card.unwrap().instance_id == "e#1");
     CHECK(g.cards.judge_size("b") == 1);
 }
 

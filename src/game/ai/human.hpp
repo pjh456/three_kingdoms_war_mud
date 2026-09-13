@@ -792,8 +792,8 @@ namespace tkw
                         {
                             if (parse_index(tokens[1], req.options.size(), index))
                             {
-                                out.card = Option<card::Card>::Some(
-                                    req.options[static_cast<std::size_t>(index - 1)]);
+                                out.option_index = Option<std::size_t>::Some(
+                                    static_cast<std::size_t>(index - 1));
                                 return out;
                             }
                             print_invalid(index_hint(req.options.size()));
@@ -993,7 +993,7 @@ namespace tkw
                     return route(entity).play_response(ctx, entity, kind, prompt);
                 }
 
-                Option<card::Card> pick_card_from_target(
+                Option<TargetPick> pick_card_from_target(
                     const ReadOnlyContext &ctx, const std::string &source,
                     const std::string &target, PickCardScope scope) override
                 {
