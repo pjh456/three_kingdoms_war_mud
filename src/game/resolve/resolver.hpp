@@ -400,6 +400,70 @@ namespace tkw
                 return GameResult<void>::Ok();
             }
 
+            /**
+             * @brief 火攻：目标展示一张手牌，使用者可弃一张同花色手牌造成火焰伤害。
+             * @note 无懈窗口在展示之前（单目标一窗）；目标结算时已无手牌即视为
+             *       火攻失败（牌已弃，不展示不伤害）。展示由目标本人选，候选为其
+             *       本人手牌；弃牌由使用者本人选，候选只含其同花色手牌。放弃/非法
+             *       选择一律按「不伤害」处理，不抛 InvalidChoice，故无需回滚。
+             * @note 火焰直伤经 deal_damage（indirect=false，可触发连环传导）；
+             *       藤甲的火焰脆弱仅在杀管线内累加，此处对目标另按能力 +1。
+             */
+            inline GameResult<void> resolve_fire_attack(const EffectInvocation &e)
+            {
+                if (e.nullified(e.targets))
+                    return GameResult<void>::Ok();
+                const std::string &target = e.targets.front();
+
+                // 结算时目标已无手牌：火攻失败（牌已弃），不展示不伤害
+                const auto target_hand = e.ctx.cards->hand(target);
+                if (target_hand.empty())
+                    return GameResult<void>::Ok();
+
+                // 目标本人展示一张手牌；非法/放弃回落首张（确定性兜底）
+                card::Card revealed = target_hand.front();
+                const auto shown = e.ai.pick_from_revealed(
+                    e.ctx, target, target_hand, RevealSource::FireAttackReveal);
+                if (shown.is_some())
+                    for (const auto &c : target_hand)
+                        if (c.instance_id == shown.unwrap().instance_id)
+                        {
+                            revealed = c;
+                            break;
+                        }
+
+                // 使用者同花色手牌（可放弃）：无匹配即不伤害
+                std::vector<card::Card> matching;
+                for (const auto &c : e.ctx.cards->hand(e.player))
+                    if (c.suit == revealed.suit)
+                        matching.push_back(c);
+                if (matching.empty())
+                    return GameResult<void>::Ok();
+
+                // 放弃/非法选择 = 不伤害（None 语义按来源区分）
+                const auto discard = e.ai.pick_from_revealed(
+                    e.ctx, e.player, matching, RevealSource::FireAttackDiscard);
+                if (discard.is_none())
+                    return GameResult<void>::Ok();
+                std::string chosen;
+                for (const auto &c : matching)
+                    if (c.instance_id == discard.unwrap().instance_id)
+                    {
+                        chosen = c.instance_id;
+                        break;
+                    }
+                if (chosen.empty() ||
+                    remove_and_discard(e.ctx, e.player, chosen).is_none())
+                    return GameResult<void>::Ok();
+
+                // 火焰伤害：藤甲火焰脆弱 +1（杀管线之外的直伤在此补足）
+                int amount = e.eff.amount;
+                if (has_ability(e.ctx, target, card::Ability::VineArmor))
+                    amount += 1;
+                deal_damage(e.ctx, e.ai, e.player, target, amount, e.eff.damage_type);
+                return GameResult<void>::Ok();
+            }
+
             /** @brief 按 effect.kind 分派到对应结算函数；未实现返回 UnsupportedKind。 */
             inline GameResult<void> apply_effect(const EffectInvocation &e)
             {
@@ -427,6 +491,8 @@ namespace tkw
                     return resolve_analeptic(e);
                 case card::CardEffectKind::Chain:
                     return resolve_chain(e);
+                case card::CardEffectKind::FireAttack:
+                    return resolve_fire_attack(e);
                 default:
                     return GameResult<void>::Err(EffectError::UnsupportedKind);
                 }

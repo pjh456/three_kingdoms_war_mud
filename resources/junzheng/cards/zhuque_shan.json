@@ -1,0 +1,15 @@
+{
+    "id": "zhuque_shan",
+    "name": "朱雀羽扇",
+    "type": "equipment",
+    "subtype": "weapon",
+    "copies": [
+        { "suit": "diamond", "number": 1 }
+    ],
+    "text": "武器·攻击范围4。你可以将一张普通【杀】当具火焰伤害的【杀】来使用。",
+    "equip": {
+        "slot": "weapon",
+        "range": 4
+    },
+    "abilities": ["fire_sha_convert"]
+}

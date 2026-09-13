@@ -103,6 +103,7 @@ namespace tkw
             bool bogus_pick = false;  /**< 选牌返回一张不存在的牌（校验测试用） */
             bool bogus_revealed = false; /**< 亮牌选择返回一张不在候选中的牌（校验测试用） */
             bool decline_revealed = false; /**< 亮牌选择返回空（强制选择被拒测试用） */
+            bool decline_fire_discard = false; /**< 火攻弃牌窗口返回空（放弃分支测试用） */
             std::size_t revealed_calls = 0; /**< 亮牌选择已询问次数（脚本计数） */
             std::size_t valid_revealed_first = 0; /**< 前 N 次亮牌选择先返回合法牌，其后按 bogus_revealed 处理 */
             bool decline_discards = false; /**< 弃牌选择返回空（雌雄二选一的放弃分支） */
@@ -220,9 +221,12 @@ namespace tkw
             Option<card::Card> pick_from_revealed(
                 const ReadOnlyContext &, const std::string &,
                 const std::vector<card::Card> &options,
-                RevealSource) override
+                RevealSource source) override
             {
                 ++revealed_calls;
+                if (source == RevealSource::FireAttackDiscard &&
+                    decline_fire_discard)
+                    return Option<card::Card>::None();
                 if (bogus_revealed && revealed_calls > valid_revealed_first)
                     return Option<card::Card>::Some(
                         Card{"ghost#0", "sha", tkw::card::Suit::Spade, 7});

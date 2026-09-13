@@ -339,8 +339,10 @@ namespace tkw
                         return pick_borrowed_sword(
                             req.view, out, c.instance_id, opts);
 
-                    if (eff.scope.unwrap_or(card::Scope::Self) ==
-                        card::Scope::OneOther)
+                    const auto single_scope =
+                        eff.scope.unwrap_or(card::Scope::Self);
+                    if (single_scope == card::Scope::OneOther ||
+                        single_scope == card::Scope::AnyOne)
                     {
                         // 方天画戟：存在多目标动作时优先选目标最多者
                         //（否则贪心会把它丢成单目标）
@@ -656,6 +658,7 @@ namespace tkw
                     case card::CardEffectKind::Duel:
                     case card::CardEffectKind::DiscardTarget:
                     case card::CardEffectKind::Steal:
+                    case card::CardEffectKind::FireAttack:
                         return true;
                     case card::CardEffectKind::Jink:
                     case card::CardEffectKind::Heal:

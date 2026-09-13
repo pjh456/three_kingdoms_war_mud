@@ -207,6 +207,8 @@ namespace tkw
                         return kPlayPriorityAoe;
                     case card::CardEffectKind::Duel:
                         return kPlayPriorityDuel;
+                    case card::CardEffectKind::FireAttack:
+                        return kPlayPriorityDuel;
                     case card::CardEffectKind::DiscardTarget:
                         return kPlayPriorityDiscard;
                     case card::CardEffectKind::Steal:

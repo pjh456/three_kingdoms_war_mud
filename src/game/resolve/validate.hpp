@@ -105,6 +105,12 @@ namespace tkw
                 for (const auto *e : ctx.entities->const_view())
                     out.push_back(e->get_id());
                 break;
+            case card::Scope::AnyOne:
+                // 任意一名角色（含使用者），无距离限制；火攻要求目标有手牌
+                for (const auto *e : ctx.entities->const_view())
+                    if (ctx.cards->hand_size(e->get_id()) > 0)
+                        out.push_back(e->get_id());
+                break;
             case card::Scope::AllOthers:
                 all_others();
                 break;
@@ -197,6 +203,7 @@ namespace tkw
                 {
                 case card::Scope::Self:
                 case card::Scope::OneOther:
+                case card::Scope::AnyOne:
                 {
                     // 方天画戟：杀消耗完手中全部牌时共可指定至多 3 个目标
                     // （唯一目标 + 额外至多 2 名，卡面）；成员合法性由下方统一检查

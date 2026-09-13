@@ -532,9 +532,9 @@ TEST_CASE("card: junzheng skeleton deck loads elemental slashes")
     auto r = CardDefCatalog::load(store, "deck");
     REQUIRE(r.is_ok());
     const auto &cat = r.unwrap();
-    CHECK(cat.size() == 15);
-    // 杀 30 + 火杀 5 + 雷杀 9 + 藤甲 2 + 丈八 1 + 青釭 1 + 南蛮 3 + 万箭 1 + 无中 4 + 桃 8 + 酒 5 + 兵粮寸断 2 + 古锭刀 1 + 白银狮子 1 + 铁索连环 6
-    CHECK(cat.total_copies() == 79);
+    CHECK(cat.size() == 17);
+    // 杀 30 + 火杀 5 + 雷杀 9 + 藤甲 2 + 丈八 1 + 青釭 1 + 南蛮 3 + 万箭 1 + 无中 4 + 桃 8 + 酒 5 + 兵粮寸断 2 + 古锭刀 1 + 白银狮子 1 + 铁索连环 6 + 火攻 3 + 朱雀羽扇 1
+    CHECK(cat.total_copies() == 83);
 
     auto huosha = cat.find("huosha");
     REQUIRE(huosha.is_some());
@@ -637,10 +637,72 @@ TEST_CASE("card: junzheng skeleton deck loads elemental slashes")
     CHECK(effect_kind_from_name("chain").is_some());
     CHECK(effect_kind_from_name("chain").unwrap() == CardEffectKind::Chain);
 
-    // 容错扫描与严格加载同源：十五卡均为已知机制名
+    // 火攻：即时锦囊，任意一名有手牌角色，火焰伤害；花色点数与权威牌表一致
+    auto huogong = cat.find("huogong");
+    REQUIRE(huogong.is_some());
+    CHECK(huogong.unwrap()->name == "火攻");
+    CHECK(huogong.unwrap()->type == CardType::Trick);
+    CHECK(huogong.unwrap()->subtype == "instant");
+    CHECK(huogong.unwrap()->judge.is_none());
+    REQUIRE(huogong.unwrap()->effect.is_some());
+    CHECK(huogong.unwrap()->effect.unwrap().kind == CardEffectKind::FireAttack);
+    CHECK(huogong.unwrap()->effect.unwrap().amount == 1);
+    CHECK(huogong.unwrap()->effect.unwrap().scope.contains(Scope::AnyOne));
+    CHECK(huogong.unwrap()->effect.unwrap().damage_type == DamageType::Fire);
+    REQUIRE(huogong.unwrap()->copies.size() == 3);
+    CHECK(huogong.unwrap()->copies[0] == CardCopy{Suit::Diamond, 12});
+    CHECK(huogong.unwrap()->copies[1] == CardCopy{Suit::Heart, 2});
+    CHECK(huogong.unwrap()->copies[2] == CardCopy{Suit::Heart, 3});
+    CHECK(effect_kind_from_name("fire_attack").is_some());
+    CHECK(effect_kind_from_name("fire_attack").unwrap() ==
+          CardEffectKind::FireAttack);
+
+    // 朱雀羽扇：武器，♦A，范围 4，普通杀转火焰
+    auto zhuque = cat.find("zhuque_shan");
+    REQUIRE(zhuque.is_some());
+    CHECK(zhuque.unwrap()->name == "朱雀羽扇");
+    CHECK(zhuque.unwrap()->type == CardType::Equipment);
+    REQUIRE(zhuque.unwrap()->equip.is_some());
+    CHECK(zhuque.unwrap()->equip.unwrap().slot == EquipSlot::Weapon);
+    CHECK(zhuque.unwrap()->equip.unwrap().range == 4);
+    REQUIRE(zhuque.unwrap()->abilities.size() == 1);
+    CHECK(zhuque.unwrap()->abilities[0] == Ability::FireShaConvert);
+    REQUIRE(zhuque.unwrap()->copies.size() == 1);
+    CHECK(zhuque.unwrap()->copies[0] == CardCopy{Suit::Diamond, 1});
+    CHECK(ability_from_name("fire_sha_convert").is_some());
+    CHECK(ability_from_name("fire_sha_convert").unwrap() ==
+          Ability::FireShaConvert);
+
+    // 容错扫描与严格加载同源：十七卡均为已知机制名
     auto raws = scan_mechanisms(store, "deck");
     REQUIRE(raws.is_ok());
-    CHECK(raws.unwrap().size() == 15);
+    CHECK(raws.unwrap().size() == 17);
+}
+
+TEST_CASE("card: fire attack requires explicit fire damage_type")
+{
+    // 缺失 damage_type：加载期拒绝，避免静默按普通伤结算
+    const auto missing = doc(R"({
+        "id": "huogong", "name": "火攻", "type": "trick", "subtype": "instant",
+        "copies": [ {"suit": "diamond", "number": 12} ],
+        "effect": {"kind": "fire_attack", "amount": 1, "scope": "any_one"}
+    })");
+    auto r1 = parse_card_def(missing.root(), "huogong");
+    REQUIRE(r1.is_err());
+    CHECK(r1.unwrap_err().kind == ConfigErrorKind::InvalidValue);
+    CHECK(r1.unwrap_err().detail == "huogong.effect.damage_type");
+
+    // 显式 normal 同样拒绝：火攻不能声明为普通伤害
+    const auto normal = doc(R"({
+        "id": "huogong", "name": "火攻", "type": "trick", "subtype": "instant",
+        "copies": [ {"suit": "diamond", "number": 12} ],
+        "effect": {"kind": "fire_attack", "amount": 1, "scope": "any_one",
+                   "damage_type": "normal"}
+    })");
+    auto r2 = parse_card_def(normal.root(), "huogong");
+    REQUIRE(r2.is_err());
+    CHECK(r2.unwrap_err().kind == ConfigErrorKind::InvalidValue);
+    CHECK(r2.unwrap_err().detail == "huogong.effect.damage_type");
 }
 
 TEST_CASE("card: scan_mechanisms reads raw names and shares the name table")

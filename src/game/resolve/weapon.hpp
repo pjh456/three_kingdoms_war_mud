@@ -485,6 +485,13 @@ namespace tkw
             // 加成初值先落位，钩子（藤甲火焰脆弱等）在 Armor 阶段累加
             sc.damage_bonus = damage_bonus;
 
+            // 朱雀羽扇：普通杀使用时可转为火焰伤害。非锁定技、可放弃、无每回合
+            // 限制；火杀/雷杀属性非普通，不询问（只能转化普通杀）
+            if (sc.damage_type == card::DamageType::Normal &&
+                has_ability(ctx, attacker, card::Ability::FireShaConvert) &&
+                ai.trigger_effect(ctx, attacker, card::Ability::FireShaConvert))
+                sc.damage_type = card::DamageType::Fire;
+
             run_sha_phase(sc, ShaPhase::OnTarget);
 
             run_sha_phase(sc, ShaPhase::Armor);

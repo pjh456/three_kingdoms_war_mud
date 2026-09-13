@@ -1,0 +1,18 @@
+{
+    "id": "huogong",
+    "name": "火攻",
+    "type": "trick",
+    "subtype": "instant",
+    "copies": [
+        { "suit": "diamond", "number": 12 },
+        { "suit": "heart", "number": 2 },
+        { "suit": "heart", "number": 3 }
+    ],
+    "text": "出牌阶段，对一名有手牌的角色使用。该角色展示一张手牌，然后你可以弃置一张与所展示牌花色相同的手牌，对其造成1点火焰伤害。",
+    "effect": {
+        "kind": "fire_attack",
+        "amount": 1,
+        "scope": "any_one",
+        "damage_type": "fire"
+    }
+}

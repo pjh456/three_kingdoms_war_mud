@@ -46,7 +46,8 @@ namespace tkw
             inline constexpr std::initializer_list<std::pair<std::string_view, Scope>>
                 scope_table{{"self", Scope::Self}, {"one_other", Scope::OneOther},
                              {"all_others", Scope::AllOthers}, {"all", Scope::All},
-                             {"one_or_two", Scope::OneOrTwo}};
+                             {"one_or_two", Scope::OneOrTwo},
+                             {"any_one", Scope::AnyOne}};
 
             /** damage_type 字段封闭三值集：effect/judge 解析共用的单一表源。 */
             inline constexpr
@@ -69,7 +70,8 @@ namespace tkw
                                       {"reveal_pick", CardEffectKind::RevealPick},
                                       {"borrowed_sword", CardEffectKind::BorrowedSword},
                                       {"analeptic", CardEffectKind::Analeptic},
-                                      {"chain", CardEffectKind::Chain}};
+                                      {"chain", CardEffectKind::Chain},
+                                      {"fire_attack", CardEffectKind::FireAttack}};
 
             /** abilities 封闭名表：严格解析与名称查询共用的单一表源。 */
             inline constexpr
@@ -87,7 +89,8 @@ namespace tkw
                                   {"black_sha_immune", Ability::BlackShaImmune},
                                   {"vine_armor", Ability::VineArmor},
                                   {"guding_blade", Ability::GudingBlade},
-                                  {"silver_lion", Ability::SilverLion}};
+                                  {"silver_lion", Ability::SilverLion},
+                                  {"fire_sha_convert", Ability::FireShaConvert}};
 
             /** 字符串 → 封闭枚举：未知值报 InvalidValue（detail = 字段路径）。 */
             template <typename E>
@@ -231,6 +234,7 @@ namespace tkw
                 case CardEffectKind::AoeDamage:
                 case CardEffectKind::Heal:
                 case CardEffectKind::Duel:
+                case CardEffectKind::FireAttack:
                     if (eff.amount <= 0)
                         return cfg::fail<CardEffect>(
                             cfg::ConfigErrorKind::InvalidValue,
@@ -256,6 +260,14 @@ namespace tkw
                 default:
                     break;
                 }
+
+                // 火攻必须显式声明火焰伤害：缺失/为普通伤会在运行时静默打普通伤，
+                // 加载期直接拒绝（detail 指向 damage_type）
+                if (eff.kind == CardEffectKind::FireAttack &&
+                    eff.damage_type != DamageType::Fire)
+                    return cfg::fail<CardEffect>(
+                        cfg::ConfigErrorKind::InvalidValue,
+                        cfg::field_path(path, "damage_type"));
 
                 // 铁索连环必须显式声明目标范围：缺失会静默回落 Self 而选不出
                 // 1~2 名角色，加载期直接拒绝而非按 0/1 目标错结算

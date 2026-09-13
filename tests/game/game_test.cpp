@@ -5584,3 +5584,332 @@ TEST_CASE("game: chain respects silver lion cap at origin")
     CHECK_FALSE(a->get_chained());
     CHECK_FALSE(b->get_chained());
 }
+
+// ── 火攻 ─────────────────────────────────────────────────────────────
+
+namespace
+{
+    /** 手牌写入指定花色点数的副本（give 固定用首副本，不满足花色匹配用例）。 */
+    void give_suited(
+        TestGame &g, const std::string &id, const std::string &def_id,
+        const char *inst, Suit suit, int number)
+    {
+        REQUIRE(g.catalog.find(def_id).is_some());
+        g.cards.add_to_hand(id, Card{inst, def_id, suit, number});
+    }
+}
+
+TEST_CASE("game: fire attack reveals and deals fire damage when discarding a matching suit")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    auto *a = g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.give("a", "huogong", "g#0");
+    give_suited(g, "a", "sha", "s#0", Suit::Heart, 7);   // 与展示牌同花色
+    give_suited(g, "b", "sha", "s#1", Suit::Heart, 8);   // 被展示
+
+    std::vector<tkw::card::DamageType> types;
+    auto h = g.bus.subscribe(tkw::Handler<tkw::EntityDamagedEvent>(
+        [&](tkw::HandlerContext<tkw::EntityDamagedEvent> &c)
+        { types.push_back(c.event.damage_type); }));
+
+    TestDecider decider;  // 展示与弃牌均取候选首张
+    const Card played = g.cards.hand("a")[0];
+    REQUIRE(played.def_id == "huogong");
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+
+    CHECK(b->get_hp() == 3);
+    CHECK(a->get_hp() == 4);
+    REQUIRE(types.size() == 1);
+    CHECK(types[0] == tkw::card::DamageType::Fire);
+    CHECK(decider.revealed_calls == 2);      // 展示 + 弃牌
+    CHECK(g.cards.hand_size("a") == 0);      // 同花色牌已弃置
+    CHECK(g.cards.hand_size("b") == 1);      // 展示不消费目标手牌
+}
+
+TEST_CASE("game: fire attack does not damage without a matching suit")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.give("a", "huogong", "g#0");
+    give_suited(g, "a", "sha", "s#0", Suit::Spade, 7);   // 与展示牌异花色
+    give_suited(g, "b", "sha", "s#1", Suit::Heart, 8);
+
+    TestDecider decider;
+    const Card played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+
+    CHECK(b->get_hp() == 4);
+    CHECK(decider.revealed_calls == 1);      // 无同花色则不进入弃牌窗
+    CHECK(g.cards.hand_size("a") == 1);      // 无匹配牌保留
+}
+
+TEST_CASE("game: fire attack does not damage when the user declines")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.give("a", "huogong", "g#0");
+    give_suited(g, "a", "sha", "s#0", Suit::Heart, 7);
+    give_suited(g, "b", "sha", "s#1", Suit::Heart, 8);
+
+    TestDecider decider;
+    decider.decline_fire_discard = true;
+    const Card played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+
+    CHECK(b->get_hp() == 4);
+    CHECK(decider.revealed_calls == 2);      // 已进入弃牌窗但放弃
+    CHECK(g.cards.hand_size("a") == 1);      // 放弃弃牌 → 手牌保留
+}
+
+TEST_CASE("game: fire attack can target itself")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    auto *a = g.add_player("a", 0, 4);
+    g.give("a", "huogong", "g#0");
+    give_suited(g, "a", "sha", "s#0", Suit::Heart, 7);
+
+    TestDecider decider;  // 展示并弃置同一张手牌
+    const Card played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"a"}).is_ok());
+
+    CHECK(a->get_hp() == 3);                 // 自伤 1 点火焰
+    CHECK(g.cards.hand_size("a") == 0);
+}
+
+TEST_CASE("game: fire attack rejects a target without hand cards")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.give("a", "huogong", "g#0");
+
+    const auto &def = *g.catalog.find("huogong").unwrap();
+    const Card card = g.cards.hand("a")[0];
+    const TurnContext turn{"a", 0, 1, false};
+
+    const auto targets = valid_targets(g.ctx, "a", def);
+    CHECK(std::find(targets.begin(), targets.end(), "b") == targets.end());
+    CHECK(std::find(targets.begin(), targets.end(), "a") != targets.end());
+    CHECK(validate_play_action(g.ctx, "a", def, card, {"b"}, turn).is_err());
+
+    TestDecider decider;
+    const auto rr = resolve_play(g.ctx, decider, "a", card, {"b"});
+    REQUIRE(rr.is_err());
+    CHECK(rr.unwrap_err() == EffectError::InvalidTarget);
+    CHECK(b->get_hp() == 4);
+}
+
+TEST_CASE("game: fire attack is nullified before the reveal")
+{
+    // 军争骨架牌表不含无懈可击：临时牌表让火攻与无懈同场
+    const auto dir = pjh::platform::Fs::temp_directory() / "tkw_huogong_wuxie";
+    std::filesystem::remove_all(dir);
+    REQUIRE(pjh::platform::Fs::create_directories(dir / "cards").is_ok());
+    CHECK(tkw::io::write_text(
+              dir / "deck.json",
+              R"({"name": "fire mix", "cards": ["huogong", "wuxie"]})")
+              .is_ok());
+    CHECK(tkw::io::write_text(dir / "cards" / "huogong.json", R"({
+        "id": "huogong", "name": "火攻", "type": "trick", "subtype": "instant",
+        "copies": [ {"suit": "diamond", "number": 12} ],
+        "text": "对一名有手牌的角色使用。",
+        "effect": {"kind": "fire_attack", "amount": 1, "scope": "any_one",
+                   "damage_type": "fire"}
+    })").is_ok());
+    CHECK(tkw::io::write_text(dir / "cards" / "wuxie.json", R"({
+        "id": "wuxie", "name": "无懈可击", "type": "trick", "subtype": "instant",
+        "copies": [ {"suit": "spade", "number": 11} ],
+        "text": "抵消一张锦囊牌对一名角色产生的效果。",
+        "counter": true
+    })").is_ok());
+
+    const std::string root = dir.string();
+    TestGame g("deck", 1, root.c_str());
+    g.add_player("p", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.give("p", "huogong", "g#0");
+    g.give("b", "wuxie", "w#0");  // b 用手牌里的无懈抵消
+
+    TestDecider decider;
+    decider.counter = true;
+    const Card played = g.cards.hand("p")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "p", played, {"b"}).is_ok());
+
+    CHECK(b->get_hp() == 4);
+    CHECK(decider.revealed_calls == 0);      // 亮牌前被抵消
+    REQUIRE(decider.counter_windows.size() == 1);
+    CHECK(decider.counter_windows[0] == std::vector<std::string>{"b"});
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("game: fire attack on tengjia deals extra fire damage")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    equip_tengjia(g, "b", "e#0");
+    g.give("a", "huogong", "g#0");
+    give_suited(g, "a", "sha", "s#0", Suit::Heart, 7);
+    give_suited(g, "b", "sha", "s#1", Suit::Heart, 8);
+
+    TestDecider decider;
+    const Card played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+    CHECK(b->get_hp() == 2);                 // 1 火焰 + 藤甲 1
+}
+
+TEST_CASE("game: fire attack fire damage transmits through chain")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("p", 0, 4);
+    auto *a = g.add_player("a", 1, 4);
+    auto *b = g.add_player("b", 2, 4);
+    chain_all(g, {"a", "b"});
+    g.give("p", "huogong", "g#0");
+    give_suited(g, "p", "sha", "s#0", Suit::Heart, 7);
+    give_suited(g, "a", "sha", "s#1", Suit::Heart, 8);
+
+    TestDecider decider;
+    const Card played = g.cards.hand("p")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "p", played, {"a"}).is_ok());
+    CHECK(a->get_hp() == 3);
+    CHECK(b->get_hp() == 3);
+    CHECK_FALSE(a->get_chained());
+    CHECK_FALSE(b->get_chained());
+}
+
+TEST_CASE("game: fire attack self with only the trick fails silently")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    auto *a = g.add_player("a", 0, 4);
+    g.give("a", "huogong", "g#0");
+
+    TestDecider decider;
+    const Card played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"a"}).is_ok());
+    CHECK(a->get_hp() == 4);                 // 结算时无手牌 = 火攻失败
+    CHECK(decider.revealed_calls == 0);      // 不展示
+    CHECK(g.cards.discard_size() == 1);      // 火攻牌已弃
+}
+
+// ── 朱雀羽扇 ─────────────────────────────────────────────────────────
+
+TEST_CASE("game: vermilion fan converts a normal sha to fire")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "zhuque_shan", "e#0");
+    equip_tengjia(g, "b", "e#1");
+    g.give("a", "sha", "s#0");
+
+    std::vector<tkw::card::DamageType> types;
+    auto h = g.bus.subscribe(tkw::Handler<tkw::EntityDamagedEvent>(
+        [&](tkw::HandlerContext<tkw::EntityDamagedEvent> &c)
+        { types.push_back(c.event.damage_type); }));
+
+    TestDecider decider;
+    decider.triggers = {Ability::FireShaConvert};
+    const Card played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+
+    REQUIRE(types.size() == 1);
+    CHECK(types[0] == tkw::card::DamageType::Fire);
+    CHECK(b->get_hp() == 2);  // 火焰 1 + 藤甲 1（普通杀则被藤甲无效）
+    REQUIRE(decider.trigger_calls.size() == 1);
+    CHECK(decider.trigger_calls[0] == Ability::FireShaConvert);
+}
+
+TEST_CASE("game: vermilion fan can be declined")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "zhuque_shan", "e#0");
+    equip_tengjia(g, "b", "e#1");
+    g.give("a", "sha", "s#0");
+
+    TestDecider decider;  // triggers 为空 = 放弃转化
+    const Card played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+    CHECK(b->get_hp() == 4);  // 普通杀被藤甲无效
+    REQUIRE(decider.trigger_calls.size() == 1);
+    CHECK(decider.trigger_calls[0] == Ability::FireShaConvert);
+}
+
+TEST_CASE("game: vermilion fan leaves thunder sha unchanged")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "zhuque_shan", "e#0");
+    g.give("a", "leisha", "l#0");
+
+    std::vector<tkw::card::DamageType> types;
+    auto h = g.bus.subscribe(tkw::Handler<tkw::EntityDamagedEvent>(
+        [&](tkw::HandlerContext<tkw::EntityDamagedEvent> &c)
+        { types.push_back(c.event.damage_type); }));
+
+    TestDecider decider;
+    decider.triggers = {Ability::FireShaConvert};
+    const Card played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+
+    REQUIRE(types.size() == 1);
+    CHECK(types[0] == tkw::card::DamageType::Thunder);
+    CHECK(b->get_hp() == 3);
+    CHECK(decider.trigger_calls.empty());  // 雷杀不询问转化
+}
+
+TEST_CASE("game: vermilion fan does not prompt without the weapon")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    equip_tengjia(g, "b", "e#0");
+    g.give("a", "sha", "s#0");
+
+    TestDecider decider;
+    decider.triggers = {Ability::FireShaConvert};
+    const Card played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+    CHECK(b->get_hp() == 4);  // 无羽扇 = 普通杀被藤甲无效
+    CHECK(decider.trigger_calls.empty());
+}
+
+TEST_CASE("game: legal actions enumerate fire attack against hand holders only")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);  // 无手牌
+    g.give("a", "huogong", "g#0");
+    give_suited(g, "a", "sha", "s#0", Suit::Heart, 7);
+    give_suited(g, "b", "sha", "s#1", Suit::Heart, 8);
+
+    const TurnContext turn{"a", 0, 1, false};
+    const auto acts = legal_actions(g.ctx, "a", turn);
+    std::vector<std::vector<std::string>> targets;
+    for (const auto &act : acts)
+        if (act.card.def_id == "huogong")
+            targets.push_back(act.targets);
+
+    REQUIRE(targets.size() == 2);
+    CHECK(std::find(targets.begin(), targets.end(),
+                    std::vector<std::string>{"a"}) != targets.end());
+    CHECK(std::find(targets.begin(), targets.end(),
+                    std::vector<std::string>{"b"}) != targets.end());
+    for (const auto &t : targets)
+        CHECK(std::find(t.begin(), t.end(), "c") == t.end());
+}
+
+TEST_CASE("game: fire attack gets offense card value")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    const auto def = g.catalog.find("huogong");
+    REQUIRE(def.is_some());
+    CHECK(ai::card_value(*def.unwrap()) == ai::kCardValueOffense);
+}

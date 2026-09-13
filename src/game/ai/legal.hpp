@@ -148,7 +148,7 @@ namespace tkw
                     continue;
 
                 const auto scope = def.effect.unwrap().scope.unwrap_or(card::Scope::Self);
-                if (scope == card::Scope::OneOther)
+                if (scope == card::Scope::OneOther || scope == card::Scope::AnyOne)
                 {
                     // 单目标：每个通过校验的候选目标各产出一个动作
                     for (const auto &t : targets)

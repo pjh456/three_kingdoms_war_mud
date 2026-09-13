@@ -47,6 +47,7 @@ namespace tkw
                 case E::DiscardTarget:
                 case E::Duel:
                 case E::Analeptic:
+                case E::FireAttack:
                     return kCardValueOffense;
                 case E::Jink:
                     return kCardValueJink;

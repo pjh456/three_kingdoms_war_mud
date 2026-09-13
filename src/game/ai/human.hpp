@@ -88,7 +88,10 @@ namespace tkw
                     case DecisionKind::PickCard:
                         return decide_pick(request, "选择目标区域的牌", true);
                     case DecisionKind::PickRevealed:
-                        return decide_pick(request, reveal_title(request), false);
+                        return decide_pick(
+                            request, reveal_title(request),
+                            request.reveal_source ==
+                                RevealSource::FireAttackDiscard);
                     case DecisionKind::Discard:
                         return decide_discard(request);
                     }
@@ -393,11 +396,20 @@ namespace tkw
                     return title;
                 }
 
-                /** @brief 亮牌窗口标题：按来源结算分别渲染五谷丰登/麒麟弓。 */
+                /** @brief 亮牌窗口标题：按来源结算分别渲染五谷丰登/麒麟弓/火攻。 */
                 static std::string reveal_title(const DecisionRequest &req)
                 {
-                    if (req.reveal_source == RevealSource::Qilin)
+                    switch (req.reveal_source)
+                    {
+                    case RevealSource::Qilin:
                         return "麒麟弓：选择目标坐骑";
+                    case RevealSource::FireAttackReveal:
+                        return "火攻：展示一张手牌";
+                    case RevealSource::FireAttackDiscard:
+                        return "火攻：弃一张同花色手牌（可放弃）";
+                    case RevealSource::Wugu:
+                        break;
+                    }
                     return "五谷丰登亮牌（每名角色依次选一张）";
                 }
 
@@ -434,6 +446,8 @@ namespace tkw
                         return "杀的目标没有手牌时此伤害 +1";
                     case card::Ability::SilverLion:
                         return "单次受到的伤害至多 1 点；失去此装备回复 1 点体力";
+                    case card::Ability::FireShaConvert:
+                        return "普通杀可当具火焰伤害的杀使用（可放弃）";
                     }
                     return "装备能力";
                 }

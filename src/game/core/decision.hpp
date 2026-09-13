@@ -61,6 +61,8 @@ namespace tkw
         {
             Wugu,  /**< 五谷丰登：按座位序各选一张 */
             Qilin, /**< 麒麟弓：攻击方选弃目标坐骑 */
+            FireAttackReveal,  /**< 火攻：目标本人展示一张手牌（强制选择） */
+            FireAttackDiscard, /**< 火攻：使用者弃一张同花色手牌（可放弃） */
         };
 
         /** @brief 目标区域选牌的候选范围。 */

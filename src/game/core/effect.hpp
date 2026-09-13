@@ -48,6 +48,7 @@ namespace tkw
             case E::BorrowedSword:
             case E::Analeptic:
             case E::Chain:
+            case E::FireAttack:
                 return {true, true, false, false};
             }
             return {};
@@ -79,6 +80,7 @@ namespace tkw
             case A::VineArmor:
             case A::GudingBlade:
             case A::SilverLion:
+            case A::FireShaConvert:
                 return {true};
             }
             return {};
