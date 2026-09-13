@@ -77,6 +77,7 @@ TEST_CASE("tui: run drives the session to its end")
     CHECK(c.snapshot().over);
     CHECK_FALSE(c.snapshot().winner_label.empty());
     CHECK_FALSE(c.running());
+    CHECK(log_has_prefix(c.log_lines(), "对局结束"));
 }
 
 TEST_CASE("tui: save then load round-trips session progress")

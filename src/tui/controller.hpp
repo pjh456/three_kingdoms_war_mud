@@ -404,6 +404,13 @@ namespace tkw
                     if (!to_end)
                         break;
                 }
+                // 正常终局补一条结束行（取消/平局/失败路径各自已有提示）。
+                if (!cancel_.load() && tkw::game::session_over(ctx))
+                {
+                    log_.push("对局结束，胜者: " +
+                              make_snapshot(session_, viewer_).winner_label);
+                    post_snapshot();
+                }
                 post_done();
             }
 
