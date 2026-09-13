@@ -204,13 +204,15 @@ namespace tkw
                 }
                 case card::Scope::All:
                 case card::Scope::AllOthers:
-                    // 去重后比对：All/AllOthers 须覆盖合法集合一次且仅一次，
-                    // 重复目标（如 {a,a,b}）数量能对上但会重复结算/漏结算
+                    // 集合相等：All/AllOthers 须覆盖合法集合一次且仅一次。去重后
+                    // 数量须等于合法集，且原集合长度须等于去重后长度，否则
+                    // {b,c,d,b} 这类全覆盖 + 多余重复会重复结算
                     {
                         std::vector<std::string> uniq = targets;
                         std::sort(uniq.begin(), uniq.end());
                         uniq.erase(std::unique(uniq.begin(), uniq.end()), uniq.end());
-                        target_ok = uniq.size() == legal.size();
+                        target_ok = targets.size() == uniq.size() &&
+                                    uniq.size() == legal.size();
                     }
                     break;
                 }

@@ -525,6 +525,66 @@ TEST_CASE("game: aoe rejects duplicate targets")
     CHECK(g.cards.hand_size("a") == 1);  // 牌未消耗
 }
 
+TEST_CASE("game: aoe rejects full coverage with extra duplicate target")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    auto *d = g.add_player("d", 3, 4);
+    g.give("a", "nanman", "n#0");
+
+    TestDecider decider;  // 不响应
+    const auto played = g.cards.hand("a")[0];
+    // 全覆盖 {b,c,d} 之外多带一个 b：去重后数量仍等于合法集，须拒绝
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c", "d", "b"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+    CHECK(g.cards.hand_size("a") == 1);  // 牌未消耗
+    CHECK(b->get_hp() == 4);
+    CHECK(c->get_hp() == 4);
+    CHECK(d->get_hp() == 4);
+    CHECK(g.cards.discard_size() == 0);  // 未结算
+}
+
+TEST_CASE("game: all scope rejects duplicated target")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    b->take_damage("a", 2, false);  // b: 4 → 2
+    g.give("a", "taoyuan", "t#0");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    // {a,b,b} 去重后为 {a,b}，与合法集等量但 b 会被重复回血，须拒绝
+    auto r = resolve_play(g.ctx, decider, "a", played, {"a", "b", "b"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+    CHECK(g.cards.hand_size("a") == 1);  // 牌未消耗
+    CHECK(b->get_hp() == 2);
+    CHECK(g.cards.discard_size() == 0);
+}
+
+TEST_CASE("game: aoe accepts exact full target set")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    auto *d = g.add_player("d", 3, 4);
+    g.give("a", "nanman", "n#0");
+
+    TestDecider decider;  // 不响应
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c", "d"});
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.hand_size("a") == 0);
+    CHECK(b->get_hp() == 3);
+    CHECK(c->get_hp() == 3);
+    CHECK(d->get_hp() == 3);
+}
+
 TEST_CASE("game: card not in hand is rejected without effect")
 {
     TestGame g("deck");
