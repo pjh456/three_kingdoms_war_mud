@@ -19,7 +19,7 @@ namespace tkw
         {
             int draw_per_turn = 2;  /**< 每回合摸牌阶段摸牌数 */
             int sha_limit = 1;      /**< 每回合「杀」次数上限（连弩除外） */
-            int kill_reward = 3;    /**< 击杀一名角色后的奖励摸牌数 */
+            int kill_reward = 3;    /**< 击杀奖励摸牌数（乱斗：任意击杀；身份局：击杀反贼） */
             int initial_hand = 4;   /**< 开局每人初始手牌数 */
             int max_turns = 1000;   /**< 主循环回合上限（防僵局） */
             int dying_rounds = 64;  /**< 濒死救场轮上限（保险） */

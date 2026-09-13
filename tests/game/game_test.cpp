@@ -1539,6 +1539,126 @@ TEST_CASE("game: dying rescue is bounded by dying_rounds")
     CHECK(g.cards.discard_size() == 3);     // 2 张消耗救场 + 1 张死亡清场
 }
 
+TEST_CASE("game: identity rebel kill rewards three draws")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    make_identity(g, {{"a", Role::Lord}, {"b", Role::Rebel}});
+    g.cards.build_deck(g.catalog);
+    g.give("a", "sha", "s#0");
+    g.entities.find("b").unwrap()->take_damage("a", 3, false);  // b: 1
+
+    TestDecider decider;  // save=false
+    deal_damage(g.ctx, decider, "a", "b", 1);
+    CHECK(g.entities.find("b").is_none());
+    CHECK(g.cards.hand_size("a") == 4);  // 1 + 3
+}
+
+TEST_CASE("game: identity non-lord killing a loyalist gives no reward")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    make_identity(g, {{"a", Role::Rebel}, {"b", Role::Loyalist}});
+    g.cards.build_deck(g.catalog);
+    g.give("a", "sha", "s#0");
+    g.entities.find("b").unwrap()->take_damage("a", 3, false);  // b: 1
+
+    TestDecider decider;
+    deal_damage(g.ctx, decider, "a", "b", 1);
+    CHECK(g.entities.find("b").is_none());
+    CHECK(g.cards.hand_size("a") == 1);  // 非主公杀忠臣：无奖励
+}
+
+TEST_CASE("game: identity lord killing a loyalist discards hand and equipment")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    make_identity(g, {{"a", Role::Lord}, {"b", Role::Loyalist}});
+    g.cards.build_deck(g.catalog);
+    g.give("a", "sha", "s#0");
+    g.give("a", "sha", "s#1");
+    g.equip("a", "qinglong", "e#0");
+    g.entities.find("b").unwrap()->take_damage("a", 3, false);  // b: 1
+    const auto discard_before = g.cards.discard_size();
+
+    TestDecider decider;
+    deal_damage(g.ctx, decider, "a", "b", 1);
+    CHECK(g.entities.find("b").is_none());
+    CHECK(g.cards.hand_size("a") == 0);
+    CHECK(g.cards.equip_size("a") == 0);
+    CHECK(g.cards.discard_size() == discard_before + 3);  // 2 手牌 + 1 装备
+}
+
+TEST_CASE("game: identity traitor kill gives no reward")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    make_identity(g, {{"a", Role::Lord}, {"b", Role::Traitor}});
+    g.cards.build_deck(g.catalog);
+    g.give("a", "sha", "s#0");
+    g.entities.find("b").unwrap()->take_damage("a", 3, false);  // b: 1
+
+    TestDecider decider;
+    deal_damage(g.ctx, decider, "a", "b", 1);
+    CHECK(g.entities.find("b").is_none());
+    CHECK(g.cards.hand_size("a") == 1);  // 击杀内奸：无奖励
+}
+
+TEST_CASE("game: brawl kill still rewards three draws")
+{
+    TestGame g("deck");  // 不设模式 → Brawl
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "sha", "s#0");
+    g.entities.find("b").unwrap()->take_damage("a", 3, false);  // b: 1
+
+    TestDecider decider;
+    deal_damage(g.ctx, decider, "a", "b", 1);
+    CHECK(g.entities.find("b").is_none());
+    CHECK(g.cards.hand_size("a") == 4);  // 1 + 3
+}
+
+TEST_CASE("game: identity sourceless kill gives no reward")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    make_identity(g, {{"a", Role::Lord}, {"b", Role::Rebel}});
+    g.cards.build_deck(g.catalog);
+    g.give("a", "sha", "s#0");
+    g.entities.find("b").unwrap()->take_damage("a", 3, false);  // b: 1
+
+    TestDecider decider;
+    deal_damage(g.ctx, decider, "", "b", 1);  // 无来源（闪电类）
+    CHECK(g.entities.find("b").is_none());
+    CHECK(g.cards.hand_size("a") == 1);  // 来源为空：无奖励
+}
+
+TEST_CASE("game: identity lord penalty keeps the judgement zone")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    make_identity(g, {{"a", Role::Lord}, {"b", Role::Loyalist}});
+    g.cards.build_deck(g.catalog);
+    g.give("a", "sha", "s#0");
+    g.give("a", "sha", "s#1");
+    g.equip("a", "qinglong", "e#0");
+    g.cards.add_to_judge("a", Card{"L#0", "lesi", Suit::Spade, 6});
+    g.entities.find("b").unwrap()->take_damage("a", 3, false);  // b: 1
+
+    TestDecider decider;
+    deal_damage(g.ctx, decider, "a", "b", 1);
+    CHECK(g.cards.hand_size("a") == 0);
+    CHECK(g.cards.equip_size("a") == 0);
+    CHECK(g.cards.judge_size("a") == 1);  // 判定区不属于手牌与装备，保留
+}
+
 // ── 无懈可击 ─────────────────────────────────────────────────────────
 
 TEST_CASE("game: wuxie cancels aoe effect on one target only")
