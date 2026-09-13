@@ -15,6 +15,7 @@
 #include "cli/commands.hpp"
 #include "cli/error_zh.hpp"
 #include "cli/help_zh.hpp"
+#include "cli/query_lines.hpp"
 #include "cli/render.hpp"
 #include "config/error.hpp"
 #include "game/core/roles.hpp"
@@ -136,6 +137,54 @@ namespace
                    R"({"id":"h0","name":")" + card_name +
                        R"(","type":"basic","copies":[)" + copies + "]}")
             .is_ok();
+    }
+
+    /**
+     * @brief 写一份含未知机制名的 mini 牌表，供 audit 未实现卡分支断言。
+     * @param dir 牌表目录；不存在则创建，已存在先清空。
+     * @return deck.json 与 cards/ghost.json 均写出成功为真。
+     */
+    bool write_unknown_mechanism_deck(const std::filesystem::path &dir)
+    {
+        std::error_code ec;
+        std::filesystem::remove_all(dir, ec);
+        if (!std::filesystem::create_directories(dir / "cards"))
+            return false;
+        if (tkw::io::write_text(dir / "deck.json",
+                                R"({"name":"ghost","cards":["ghost"]})")
+                .is_err())
+            return false;
+        return tkw::io::write_text(
+                   dir / "cards" / "ghost.json",
+                   R"({"id":"ghost","name":"幽魂","type":"basic",)"
+                   R"("effect":{"kind":"summon","amount":1,"scope":"one_other"}})")
+            .is_ok();
+    }
+
+    /** 逐行拼接：每行补行尾 '\n'，与 CLI wrapper 的打印契约一致；空向量得空串。 */
+    std::string join_lines(const std::vector<std::string> &lines)
+    {
+        std::string out;
+        for (const auto &line : lines)
+            out += line + "\n";
+        return out;
+    }
+
+    /**
+     * @brief 执行 f 期间捕获 std::cout 的字节输出，返回捕获内容。
+     * @note RAII 恢复原缓冲：即使 f 抛出（doctest REQUIRE）也不污染后续用例。
+     */
+    template <typename F>
+    std::string capture_cout(F &&f)
+    {
+        std::ostringstream captured;
+        struct Restore
+        {
+            std::streambuf *old;
+            ~Restore() { std::cout.rdbuf(old); }
+        } restore{std::cout.rdbuf(captured.rdbuf())};
+        f();
+        return captured.str();
     }
 }
 
@@ -1687,4 +1736,175 @@ TEST_CASE("cli: status flags a session at the round cap")
     CHECK(capped.out.find("已达回合上限") != std::string::npos);
     CHECK(capped.out.find("下一回合") != std::string::npos);
     CHECK(capped.out.find("会话: 已结束") == std::string::npos);
+}
+
+// ── 纯行构造器与 CLI 打印 wrapper 的行级字节护栏 ────────────────────────
+
+TEST_CASE("cli: query_lines pure vectors are byte-exact")
+{
+    const std::filesystem::path deck = temp_dir("tkw_cli_lines_deck_reg");
+    const std::filesystem::path ghost = temp_dir("tkw_cli_lines_deck_ghost");
+    std::error_code ec;
+    REQUIRE(write_mini_deck(deck, "reg-a", "A测"));
+    REQUIRE(write_unknown_mechanism_deck(ghost));
+
+    tkw::cli::Options opt;
+    opt.deck = deck;
+    const std::string head = "牌表: " + deck.string();
+
+    auto plain = tkw::cli::detail::cards_lines(opt, false);
+    REQUIRE(plain.is_ok());
+    CHECK(plain.unwrap() ==
+          std::vector<std::string>{head, "牌堆 reg-a（1 种 / 30 张）",
+                                   "  A测(h0) 基本 30"});
+
+    auto with_text = tkw::cli::detail::cards_lines(opt, true);
+    REQUIRE(with_text.is_ok());
+    CHECK(with_text.unwrap() ==
+          std::vector<std::string>{head, "牌堆 reg-a（1 种 / 30 张）",
+                                   "  A测(h0) 基本 30: （无说明）"});
+
+    auto all = tkw::cli::detail::rules_lines(opt, "");
+    REQUIRE(all.is_ok());
+    CHECK(all.unwrap() == std::vector<std::string>{
+                              head, "卡牌说明（1 种）:", "  A测(h0): （无说明）"});
+
+    auto hit = tkw::cli::detail::rules_lines(opt, "A测");
+    REQUIRE(hit.is_ok());
+    CHECK(hit.unwrap() ==
+          std::vector<std::string>{head, "卡牌说明（匹配「A测」的 1 种）:",
+                                   "  A测(h0): （无说明）"});
+
+    auto miss = tkw::cli::detail::rules_lines(opt, "zzz");
+    REQUIRE(miss.is_ok());
+    CHECK(miss.unwrap() ==
+          std::vector<std::string>{head, "卡牌说明（匹配「zzz」的 0 种）:",
+                                   "  没有匹配的卡牌说明。"});
+
+    auto supported = tkw::cli::detail::audit_lines(opt);
+    REQUIRE(supported.is_ok());
+    CHECK(supported.unwrap() ==
+          std::vector<std::string>{head, "牌堆全部可结算"});
+
+    tkw::cli::Options ghost_opt;
+    ghost_opt.deck = ghost;
+    auto unsupported = tkw::cli::detail::audit_lines(ghost_opt);
+    REQUIRE(unsupported.is_ok());
+    CHECK(unsupported.unwrap() ==
+          std::vector<std::string>{"牌表: " + ghost.string(),
+                                   "未实现卡（1 张）:", "  幽魂(ghost)"});
+
+    std::filesystem::remove_all(deck, ec);
+    std::filesystem::remove_all(ghost, ec);
+}
+
+TEST_CASE("cli: query wrappers print pure lines with trailing newline")
+{
+    const std::filesystem::path deck = temp_dir("tkw_cli_lines_deck_print");
+    const std::filesystem::path ghost = temp_dir("tkw_cli_lines_deck_print_ghost");
+    std::error_code ec;
+    REQUIRE(write_mini_deck(deck, "reg-a", "A测"));
+    REQUIRE(write_unknown_mechanism_deck(ghost));
+
+    tkw::cli::Options opt;
+    opt.deck = deck;
+
+    {
+        auto pure = tkw::cli::detail::cards_lines(opt, false);
+        REQUIRE(pure.is_ok());
+        const std::string out =
+            capture_cout([&] { (void)tkw::cli::detail::cards_list(opt, false); });
+        CHECK(out == join_lines(pure.unwrap()));
+    }
+    {
+        auto pure = tkw::cli::detail::cards_lines(opt, true);
+        REQUIRE(pure.is_ok());
+        const std::string out =
+            capture_cout([&] { (void)tkw::cli::detail::cards_list(opt, true); });
+        CHECK(out == join_lines(pure.unwrap()));
+    }
+    {
+        auto pure = tkw::cli::detail::rules_lines(opt, "");
+        REQUIRE(pure.is_ok());
+        const std::string out =
+            capture_cout([&] { (void)tkw::cli::detail::rules_lookup(opt, ""); });
+        CHECK(out == join_lines(pure.unwrap()));
+    }
+    {
+        auto pure = tkw::cli::detail::rules_lines(opt, "A测");
+        REQUIRE(pure.is_ok());
+        const std::string out = capture_cout(
+            [&] { (void)tkw::cli::detail::rules_lookup(opt, "A测"); });
+        CHECK(out == join_lines(pure.unwrap()));
+    }
+    {
+        auto pure = tkw::cli::detail::audit_lines(opt);
+        REQUIRE(pure.is_ok());
+        const std::string out =
+            capture_cout([&] { (void)tkw::cli::detail::audit_deck(opt); });
+        CHECK(out == join_lines(pure.unwrap()));
+    }
+    {
+        tkw::cli::Options ghost_opt;
+        ghost_opt.deck = ghost;
+        auto pure = tkw::cli::detail::audit_lines(ghost_opt);
+        REQUIRE(pure.is_ok());
+        const std::string out =
+            capture_cout([&] { (void)tkw::cli::detail::audit_deck(ghost_opt); });
+        CHECK(out == join_lines(pure.unwrap()));
+    }
+
+    std::filesystem::remove_all(deck, ec);
+    std::filesystem::remove_all(ghost, ec);
+}
+
+TEST_CASE("cli: turn header and battle stats are byte-exact")
+{
+    tkw::game::GameSession session;
+    session.current = "P0";
+    session.turns = 0;
+    CHECK(tkw::cli::detail::turn_header_text(session) == "—— 回合 1：P0 ——");
+    session.current = "P2";
+    session.turns = 6;
+    CHECK(tkw::cli::detail::turn_header_text(session) == "—— 回合 7：P2 ——");
+    CHECK(capture_cout([&] { tkw::cli::detail::print_turn_header(session); }) ==
+          join_lines({tkw::cli::detail::turn_header_text(session)}));
+
+    Repl repl;
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+    REQUIRE(repl.session.game != nullptr);
+    const tkw::game::Game &game = *repl.session.game;
+
+    const std::vector<std::string> fresh = {
+        "对局统计:", "  回合数: 5", "  胜者: 无",
+        "  P0: 体力 4/4，击杀 0，伤害 0，治疗 0",
+        "  P1: 体力 4/4，击杀 0，伤害 0，治疗 0"};
+    CHECK(tkw::cli::detail::battle_stats_lines(tkw::save::BattleStats{}, game, "",
+                                               5) == fresh);
+
+    tkw::save::BattleStats stats;
+    stats.kills["P0"] = 2;
+    stats.damage_dealt["P0"] = 7;
+    stats.healing["P0"] = 3;
+    stats.died.insert("P1");
+    auto ctx = repl.session.game->context();
+    tkw::game::declare_death(ctx, "P1");
+    const std::vector<std::string> after = {
+        "对局统计:", "  回合数: 7", "  胜者: P0",
+        "  P0: 体力 4/4，击杀 2，伤害 7，治疗 3",
+        "  P1: 阵亡，击杀 0，伤害 0，治疗 0"};
+    CHECK(tkw::cli::detail::battle_stats_lines(stats, game, "P0", 7) == after);
+    CHECK(capture_cout(
+              [&] { tkw::cli::detail::print_battle_stats(stats, game, "P0", 7); }) ==
+          join_lines(after));
+}
+
+TEST_CASE("cli: unsupported cards warning lines stay empty without a deck")
+{
+    CHECK(tkw::cli::detail::unsupported_cards_warning_lines(
+              tkw::card::CardDefCatalog{})
+              .empty());
+    std::ostringstream err;
+    tkw::cli::detail::warn_unsupported_cards(tkw::card::CardDefCatalog{}, err);
+    CHECK(err.str().empty());
 }
