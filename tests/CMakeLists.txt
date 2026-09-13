@@ -239,6 +239,14 @@ add_test(NAME cli_help_option_defaults_zh
          COMMAND sh -c
                  "out=$($<TARGET_FILE:tkw> new --help); printf '%s' \"$out\" | grep -q '默认 4' && printf '%s' \"$out\" | grep -q '默认 42' && printf '%s' \"$out\" | grep -q '默认 resources' && printf '%s' \"$out\" | grep -q '默认 simple' && printf '%s' \"$out\" | grep -q 'tkw-autosave.json' && printf '%s' \"$out\" | grep -q -- '--history'")
 set_tests_properties(cli_help_option_defaults_zh PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+# --mode 可发现性：根帮助列出选项并标注默认 brawl（描述文字，非 .default_value）。
+add_test(NAME cli_help_mode_option
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> --help); printf '%s' \"$out\" | grep -q -- '--mode' && printf '%s' \"$out\" | grep -q '默认 brawl'")
+set_tests_properties(cli_help_mode_option PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # 高频 leaf 命令 --help 附「示例:」段，含与当前选项面一致的示例行；非高频 leaf
@@ -426,12 +434,26 @@ add_test(NAME cli_ai_bogus_value_rejected
 set_tests_properties(cli_ai_bogus_value_rejected PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# 值域校验：非法 --mode 值解析期拒绝（enum 映射外，Parse Error rc=2）。
+add_test(NAME cli_mode_bogus_value_rejected
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> deal 2 1 --mode bogus 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '参数错误' && [ $rc -eq 2 ]")
+set_tests_properties(cli_mode_bogus_value_rejected PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # simulate 批量模拟：aggressive 档完整跑 20 局，钉汇总关键词与「种子 1..20」
 # 缺省基种子文案（Options.seed 缺省 42 不适用于 simulate）。
 add_test(NAME cli_simulate_aggressive
          COMMAND sh -c
                  "out=$($<TARGET_FILE:tkw> simulate 20 2 --ai aggressive 2>&1); rc=$?; [ $rc -eq 0 ] && printf '%s' \"$out\" | grep -q '模拟 20 局' && printf '%s' \"$out\" | grep -q '种子 1..20' && printf '%s' \"$out\" | grep -q 'ai=aggressive' && printf '%s' \"$out\" | grep -q '胜' && printf '%s' \"$out\" | grep -q '平均回合'")
 set_tests_properties(cli_simulate_aggressive PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 身份局批量模拟：头行标 mode=identity，汇总按阵营输出。
+add_test(NAME cli_simulate_identity
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> simulate 3 4 --mode identity 2>&1); rc=$?; [ $rc -eq 0 ] && printf '%s' \"$out\" | grep -q 'mode=identity' && printf '%s' \"$out\" | grep -q '阵营'")
+set_tests_properties(cli_simulate_identity PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # 确定性：同参数两跑输出逐字节一致（种子完全由基种子 + 局序号决定）。
@@ -515,6 +537,27 @@ add_test(NAME cli_status_finished
          COMMAND sh -c
                  "out=$(printf 'new --players 2 --seed 1\\nrun\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); printf '%s' \"$out\" | grep -q '会话: 已结束' && printf '%s' \"$out\" | grep -q '胜者: P0' && [ \"$(printf '%s' \"$out\" | grep -c '下一回合')\" -eq 1 ]")
 set_tests_properties(cli_status_finished PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 身份局人数不足：建局期可操作文案（含人数）并退出 1。
+add_test(NAME cli_identity_too_few_players
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> new --mode identity --players 2 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '身份模式至少 4 人' && printf '%s' \"$out\" | grep -q '2' && [ $rc -eq 1 ]")
+set_tests_properties(cli_identity_too_few_players PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 身份局 REPL 终局：seed 1 4p 主公阵营胜，钉阵营/内奸/平局三关键词之一。
+add_test(NAME cli_identity_repl_run_outcome
+         COMMAND sh -c
+                 "out=$(printf 'new --mode identity --players 4 --seed 1\\nrun\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); rc=$?; printf '%s' \"$out\" | grep -qE '阵营|内奸|平局' && [ $rc -eq 0 ]")
+set_tests_properties(cli_identity_repl_run_outcome PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 身份局存读往返：模式与角色随存档恢复，load 后 status 显示身份局模式与逐座角色。
+add_test(NAME cli_identity_save_load_roundtrip
+         COMMAND sh -c
+                 "out=$(printf 'new --mode identity --players 4 --seed 1\\nstep\\nsave ${CMAKE_CURRENT_BINARY_DIR}/tkw-identity-e2e.json\\nnew --players 2 --seed 1\\nload ${CMAKE_CURRENT_BINARY_DIR}/tkw-identity-e2e.json\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); rc=$?; rm -f ${CMAKE_CURRENT_BINARY_DIR}/tkw-identity-e2e.json; printf '%s' \"$out\" | grep -q '模式: 身份局' && printf '%s' \"$out\" | grep -q '角色 主公' && [ $rc -eq 0 ]")
+set_tests_properties(cli_identity_save_load_roundtrip PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # status 展示本会话牌表来源（默认 resources；REPL 启动选项被行内建局继承）。

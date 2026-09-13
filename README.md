@@ -29,6 +29,7 @@ ctest --test-dir build        # 运行全部测试
 ```sh
 tkw                   # 裸命令：跑一局 4 人 AI 对局到结束
 tkw deal 2 1          # 位置参数跑一局：2 人、种子 1
+tkw --mode identity deal 5 1  # 身份局：5 人、种子 1（身份局需 4–8 人）
 tkw --human P0 repl   # P0 真人参与，REPL 交互模式
 ```
 
@@ -67,12 +68,14 @@ tkw --human P0 repl   # P0 真人参与，REPL 交互模式
 | `--human <seat>` | 真人座位（可重复：`--human P0 --human P2`；存档不保存，读档后需重新指定） |
 | `--no-human` | 清空真人座位（REPL 内覆盖启动/会话带入的 `--human`；与 `--human` 同给时清空优先） |
 | `--ai <simple\|aggressive>` | AI 难度（默认 `simple` 贪心；`aggressive` 伤害/多目标先行） |
+| `--mode <brawl\|identity>` | 对局模式（默认 `brawl` 乱斗；`identity` 身份局需 4–8 人，`load` 以存档为准） |
 
-上表的选项各命令都声明并接受，但生效面不同：`--deck`/`--players`/`--hand`/`--seed`/`--ai`
+上表的选项各命令都声明并接受，但生效面不同：`--deck`/`--players`/`--hand`/`--seed`/`--ai`/`--mode`
 只对建局/载入类命令（裸 `tkw`/`deal`/`new`/`load`/`repl`/`simulate`）实际生效；`cards`/`audit`
 只读 `--deck`；`step`/`run`/`status`/`save` 只读取其中的 `--verbose`（`step`/`run`）
 或全不读取（`status`/`save`）。`--human` 只在运行真人参与对局的命令生效，`audit`/`cards`/
-`simulate` 会明确拒绝；`--autosave`/`--history` 只在 `repl` 生效。
+`simulate` 会明确拒绝；`--autosave`/`--history` 只在 `repl` 生效。**`--mode` 在 `load` 上
+不生效**：载入的模式与角色以存档为准，避免用命令行强行改写存档模式。
 
 会话命令（`new`/`step`/`run`/`status`/`save`/`load`）共享同一进程内的会话，通常在
 `tkw repl` 内逐条输入使用；在 REPL 外单独执行不会保留会话（单独 `tkw new` 只开一局
@@ -91,6 +94,9 @@ tkw repl
 - 会话流：`new --players 2 --seed 1` 开新局 → `step` 执行一个回合（可重复）/
   `run` 跑到结束 → `status` 看状态 → `save s.json` 存档 / `load s.json` 续玩 →
   `quit` 退出；
+- 身份局：`new --mode identity --players 5 --seed 1`（4–8 人）开身份局，`status`
+  显示「模式: 身份局」与逐座角色（主公/忠臣/反贼/内奸），终局按阵营给出
+  「主公阵营胜/反贼阵营胜/内奸胜」；`run`/`deal`/`simulate` 同样支持 `--mode identity`；
 - 事件日志：`tkw --verbose repl` 进入后，`new`/`load` 建局默认继承启动日志开关；
   在 `step`/`run` 上行内加 `--no-verbose` 可只关本次输出的日志，下一行仍回落
   会话默认，无需重启；
@@ -135,8 +141,9 @@ tkw repl
 | 「杀」次数 | 每回合 1 次（装备诸葛连弩不限） |
 | 手牌上限 | 当前体力值（超出时弃牌） |
 | 击杀奖励 | 摸 3 张牌 |
-| 玩家数 | 2–8 人 |
+| 玩家数 | 2–8 人（身份局需 4–8 人） |
 | 胜利条件 | 唯一存活；达到 1000 回合上限判平局 |
+| 身份局胜利 | 主公阵营胜（主公存活）/ 反贼胜（主公阵亡且内奸非唯一存活者）/ 内奸胜（唯一存活内奸）；同归于尽为平局 |
 
 规则数值数据驱动，每张牌的效果文案见卡文件 `text` 字段；详细规则以 `tkw --help`
 与卡面文案为准。
@@ -153,6 +160,9 @@ tkw repl
   来源/阵亡），读档后自动恢复；`load <file> --ai <档>` 显式覆盖存档 AI 档。旧档
   无这些字段时回落命令行取值与空统计，仍可加载。`--human` 与 `--verbose` 仍不
   入档（读档命令行的 `--verbose` 自行控制日志）。
+- **模式与角色入档**：身份局存档额外记录 `mode` 与逐座 `roles`，读档后自动恢复
+  模式与角色；`load` 的模式以存档为准，命令行 `--mode` 不生效（与 `--ai` 的覆盖
+  语义刻意区分）。乱斗存档不写这两项，旧档缺字段时回落乱斗 + 空角色表，仍可加载。
 - **自动存档**：REPL 退出时若有进行中的会话，自动存档到当前目录
   `tkw-autosave.json`；`--autosave <path>` 改路径，空串关闭。
 

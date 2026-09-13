@@ -20,6 +20,7 @@
 #include "event/event_bus.hpp"
 #include "event/handler.hpp"
 #include "game/core/card_event.hpp"
+#include "game/core/roles.hpp"
 #include "game/flow/table.hpp"
 #include "save/session_meta.hpp"
 
@@ -236,6 +237,50 @@ namespace tkw
             inline std::string winner_label(const std::string &winner)
             {
                 return winner.empty() ? "平局（同归于尽）" : winner;
+            }
+
+            /** 身份局角色 → 中文展示；Role::None 回落「未知」。 */
+            inline const char *role_label_zh(tkw::game::Role r)
+            {
+                switch (r)
+                {
+                case tkw::game::Role::Lord:
+                    return "主公";
+                case tkw::game::Role::Loyalist:
+                    return "忠臣";
+                case tkw::game::Role::Rebel:
+                    return "反贼";
+                case tkw::game::Role::Traitor:
+                    return "内奸";
+                default:
+                    return "未知";
+                }
+            }
+
+            /**
+             * @brief 身份局终局阵营标签。
+             * @param camp 胜利阵营；Draw/None 回落同归于尽口径。
+             * @param rep  阵营代表 id（可空）；反贼代表可能是已阵亡者，展示 id 会
+             *             误导，故忽略。
+             * @return 主公阵营胜/反贼阵营胜/内奸胜（带代表 id 时加括号）/平局。
+             * @note 仅 identity 已结束会话调用；与乱斗 winner_label 的回落口径区分：
+             *       本函数把空 rep 视为同归于尽平局，乱斗统计块的「无」不走这里。
+             */
+            inline std::string identity_result_label(
+                tkw::game::WinCamp camp, const std::string &rep)
+            {
+                switch (camp)
+                {
+                case tkw::game::WinCamp::LordCamp:
+                    return rep.empty() ? "主公阵营胜" : "主公阵营胜（" + rep + "）";
+                case tkw::game::WinCamp::TraitorCamp:
+                    return rep.empty() ? "内奸胜" : "内奸胜（" + rep + "）";
+                case tkw::game::WinCamp::RebelCamp:
+                    return "反贼阵营胜";
+                case tkw::game::WinCamp::Draw:
+                default:
+                    return "平局（同归于尽）";
+                }
             }
         }  // namespace detail
     }  // namespace cli

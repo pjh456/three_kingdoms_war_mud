@@ -112,7 +112,8 @@ namespace tkw
                 if (name == "new")
                     return "示例:\n"
                            "    tkw new --players 2 --seed 1   开一局并打印状态\n"
-                           "    new --players 2 --seed 1       REPL 内开新局\n";
+                           "    new --players 2 --seed 1       REPL 内开新局\n"
+                           "    tkw new --mode identity --players 5 --seed 1  身份局（4–8 人）\n";
                 if (name == "deal")
                     return "示例:\n"
                            "    tkw deal 2 1                     2 人、种子 1 跑一局\n"
@@ -144,7 +145,8 @@ namespace tkw
                 if (name == "load")
                     return "示例:\n"
                            "    load s.json                      在 REPL 内载入存档续玩（别名 l）\n"
-                           "    tkw load s.json --ai aggressive  命令行载入并覆盖 AI 档\n";
+                           "    tkw load s.json --ai aggressive  命令行载入并覆盖 AI 档\n"
+                           "    注: load 的模式与角色以存档为准，--mode 不生效\n";
                 return {};
             }
         }  // namespace detail
@@ -193,6 +195,7 @@ namespace tkw
                     "    tkw                      跑一局 AI 对局\n"
                     "    tkw deal 2 1             按位置参数跑一局（2 人，种子 1）\n"
                     "    tkw --ai aggressive deal 2 1  aggressive AI 跑一局\n"
+                    "    tkw --mode identity deal 4 1  身份局跑一局（4–8 人）\n"
                     "    tkw audit                审计牌堆\n"
                     "    tkw cards              列出牌表构成\n"
                     "    tkw simulate 100 2     批量模拟 100 局（2 人）\n"

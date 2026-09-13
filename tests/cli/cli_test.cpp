@@ -16,6 +16,7 @@
 #include "cli/help_zh.hpp"
 #include "cli/render.hpp"
 #include "config/error.hpp"
+#include "game/core/roles.hpp"
 #include "game/flow/loop.hpp"
 #include "io/file.hpp"
 
@@ -529,6 +530,31 @@ TEST_CASE("cli: --ai completion offers level names")
     CHECK(none.candidates.empty());
 }
 
+TEST_CASE("cli: --mode completion offers mode names")
+{
+    Repl repl;
+
+    // 空前缀：两个模式全量；i 前缀单命中；越界前缀为空。
+    auto all = pjh::cli::complete_line_result(repl.app, "--mode ", 7);
+    REQUIRE(all.candidates.size() == 2);
+    std::vector<std::string> got;
+    for (const auto &c : all.candidates)
+        got.push_back(c.display);
+    CHECK(std::find(got.begin(), got.end(), "brawl") != got.end());
+    CHECK(std::find(got.begin(), got.end(), "identity") != got.end());
+
+    auto identity = pjh::cli::complete_line_result(repl.app, "--mode i", 8);
+    REQUIRE(identity.candidates.size() == 1);
+    CHECK(identity.candidates[0].display == "identity");
+
+    // leaf 位置经祖先链同样命中（--mode 每个 leaf 都声明）。
+    auto leaf = pjh::cli::complete_line_result(repl.app, "new --mode ", 11);
+    CHECK(leaf.candidates.size() == 2);
+
+    auto none = pjh::cli::complete_line_result(repl.app, "--mode x", 8);
+    CHECK(none.candidates.empty());
+}
+
 TEST_CASE("cli: audit entry name renders chinese name with id")
 {
     tkw::config::ResourceStore store(TKW_TEST_RESOURCE_DIR);
@@ -575,6 +601,59 @@ TEST_CASE("cli: --ai rejects an unmapped value")
     auto bad = repl.run("new --ai bogus");
     CHECK_FALSE(bad.ok);
     CHECK(bad.error.find("Parse Error") != std::string::npos);
+}
+
+TEST_CASE("cli: identity status shows mode and roles")
+{
+    Repl repl;
+
+    auto created = repl.run("new --mode identity --players 5 --seed 1");
+    CHECK(created.ok);
+    REQUIRE(repl.session.game != nullptr);
+    CHECK(repl.session.game->mode == tkw::game::GameMode::Identity);
+    CHECK(created.out.find("模式: 身份局") != std::string::npos);
+    // 5 人配比覆盖全部四种角色标签。
+    CHECK(created.out.find("角色 主公") != std::string::npos);
+    CHECK(created.out.find("角色 忠臣") != std::string::npos);
+    CHECK(created.out.find("角色 反贼") != std::string::npos);
+    CHECK(created.out.find("角色 内奸") != std::string::npos);
+}
+
+TEST_CASE("cli: identity new rejects too few players")
+{
+    Repl repl;
+
+    auto created = repl.run("new --mode identity --players 2");
+    CHECK_FALSE(created.ok);
+    CHECK(created.error.find("身份模式至少 4 人") != std::string::npos);
+    CHECK_FALSE(repl.session.active);
+}
+
+TEST_CASE("cli: brawl status has no mode or role line")
+{
+    Repl repl;
+
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+    auto status = repl.run("status");
+    CHECK(status.ok);
+    // 乱斗输出逐字节不变：模式行与逐座角色均只在 identity 分支产出。
+    CHECK(status.out.find("模式") == std::string::npos);
+    CHECK(status.out.find("角色") == std::string::npos);
+}
+
+TEST_CASE("cli: brawl zero-survivor stats keep the raw empty winner")
+{
+    Repl repl;
+
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+    auto ctx = repl.session.game->context();
+    tkw::game::declare_death(ctx, "P0");
+    tkw::game::declare_death(ctx, "P1");
+
+    // 终局行回落同归于尽标签；统计块必须保留乱斗原始空胜者（print_battle_stats
+    // 显示「胜者: 无」），二者拆分正是为此，不可合并为一个标签。
+    CHECK(tkw::cli::detail::game_end_label(ctx) == "平局（同归于尽）");
+    CHECK(tkw::cli::detail::game_stats_label(ctx).empty());
 }
 
 TEST_CASE("cli: parse errors render in Chinese")
@@ -774,6 +853,32 @@ TEST_CASE("cli: load restores ai and stats")
     auto overridden = repl.run("load " + file.string() + " --ai simple");
     CHECK(overridden.ok);
     CHECK(repl.session.ai == tkw::cli::AiLevel::Simple);
+
+    std::filesystem::remove(file, ec);
+}
+
+TEST_CASE("cli: load restores identity mode from a save")
+{
+    Repl repl;
+    const std::filesystem::path file = temp_save("tkw-cli-identity.json");
+    std::error_code ec;
+    std::filesystem::remove(file, ec);
+
+    REQUIRE(repl.run("new --mode identity --players 4 --seed 1").ok);
+    REQUIRE(repl.run("step").ok);
+    REQUIRE(repl.run("save " + file.string()).ok);
+
+    // 重置为乱斗，再读回身份局档：模式与角色以存档为准。
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+    REQUIRE(repl.session.game != nullptr);
+    CHECK(repl.session.game->mode == tkw::game::GameMode::Brawl);
+
+    auto loaded = repl.run("load " + file.string());
+    CHECK(loaded.ok);
+    REQUIRE(repl.session.game != nullptr);
+    CHECK(repl.session.game->mode == tkw::game::GameMode::Identity);
+    CHECK(repl.session.game->roles.at("P0") == tkw::game::Role::Lord);
+    CHECK(loaded.out.find("模式: 身份局") != std::string::npos);
 
     std::filesystem::remove(file, ec);
 }
@@ -978,6 +1083,25 @@ TEST_CASE("cli: status reports a finished session and its winner")
     CHECK(draw.out.find("会话: 已结束") != std::string::npos);
     CHECK(draw.out.find("胜者: 平局（同归于尽）") != std::string::npos);
     CHECK(draw.out.find("下一回合") == std::string::npos);
+}
+
+TEST_CASE("cli: identity terminal labels use camp names")
+{
+    Repl repl;
+
+    REQUIRE(repl.run("new --mode identity --players 4 --seed 1").ok);
+    auto ctx = repl.session.game->context();
+    // 只手杀主公：终局为反贼阵营；反贼代表 id 可能已阵亡，不展示。
+    tkw::game::declare_death(ctx, "P0");
+    CHECK(tkw::game::session_over(ctx));
+
+    auto finished = repl.run("status");
+    CHECK(finished.ok);
+    CHECK(finished.out.find("胜者: 反贼阵营胜") != std::string::npos);
+
+    auto stepped = repl.run("step");
+    CHECK(stepped.ok);
+    CHECK(stepped.out.find("对局已结束，胜者: 反贼阵营胜") != std::string::npos);
 }
 
 TEST_CASE("cli: status shows the session deck source")

@@ -87,6 +87,9 @@ namespace tkw
                                   ? ctx.get<bool, fixed_string("verbose")>()
                                   : base.verbose;
                 opt.ai = ctx.get_or_enum<AiLevel, fixed_string("ai")>(base.ai);
+                opt.mode =
+                    ctx.get_or_enum<tkw::game::GameMode, fixed_string("mode")>(
+                        base.mode);
                 opt.autosave =
                     ctx.get_or<std::filesystem::path, fixed_string("autosave")>(
                         base.autosave);
@@ -151,7 +154,7 @@ namespace tkw
             }
 
             /**
-             * @brief 在命令上声明标量公共选项（牌堆/人数/手牌/种子/日志/存档/历史/AI 难度）。
+             * @brief 在命令上声明标量公共选项（牌堆/人数/手牌/种子/日志/存档/历史/AI 难度/对局模式）。
              * @param cmd   目标命令：根命令或会读取这些选项的 leaf。
              * @param rules 玩家数上下限来源。
              * @note pjh_cli 的选项查找沿父链（名与值都取最近声明处），故 leaf 不重
@@ -163,7 +166,9 @@ namespace tkw
              *       （session.base），破坏会话继承。--verbose 标 negatable 以支持
              *       --no-verbose 关闭；是否采用显式值由 was_provided 判定，未提供
              *       时回落会话默认。--ai 走 enum 映射，值域外输入在解析期报
-             *       enum_value_error（与未知选项同一 rc=2 错误面）。
+             *       enum_value_error（与未知选项同一 rc=2 错误面）。--mode 同
+             *       enum 范式，默认 brawl 只写进描述文字；load 的占位建局固定
+             *       brawl，模式与角色以存档为准，故 --mode 在 load 上不生效。
              */
             inline void declare_common_options(
                 pjh::cli::BaseCommand &cmd, const tkw::game::RulesConfig &rules)
@@ -209,6 +214,16 @@ namespace tkw
                         // 候选值域与上方 enum 映射保持一致
                         return std::vector<std::string>{"simple", "aggressive"};
                     });
+                cmd.option<fixed_string("mode")>(
+                       "--mode",
+                       "对局模式：brawl 乱斗 / identity 身份局（默认 brawl；identity 需 4–8 人）")
+                    .enum_type<tkw::game::GameMode>()
+                    .mapping({{"brawl", tkw::game::GameMode::Brawl},
+                              {"identity", tkw::game::GameMode::Identity}})
+                    .completer([] {
+                        // 候选值域与上方 enum 映射保持一致
+                        return std::vector<std::string>{"brawl", "identity"};
+                    });
             }
 
             /**
@@ -240,10 +255,22 @@ namespace tkw
                     .boolean();
             }
 
-            /** 建局入参：只取装配所需字段（hand/AI/verbose 属会话参数）。 */
+            /**
+             * @brief 建局入参：只取装配所需字段（hand/AI/verbose 属会话参数）。
+             * @param opt  命令行选项。
+             * @param mode 参与装配的对局模式；load 占位建局固定 Brawl（模式与角色
+             *             由存档恢复），其余入口传 opt.mode。
+             */
+            inline tkw::game::BuildOptions build_options_from(
+                const Options &opt, tkw::game::GameMode mode)
+            {
+                return tkw::game::BuildOptions{opt.deck, opt.players, opt.seed, mode};
+            }
+
+            /** 建局入参：对局模式取 opt.mode。 */
             inline tkw::game::BuildOptions build_options_from(const Options &opt)
             {
-                return tkw::game::BuildOptions{opt.deck, opt.players, opt.seed};
+                return build_options_from(opt, opt.mode);
             }
 
             /**
@@ -426,7 +453,7 @@ namespace tkw
             /** @brief 跑到底结果：正常结束或达回合上限平局。 */
             enum class RunOutcome : std::uint8_t
             {
-                Finished,  /**< 会话结束（存活 ≤ 1） */
+                Finished,  /**< 会话结束（乱斗存活 ≤ 1；身份局主公阵亡或敌对尽灭） */
                 MaxRounds, /**< 达回合上限且无唯一存活者 */
             };
 
@@ -459,11 +486,44 @@ namespace tkw
             }
 
             /**
+             * @brief 终局「胜者」行标签：乱斗逐字走 winner_label；身份局按阵营。
+             * @param ctx 已结束对局的运行时上下文。
+             * @return 乱斗=唯一存活者 id（空串回落「平局（同归于尽）」）；
+             *         身份局=主公/反贼/内奸阵营标签。
+             * @note 与 game_stats_label 拆开：本函数把空胜者渲染为同归于尽平局，
+             *       统计块需要保留乱斗原始的「无」口径，二者不可互换。
+             */
+            inline std::string game_end_label(const tkw::game::GameContext &ctx)
+            {
+                if (tkw::game::mode_of(ctx) == tkw::game::GameMode::Brawl)
+                    return winner_label(tkw::game::session_winner(ctx));
+                return identity_result_label(
+                    tkw::game::session_camp(ctx), tkw::game::session_winner(ctx));
+            }
+
+            /**
+             * @brief 统计块「胜者」字段：乱斗保持原始 id（空串=显示「无」）；
+             *        身份局用阵营标签。
+             * @param ctx 已结束对局的运行时上下文。
+             * @note 乱斗 0 存活时必须回空的原始 id，不能走 game_end_label，否则
+             *       统计块会从「胜者: 无」变成「平局（同归于尽）」。
+             */
+            inline std::string game_stats_label(const tkw::game::GameContext &ctx)
+            {
+                if (tkw::game::mode_of(ctx) == tkw::game::GameMode::Brawl)
+                    return tkw::game::session_winner(ctx);
+                return identity_result_label(
+                    tkw::game::session_camp(ctx), tkw::game::session_winner(ctx));
+            }
+
+            /**
              * @brief 打印会话状态：无会话 / 进行中 / 已结束三态。
              * @param s 当前会话；active 为假或 game 为空时只打印「会话: 无」。
-             * @note 结束态以引擎 session_over（存活 ≤ 1）判定，胜者经 winner_label
-             *       回落，0 存活显示「平局（同归于尽）」；仅进行中打印「下一回合」
-             *       与牌表来源，已达回合上限但未终结时追加一行提示。
+             * @note 结束态以引擎 session_over（乱斗存活 ≤ 1；身份局主公阵亡或
+             *       敌对尽灭）判定，胜者经 game_end_label（乱斗 winner_label，
+             *       身份局阵营标签）；仅进行中打印「下一回合」与牌表来源，已达
+             *       回合上限但未终结时追加一行提示。身份局额外打印模式行与逐座
+             *       角色，乱斗分支不新增任何行。
              */
             inline void print_status(const Session &s)
             {
@@ -481,9 +541,12 @@ namespace tkw
                     !over && s.state.turns > tkw::game::rules_of(ctx).max_turns;
                 std::cout << "会话: " << (over ? "已结束" : "进行中") << "\n";
 
-                // 已结束不再提示下一回合，与 run/deal 共用 winner_label 回落。
+                if (tkw::game::mode_of(ctx) == tkw::game::GameMode::Identity)
+                    std::cout << "  模式: 身份局\n";
+
+                // 已结束不再提示下一回合，与 run/deal 共用 game_end_label。
                 if (over)
-                    std::cout << "  胜者: " << winner_label(tkw::game::session_winner(ctx))
+                    std::cout << "  胜者: " << game_end_label(ctx)
                               << "，已执行回合: " << s.state.turns
                               << "，存活: " << ctx.entities->size() << "\n";
                 else
@@ -507,11 +570,18 @@ namespace tkw
                 std::cout << "\n";
                 std::cout << "  局面:\n";
                 for (const auto &e : *ctx.entities)
+                {
                     std::cout << "    " << e->get_id() << " 体力 " << e->get_hp() << "/"
                               << e->get_hp_bar().get_max() << " 手牌 "
                               << ctx.cards->hand_size(e->get_id()) << " 装备 "
                               << ctx.cards->equip_size(e->get_id()) << " 判定 "
-                              << ctx.cards->judge_size(e->get_id()) << "\n";
+                              << ctx.cards->judge_size(e->get_id());
+                    if (tkw::game::mode_of(ctx) == tkw::game::GameMode::Identity)
+                        std::cout << " 角色 "
+                                  << role_label_zh(
+                                         tkw::game::role_of(ctx, e->get_id()));
+                    std::cout << "\n";
+                }
             }
 
             /**
@@ -567,9 +637,7 @@ namespace tkw
                 auto ctx = s.game->context();
                 if (tkw::game::session_over(ctx))
                 {
-                    std::cout << "对局已结束，胜者: "
-                              << winner_label(tkw::game::session_winner(ctx))
-                              << "\n";
+                    std::cout << "对局已结束，胜者: " << game_end_label(ctx) << "\n";
                     return CliResult<void>::Ok();
                 }
                 tkw::game::TurnError root = tkw::game::TurnError::PlayRejected;
@@ -586,11 +654,9 @@ namespace tkw
                 }
                 if (tkw::game::session_over(ctx))
                 {
-                    std::cout << "对局结束，胜者: "
-                              << winner_label(tkw::game::session_winner(ctx))
-                              << "\n";
+                    std::cout << "对局结束，胜者: " << game_end_label(ctx) << "\n";
                     print_battle_stats(
-                        s.stats, *s.game, tkw::game::session_winner(ctx), s.state.turns);
+                        s.stats, *s.game, game_stats_label(ctx), s.state.turns);
                 }
                 else
                     print_status(s);
@@ -617,13 +683,12 @@ namespace tkw
                     print_max_rounds_draw(s.stats, *s.game, s.state.turns);
                     return CliResult<void>::Ok();
                 }
-                std::cout << "胜者: "
-                          << winner_label(tkw::game::session_winner(ctx))
+                std::cout << "胜者: " << game_end_label(ctx)
                           << "，回合数: " << s.state.turns << "\n";
                 // 对局在本次命令内跑完才附统计块；已在更早 step 结束时不重复打印。
                 if (advanced)
                     print_battle_stats(
-                        s.stats, *s.game, tkw::game::session_winner(ctx), s.state.turns);
+                        s.stats, *s.game, game_stats_label(ctx), s.state.turns);
                 return CliResult<void>::Ok();
             }
 
@@ -654,7 +719,8 @@ namespace tkw
              * @param ai_explicit 命令行是否显式给了 --ai；显式值覆盖存档 AI 档。
              * @return Err 读文件 / 存档解析 / 真人座位校验失败；成功返回 Ok。
              * @note 旧档无元数据时 AI 档回落命令行取值、统计为空；未知 AI 文本
-             *       亦回落命令行，不拒绝存档。
+             *       亦回落命令行，不拒绝存档。模式与角色以存档为准，占位建局固定
+             *       Brawl，--mode 在本命令上不生效。
              */
             inline CliResult<void> cmd_load(
                 const Options &opt, const std::filesystem::path &file, Session &s,
@@ -664,7 +730,11 @@ namespace tkw
                 if (text.is_err())
                     return CliFailure{
                         CliError(render_read_error_zh(file, text.unwrap_err()))};
-                auto built = tkw::game::build_game(build_options_from(opt));
+                // 占位建局固定 Brawl：模式与角色由存档恢复，避免以 identity 占位
+                // 时因 --players 与存档不符误报 IdentityPlayerCount，或占位洗牌
+                // 消耗随机流（随后被 reader 覆盖）。
+                auto built = tkw::game::build_game(
+                    build_options_from(opt, tkw::game::GameMode::Brawl));
                 if (built.is_err())
                     return CliFailure{CliError(format_build_error(built.unwrap_err()))};
                 auto game = std::move(built).unwrap();
@@ -727,10 +797,9 @@ namespace tkw
                     print_max_rounds_draw(stats, *game, session.turns);
                     return CliResult<void>::Ok();
                 }
-                const std::string winner = tkw::game::session_winner(ctx);
-                std::cout << "胜者: " << winner_label(winner)
+                std::cout << "胜者: " << game_end_label(ctx)
                           << "，回合数: " << session.turns << "\n";
-                print_battle_stats(stats, *game, winner, session.turns);
+                print_battle_stats(stats, *game, game_stats_label(ctx), session.turns);
                 return CliResult<void>::Ok();
             }
 
@@ -833,9 +902,10 @@ namespace tkw
              * @note 基种子缺省 1（局种子 1..N，跨档对比口径可比），与
              *       Options.seed 缺省 42 不同；--verbose/--autosave 接受但不读
              *       （逐局不打事件日志、无会话），--human 因全 AI 批量模拟而拒绝。
-             *       汇总头行先亮明本批实际使用的牌表目录；胜者空串 = 平局；平均
-             *       回合为回合总和除以局数（向下取整）。每局不打印胜者行与统计块，
-             *       未实现卡警告在循环前打印一次。
+             *       汇总头行先亮明本批实际使用的牌表目录；胜者空串 = 平局；身份局
+             *       聚合键换阵营标签并按主公/反贼/内奸固定序输出，头行追加
+             *       mode=identity；平均回合为回合总和除以局数（向下取整）。每局不
+             *       打印胜者行与统计块，未实现卡警告在循环前打印一次。
              */
             inline CliResult<void> simulate_games(const Options &opt, int n)
             {
@@ -876,29 +946,54 @@ namespace tkw
                     if (rr.is_err())
                         return CliFailure{CliError(format_loop_error(rr.unwrap_err()))};
 
-                    // 胜者空串 = 平局（达回合上限或同归于尽）。
+                    // 胜者空串 = 平局（达回合上限或同归于尽）；身份局按阵营聚合，
+                    // 传空代表 id 得通用阵营标签，避免「内奸胜（P2）」拆成多键。
                     const std::string winner = tkw::game::session_winner(ctx);
                     if (winner.empty())
                         ++agg.draws;
+                    else if (tkw::game::mode_of(ctx) ==
+                             tkw::game::GameMode::Identity)
+                        ++agg.wins[identity_result_label(
+                            tkw::game::session_camp(ctx), {})];
                     else
                         ++agg.wins[winner];
                     agg.turns_sum += session.turns;
                 }
 
-                // 汇总：头行（牌表来源 + 局数/人数/种子区间/AI 档）+ 逐座位胜场与平局
-                // + 平均回合。
+                // 汇总：头行（牌表来源 + 局数/人数/种子区间/AI 档）+ 逐座位胜场或
+                // 身份局阵营胜场与平局 + 平均回合。
                 std::cout << "牌表: " << opt.deck.string() << "\n";
                 std::cout << "模拟 " << n << " 局（" << opt.players << " 人，种子 "
                           << opt.seed << ".." << opt.seed + n - 1 << "，ai="
-                          << ai_level_name(opt.ai) << "）:\n";
+                          << ai_level_name(opt.ai);
+                if (opt.mode == tkw::game::GameMode::Identity)
+                    std::cout << "，mode=identity";
+                std::cout << "）:\n";
                 std::string line;
-                for (int seat = 0; seat < opt.players; ++seat)
+                if (opt.mode == tkw::game::GameMode::Identity)
                 {
-                    const std::string id = "P" + std::to_string(seat);
-                    const auto it = agg.wins.find(id);
-                    const int w = it == agg.wins.end() ? 0 : it->second;
-                    line += (seat == 0 ? "" : "，") + id + " 胜 " +
-                            std::to_string(w);
+                    // 固定阵营序输出，避免依赖中文字符串字典序
+                    for (tkw::game::WinCamp c : {tkw::game::WinCamp::LordCamp,
+                                                 tkw::game::WinCamp::RebelCamp,
+                                                 tkw::game::WinCamp::TraitorCamp})
+                    {
+                        const std::string label = identity_result_label(c, {});
+                        const auto it = agg.wins.find(label);
+                        line += (line.empty() ? "" : "，") + label + " " +
+                                std::to_string(it == agg.wins.end() ? 0
+                                                                    : it->second);
+                    }
+                }
+                else
+                {
+                    for (int seat = 0; seat < opt.players; ++seat)
+                    {
+                        const std::string id = "P" + std::to_string(seat);
+                        const auto it = agg.wins.find(id);
+                        const int w = it == agg.wins.end() ? 0 : it->second;
+                        line += (seat == 0 ? "" : "，") + id + " 胜 " +
+                                std::to_string(w);
+                    }
                 }
                 line += "，平局 " + std::to_string(agg.draws);
                 std::cout << "  " << line << "\n";

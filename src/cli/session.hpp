@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "game/core/roles.hpp"
 #include "game/core/rules.hpp"
 #include "game/flow/loop.hpp"
 #include "game/flow/table.hpp"
@@ -44,6 +45,8 @@ namespace tkw
             std::filesystem::path history; /**< REPL 命令历史文件；空 = 仅内存（opt-in） */
             std::vector<std::string> humans; /**< 真人座位 id（可重复选项累积） */
             AiLevel ai = AiLevel::Simple;    /**< AI 难度档（默认 simple，零行为变化） */
+            tkw::game::GameMode mode =
+                tkw::game::GameMode::Brawl; /**< 对局模式（默认乱斗，零行为变化） */
         };
 
         /** 跨命令持有的对局会话（new/step/run/save/load 共享）。 */
