@@ -12,8 +12,8 @@ option(TKW_ENABLE_TESTS "Compile three_kingdoms_war tests" ON)
 
 add_subdirectory(thirdparty/pjh_result)
 add_subdirectory(thirdparty/pjh_json)
-add_subdirectory(thirdparty/pjh_cli)
 add_subdirectory(thirdparty/pjh_platform)
+add_subdirectory(thirdparty/pjh_cli)
 
 add_subdirectory(src)
 
