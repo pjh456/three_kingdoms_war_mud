@@ -8,12 +8,16 @@
 #include <doctest/doctest.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "event_log.hpp"
 #include "game/ai/aggressive.hpp"
 #include "game/ai/simple.hpp"
+#include "game/core/card_event.hpp"
+#include "game/core/roles.hpp"
+#include "game/flow/factory.hpp"
 #include "game/flow/loop.hpp"
 #include "test_game.hpp"
 
@@ -27,6 +31,16 @@ namespace
     constexpr std::uint64_t AGGRESSIVE_2P_FP = 4647716859109022064ULL;
     constexpr std::size_t AGGRESSIVE_4P_LINES = 413;
     constexpr std::uint64_t AGGRESSIVE_4P_FP = 16001951569717656035ULL;
+
+    // 身份局自钉值（4p/5p simple、4p aggressive，实跑钉入，见对应用例注释）
+    constexpr std::size_t IDENTITY_4P_LORD_LINES = 189;
+    constexpr std::uint64_t IDENTITY_4P_LORD_FP = 5619353930443360471ULL;
+    constexpr std::size_t IDENTITY_4P_TRAITOR_LINES = 328;
+    constexpr std::uint64_t IDENTITY_4P_TRAITOR_FP = 4749805336551271861ULL;
+    constexpr std::size_t IDENTITY_5P_REBEL_LINES = 204;
+    constexpr std::uint64_t IDENTITY_5P_REBEL_FP = 9084552058339189105ULL;
+    constexpr std::size_t IDENTITY_4P_AGGRESSIVE_LINES = 179;
+    constexpr std::uint64_t IDENTITY_4P_AGGRESSIVE_FP = 1752563832169043738ULL;
 
     /** 跑一局并返回完整事件日志（Ok 或 MaxRounds 都算完整对局）。 */
     std::vector<std::string> run_game(std::uint32_t seed, int players)
@@ -96,6 +110,118 @@ namespace
             h *= 1099511628211ULL;
         }
         return h;
+    }
+
+    /** 身份局整局结果：事件日志 + 终局 + 角色表 + 身份专属路径计数。 */
+    struct IdentityRun
+    {
+        std::vector<std::string> lines; /**< 完整事件日志（发布序） */
+        tkw::game::GameOutcome outcome; /**< 终局结果；ok=false 时 camp 为 None */
+        tkw::game::RoleTable roles;     /**< 本局角色表（id 升序） */
+        int kill_rewards = 0;           /**< DrawKind::KillReward 摸牌事件数 */
+        int deaths = 0;                 /**< EntityDiedEvent 数 */
+        bool ok = false;                /**< 是否在回合上限前终局 */
+        tkw::game::LoopError err = tkw::game::LoopError::MaxRounds; /**< !ok 时的流程错误 */
+    };
+
+    /**
+     * @brief 经 build_game（真实角色 Fisher-Yates 分配）开身份局并跑到底。
+     * @param ai 决策源（引用须存活至调用返回）；seed 随机种子；players 玩家人数。
+     * @return 事件日志、终局、角色表与击杀奖励/阵亡计数；回合上限平局时 ok=false。
+     * @note 角色分配在 start_session 洗牌之前消费随机流，故同 seed 的身份局牌序
+     *       与乱斗局不同；本 harness 不复用 TestGame 手工建局，以覆盖该路径。
+     *       额外订阅不停止事件传播，不影响 EventLog 的行序。
+     */
+    IdentityRun run_identity(
+        tkw::game::DecisionSource &ai, std::uint32_t seed, int players)
+    {
+        tkw::game::BuildOptions opt;
+        opt.deck = TKW_TEST_RESOURCE_DIR;
+        opt.players = players;
+        opt.seed = seed;
+        opt.mode = tkw::game::GameMode::Identity;
+        auto built = tkw::game::build_game(opt);
+        REQUIRE(built.is_ok());
+        auto game = std::move(built).unwrap();
+
+        EventLog log(game->bus);
+        IdentityRun run;
+        auto drawn = game->bus.subscribe(tkw::Handler<tkw::CardDrawnEvent>(
+            [&](tkw::HandlerContext<tkw::CardDrawnEvent> &c)
+            {
+                if (c.event.kind == tkw::DrawKind::KillReward)
+                    ++run.kill_rewards;
+            }));
+        auto died = game->bus.subscribe(tkw::Handler<tkw::EntityDiedEvent>(
+            [&](tkw::HandlerContext<tkw::EntityDiedEvent> &) { ++run.deaths; }));
+
+        auto ctx = game->context();
+        auto r = tkw::game::play_game(ctx, ai, "P0");
+        run.lines = log.lines();
+        run.roles = game->roles;
+        if (r.is_ok())
+        {
+            run.ok = true;
+            run.outcome = r.unwrap();
+        }
+        else
+        {
+            run.err = r.unwrap_err();
+        }
+        return run;
+    }
+
+    /** 校验身份局角色表：P0=主公、各角色计数符合人数配比、覆盖全部座位。 */
+    void check_identity_roles(const tkw::game::RoleTable &roles, int players)
+    {
+        const auto counts = tkw::game::roles_for_count(players);
+        REQUIRE(counts.is_some());
+        int lord = 0;
+        int loyalist = 0;
+        int rebel = 0;
+        int traitor = 0;
+        for (const auto &entry : roles)
+        {
+            switch (entry.second)
+            {
+            case tkw::game::Role::Lord: ++lord; break;
+            case tkw::game::Role::Loyalist: ++loyalist; break;
+            case tkw::game::Role::Rebel: ++rebel; break;
+            case tkw::game::Role::Traitor: ++traitor; break;
+            case tkw::game::Role::None: break;
+            }
+        }
+        CHECK(lord == 1);
+        CHECK(loyalist == counts.unwrap().loyalist);
+        CHECK(rebel == counts.unwrap().rebel);
+        CHECK(traitor == counts.unwrap().traitor);
+        CHECK(tkw::game::role_of(&roles, "P0") == tkw::game::Role::Lord);
+        CHECK(roles.size() == static_cast<std::size_t>(players));
+    }
+
+    /** 校验身份局终局：阵营非 None 且胜者角色与阵营一致。 */
+    void check_identity_outcome(const IdentityRun &run)
+    {
+        CHECK(run.outcome.camp != tkw::game::WinCamp::None);
+        const auto winner_role = tkw::game::role_of(&run.roles, run.outcome.winner);
+        switch (run.outcome.camp)
+        {
+        case tkw::game::WinCamp::LordCamp:
+            CHECK(winner_role == tkw::game::Role::Lord);
+            CHECK(run.outcome.winner == "P0");
+            break;
+        case tkw::game::WinCamp::RebelCamp:
+            CHECK(winner_role == tkw::game::Role::Rebel);
+            break;
+        case tkw::game::WinCamp::TraitorCamp:
+            CHECK(winner_role == tkw::game::Role::Traitor);
+            break;
+        case tkw::game::WinCamp::Draw:
+            CHECK(run.outcome.winner.empty());
+            break;
+        case tkw::game::WinCamp::None:
+            break;
+        }
     }
 }
 
@@ -492,5 +618,136 @@ TEST_CASE("replay: aggressive two-player scan stays consistent")
         (void)tkw::game::play_game(again.ctx, ai2, "P0");
         CHECK(log.lines() == log2.lines());
     }
+}
+
+TEST_CASE("replay: golden identity four-player lord fingerprint")
+{
+    // 身份局整局回放护栏：角色分配（build_game 的 Fisher-Yates 消费随机流）→
+    // 阵营目标 → 击杀奖励 → 终局口径端到端。事件日志不含 camp/winner/角色表，
+    // 故除指纹外必须显式断言终局阵营与胜者角色；角色分配消费的随机流使同 seed
+    // 的身份局牌序与乱斗局不同，指纹天然独立。
+    //
+    // 隐藏角色可见性不在本 harness 覆盖范围：回放日志无可见性过滤，角色不进
+    // 事件日志；真人视角的隐藏语义由 TUI/CLI 用例覆盖。
+    //
+    // seed 4：P0=主公、P1=内奸、P2=忠臣、P3=反贼；主公阵营胜，16 回合，
+    // 2 人阵亡、1 次击杀反贼的奖励摸牌（证明身份击杀奖励分支执行）。
+    tkw::game::SimpleAI ai;
+    const auto a = run_identity(ai, 4, 4);
+    const auto b = run_identity(ai, 4, 4);
+    REQUIRE(a.ok);
+    REQUIRE(b.ok);
+
+    CHECK(a.lines == b.lines);
+    CHECK(!a.lines.empty());
+    CHECK(a.lines.size() == IDENTITY_4P_LORD_LINES);
+    CHECK(fingerprint(a.lines) == IDENTITY_4P_LORD_FP);
+
+    check_identity_roles(a.roles, 4);
+    check_identity_outcome(a);
+    CHECK(a.outcome.camp == tkw::game::WinCamp::LordCamp);
+    CHECK(a.kill_rewards >= 1);
+    CHECK(a.deaths >= 1);
+}
+
+TEST_CASE("replay: golden identity four-player traitor fingerprint")
+{
+    // seed 5：P0=主公、P1=反贼、P2=忠臣、P3=内奸；内奸阵营胜（主公阵亡后
+    // 内奸唯一存活），39 回合，3 人阵亡、1 次击杀反贼奖励摸牌。该局覆盖
+    // TraitorCamp 终局口径。
+    tkw::game::SimpleAI ai;
+    const auto a = run_identity(ai, 5, 4);
+    const auto b = run_identity(ai, 5, 4);
+    REQUIRE(a.ok);
+    REQUIRE(b.ok);
+
+    CHECK(a.lines == b.lines);
+    CHECK(!a.lines.empty());
+    CHECK(a.lines.size() == IDENTITY_4P_TRAITOR_LINES);
+    CHECK(fingerprint(a.lines) == IDENTITY_4P_TRAITOR_FP);
+
+    check_identity_roles(a.roles, 4);
+    check_identity_outcome(a);
+    CHECK(a.outcome.camp == tkw::game::WinCamp::TraitorCamp);
+    CHECK(a.kill_rewards >= 1);
+    CHECK(a.deaths >= 1);
+}
+
+TEST_CASE("replay: golden identity five-player rebel fingerprint")
+{
+    // seed 2、5 人配比（1 忠臣 / 2 反贼 / 1 内奸）：反贼阵营胜，19 回合，
+    // 2 人阵亡、1 次击杀反贼奖励摸牌。覆盖 RebelCamp 终局口径与 5 人角色
+    // 配比，胜者为角色表首个反贼。
+    tkw::game::SimpleAI ai;
+    const auto a = run_identity(ai, 2, 5);
+    const auto b = run_identity(ai, 2, 5);
+    REQUIRE(a.ok);
+    REQUIRE(b.ok);
+
+    CHECK(a.lines == b.lines);
+    CHECK(!a.lines.empty());
+    CHECK(a.lines.size() == IDENTITY_5P_REBEL_LINES);
+    CHECK(fingerprint(a.lines) == IDENTITY_5P_REBEL_FP);
+
+    check_identity_roles(a.roles, 5);
+    check_identity_outcome(a);
+    CHECK(a.outcome.camp == tkw::game::WinCamp::RebelCamp);
+    CHECK(a.kill_rewards >= 1);
+    CHECK(a.deaths >= 1);
+}
+
+TEST_CASE("replay: golden identity aggressive fingerprint")
+{
+    // 攻击优先档身份局自钉：证明身份阵营目标在 aggressive 档同样生效。
+    // seed 2：主公阵营胜，13 回合，2 人阵亡、1 次击杀反贼奖励摸牌。
+    tkw::game::AggressiveAI aggr;
+    const auto a = run_identity(aggr, 2, 4);
+    const auto b = run_identity(aggr, 2, 4);
+    REQUIRE(a.ok);
+    REQUIRE(b.ok);
+
+    CHECK(a.lines == b.lines);
+    CHECK(!a.lines.empty());
+    CHECK(a.lines.size() == IDENTITY_4P_AGGRESSIVE_LINES);
+    CHECK(fingerprint(a.lines) == IDENTITY_4P_AGGRESSIVE_FP);
+
+    check_identity_roles(a.roles, 4);
+    check_identity_outcome(a);
+    CHECK(a.outcome.camp == tkw::game::WinCamp::LordCamp);
+    CHECK(a.kill_rewards >= 1);
+    CHECK(a.deaths >= 1);
+}
+
+TEST_CASE("replay: identity four-player scan stays deterministic and legal")
+{
+    // 4 人身份局 12 个种子各跑两遍：同 seed 逐行一致，失败仅允许 MaxRounds，
+    // 终局阵营非 None、胜者角色与阵营一致、角色表合法。不硬钉阵营分布，
+    // 避免 AI 调整时必然变红；seed 1..12 实测直方图：主公 3 / 反贼 8 /
+    // 内奸 1，全部在回合上限前终局。
+    tkw::game::SimpleAI ai;
+    int decisive = 0;
+    for (std::uint32_t seed = 1; seed <= 12; ++seed)
+    {
+        const auto a = run_identity(ai, seed, 4);
+
+        CHECK(!a.lines.empty());
+        check_identity_roles(a.roles, 4);
+
+        if (a.ok)
+        {
+            check_identity_outcome(a);
+            if (a.outcome.camp != tkw::game::WinCamp::Draw)
+                ++decisive;
+        }
+        else
+        {
+            CHECK(a.err == tkw::game::LoopError::MaxRounds);
+        }
+
+        // 同种子可重放：第二局逐行一致（扫描不放松确定性契约）
+        const auto b = run_identity(ai, seed, 4);
+        CHECK(a.lines == b.lines);
+    }
+    CHECK(decisive >= 1);
 }
 
