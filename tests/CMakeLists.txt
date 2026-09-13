@@ -328,6 +328,16 @@ add_test(NAME cli_verbose_negatable
 set_tests_properties(cli_verbose_negatable PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# 真人局默认可见事件日志：未显式提供 verbose 时开启；启动 --no-verbose 可关闭；
+# 全 AI 局仍静默（不出现事件标签）。真人 step 会进入决策窗口读走 quit，退出码不钉。
+add_test(NAME cli_repl_human_default_verbose
+         COMMAND sh -c
+                 "out=$(printf 'new --players 2 --seed 1\\nstep\\nquit\\n' | $<TARGET_FILE:tkw> --human P0 repl --autosave '' 2>&1); printf '%s' \"$out\" | grep -q '\\[摸牌\\]' && \
+                  quiet=$(printf 'new --players 2 --seed 1\\nstep\\nquit\\n' | $<TARGET_FILE:tkw> --human P0 --no-verbose repl --autosave '' 2>&1); ! printf '%s' \"$quiet\" | grep -q '\\[摸牌\\]' && \
+                  ai=$(printf 'new --players 2 --seed 1\\nstep\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); ! printf '%s' \"$ai\" | grep -q '\\[摸牌\\]'")
+set_tests_properties(cli_repl_human_default_verbose PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 裸 tkw 与 REPL 各打印一行引导文案。
 add_test(NAME cli_bare_root_banner
          COMMAND sh -c "$<TARGET_FILE:tkw> 2>&1 | grep -q '无子命令'")

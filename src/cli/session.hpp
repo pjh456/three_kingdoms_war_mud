@@ -41,6 +41,7 @@ namespace tkw
             int hand = tkw::game::RulesConfig{}.initial_hand;
             std::uint32_t seed = 42;
             bool verbose = false;
+            bool verbose_explicit = false; /**< verbose 是否来自显式选项（含启动 --no-verbose） */
             std::filesystem::path autosave = "tkw-autosave.json";
             std::filesystem::path history; /**< REPL 命令历史文件；空 = 仅内存（opt-in） */
             std::vector<std::string> humans; /**< 真人座位 id（可重复选项累积） */

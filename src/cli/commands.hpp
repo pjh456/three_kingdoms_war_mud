@@ -83,9 +83,13 @@ namespace tkw
                 opt.seed = static_cast<std::uint32_t>(
                     ctx.get_or<int, fixed_string("seed")>(static_cast<int>(base.seed)));
                 // 显式提供（含 --no-verbose）才覆盖会话继承；未提供时保持启动/会话值。
-                opt.verbose = ctx.was_provided<fixed_string("verbose")>()
+                // verbose_explicit 随继承传递，使启动 --no-verbose 能压过真人局默认日志。
+                const bool verbose_provided =
+                    ctx.was_provided<fixed_string("verbose")>();
+                opt.verbose = verbose_provided
                                   ? ctx.get<bool, fixed_string("verbose")>()
                                   : base.verbose;
+                opt.verbose_explicit = verbose_provided || base.verbose_explicit;
                 opt.ai = ctx.get_or_enum<AiLevel, fixed_string("ai")>(base.ai);
                 opt.mode =
                     ctx.get_or_enum<tkw::game::GameMode, fixed_string("mode")>(
@@ -124,6 +128,21 @@ namespace tkw
                 return ctx.was_provided<fixed_string("verbose")>()
                            ? ctx.get<bool, fixed_string("verbose")>()
                            : session.verbose;
+            }
+
+            /**
+             * @brief 建局时的会话事件日志默认：真人座位存在且未显式选择过 verbose 时开启。
+             * @param opt 合并后的选项；humans/verbose/verbose_explicit 均已就绪。
+             * @return 显式提供过（含启动 --no-verbose）→ 取显式值；否则真人局为真、
+             *         全 AI 局为假。
+             * @note 全 AI 路径保持默认关闭以维持批量/回放输出不变；行内 --no-verbose
+             *       只经 resolve_verbose 影响单次命令，不改写本默认。
+             */
+            inline bool session_verbose(const Options &opt)
+            {
+                if (opt.verbose_explicit)
+                    return opt.verbose;
+                return opt.verbose || !opt.humans.empty();
             }
 
             /**
@@ -193,7 +212,7 @@ namespace tkw
                     .min(0);
                 cmd.option<fixed_string("verbose")>(
                        "--verbose", 'v',
-                       "打印事件日志（摸牌/打出/弃置/移牌/伤害/体力/阵亡；--no-verbose 关闭）")
+                       "打印事件日志（摸牌/打出/弃置/移牌/伤害/体力/阵亡；真人局默认开启，--no-verbose 关闭）")
                     .boolean()
                     .negatable();
                 cmd.option<fixed_string("autosave")>(
@@ -618,7 +637,7 @@ namespace tkw
                 s.state = std::move(state);
                 s.humans = opt.humans;
                 s.ai = opt.ai;
-                s.verbose = opt.verbose;
+                s.verbose = session_verbose(opt);
                 s.active = true;
                 s.deck = opt.deck;
                 s.stats = BattleStats{};
@@ -760,7 +779,7 @@ namespace tkw
                 else
                     s.ai = opt.ai;
                 s.stats = std::move(meta.stats);
-                s.verbose = opt.verbose;
+                s.verbose = session_verbose(opt);
                 s.active = true;
                 s.deck = opt.deck;
                 std::cout << "已加载: " << file.string() << "\n";

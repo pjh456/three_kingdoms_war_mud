@@ -195,6 +195,28 @@ TEST_CASE("cli: --no-verbose turns off a session-inherited event log")
     CHECK(again.out.find("[") != std::string::npos);
 }
 
+TEST_CASE("cli: human session defaults event log on")
+{
+    Repl repl;
+
+    // 真人座位存在且未显式提供 verbose：建局默认开启事件日志。
+    REQUIRE(repl.run("--human P0 new --players 2 --seed 1").ok);
+    CHECK(repl.session.verbose);
+    // 真人 step 会进入决策窗口；无输入时以回合失败收场，但摸牌事件已可见。
+    auto stepped = repl.run("step");
+    CHECK(stepped.out.find("[摸牌]") != std::string::npos);
+
+    // 启动 --no-verbose 是显式选择，能关闭真人默认。
+    Repl quiet;
+    REQUIRE(quiet.run("--no-verbose --human P0 new --players 2 --seed 1").ok);
+    CHECK_FALSE(quiet.session.verbose);
+
+    // 全 AI 局默认保持静默，不产生事件日志。
+    Repl ai;
+    REQUIRE(ai.run("new --players 2 --seed 1").ok);
+    CHECK_FALSE(ai.session.verbose);
+}
+
 TEST_CASE("cli: verbose log renders card moved events")
 {
     Repl repl;
