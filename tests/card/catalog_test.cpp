@@ -532,9 +532,9 @@ TEST_CASE("card: junzheng skeleton deck loads elemental slashes")
     auto r = CardDefCatalog::load(store, "deck");
     REQUIRE(r.is_ok());
     const auto &cat = r.unwrap();
-    CHECK(cat.size() == 12);
-    // 杀 30 + 火杀 5 + 雷杀 9 + 藤甲 2 + 丈八 1 + 青釭 1 + 南蛮 3 + 万箭 1 + 无中 4 + 桃 8 + 酒 5 + 兵粮寸断 2
-    CHECK(cat.total_copies() == 71);
+    CHECK(cat.size() == 14);
+    // 杀 30 + 火杀 5 + 雷杀 9 + 藤甲 2 + 丈八 1 + 青釭 1 + 南蛮 3 + 万箭 1 + 无中 4 + 桃 8 + 酒 5 + 兵粮寸断 2 + 古锭刀 1 + 白银狮子 1
+    CHECK(cat.total_copies() == 73);
 
     auto huosha = cat.find("huosha");
     REQUIRE(huosha.is_some());
@@ -587,10 +587,40 @@ TEST_CASE("card: junzheng skeleton deck loads elemental slashes")
     CHECK(bingliang.unwrap()->copies[0] == CardCopy{Suit::Spade, 10});
     CHECK(bingliang.unwrap()->copies[1] == CardCopy{Suit::Club, 4});
 
-    // 容错扫描与严格加载同源：十二卡均为已知机制名
+    // 古锭刀：武器，♠A，范围 2，能力名经封闭表解析
+    auto guding = cat.find("guding");
+    REQUIRE(guding.is_some());
+    CHECK(guding.unwrap()->name == "古锭刀");
+    CHECK(guding.unwrap()->type == CardType::Equipment);
+    REQUIRE(guding.unwrap()->equip.is_some());
+    CHECK(guding.unwrap()->equip.unwrap().slot == EquipSlot::Weapon);
+    CHECK(guding.unwrap()->equip.unwrap().range == 2);
+    REQUIRE(guding.unwrap()->abilities.size() == 1);
+    CHECK(guding.unwrap()->abilities[0] == Ability::GudingBlade);
+    REQUIRE(guding.unwrap()->copies.size() == 1);
+    CHECK(guding.unwrap()->copies[0] == CardCopy{Suit::Spade, 1});
+
+    // 白银狮子：防具，♣A
+    auto silver = cat.find("silver_lion");
+    REQUIRE(silver.is_some());
+    CHECK(silver.unwrap()->name == "白银狮子");
+    CHECK(silver.unwrap()->type == CardType::Equipment);
+    REQUIRE(silver.unwrap()->equip.is_some());
+    CHECK(silver.unwrap()->equip.unwrap().slot == EquipSlot::Armor);
+    REQUIRE(silver.unwrap()->abilities.size() == 1);
+    CHECK(silver.unwrap()->abilities[0] == Ability::SilverLion);
+    REQUIRE(silver.unwrap()->copies.size() == 1);
+    CHECK(silver.unwrap()->copies[0] == CardCopy{Suit::Club, 1});
+
+    CHECK(ability_from_name("guding_blade").is_some());
+    CHECK(ability_from_name("guding_blade").unwrap() == Ability::GudingBlade);
+    CHECK(ability_from_name("silver_lion").is_some());
+    CHECK(ability_from_name("silver_lion").unwrap() == Ability::SilverLion);
+
+    // 容错扫描与严格加载同源：十四卡均为已知机制名
     auto raws = scan_mechanisms(store, "deck");
     REQUIRE(raws.is_ok());
-    CHECK(raws.unwrap().size() == 12);
+    CHECK(raws.unwrap().size() == 14);
 }
 
 TEST_CASE("card: scan_mechanisms reads raw names and shares the name table")

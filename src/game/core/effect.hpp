@@ -76,6 +76,8 @@ namespace tkw
             case A::JudgementJink:
             case A::BlackShaImmune:
             case A::VineArmor:
+            case A::GudingBlade:
+            case A::SilverLion:
                 return {true};
             }
             return {};

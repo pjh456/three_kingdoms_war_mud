@@ -1,0 +1,15 @@
+{
+    "id": "guding",
+    "name": "古锭刀",
+    "type": "equipment",
+    "subtype": "weapon",
+    "copies": [
+        { "suit": "spade", "number": 1 }
+    ],
+    "text": "武器·攻击范围2。锁定技，当你使用「杀」造成伤害时，若该「杀」的目标没有手牌，此伤害+1。",
+    "equip": {
+        "slot": "weapon",
+        "range": 2
+    },
+    "abilities": ["guding_blade"]
+}

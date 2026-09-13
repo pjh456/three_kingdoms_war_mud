@@ -106,6 +106,8 @@ namespace tkw
             std::size_t revealed_calls = 0; /**< 亮牌选择已询问次数（脚本计数） */
             std::size_t valid_revealed_first = 0; /**< 前 N 次亮牌选择先返回合法牌，其后按 bogus_revealed 处理 */
             bool decline_discards = false; /**< 弃牌选择返回空（雌雄二选一的放弃分支） */
+            Option<TargetPick> target_pick =
+                Option<TargetPick>::None(); /**< 非空时 pick_card_from_target 直接返回该选择（可指向装备槽） */
             bool replay_plays = false; /**< 出牌恒请求 plays.front()，且该牌仍在手牌时重复返回
                                             （模拟无状态决策源在失败重入后重放同一出牌） */
             std::size_t revealed_pick = 0; /**< pick_from_revealed 返回的候选下标（越界回落首张） */
@@ -200,6 +202,8 @@ namespace tkw
                 // 测试逃逸口：直接回传具体手牌（card 非空），不消费 rng，保持既有
                 // game 用例确定性；生产适配器对隐藏手牌只回槽位，随机暗抽见
                 // resolve_target_pick 的独立用例。
+                if (target_pick.is_some())
+                    return target_pick;
                 if (bogus_pick)
                     return Option<TargetPick>::Some(
                         TargetPick{tkw::card::Zone::Hand, 0,

@@ -29,6 +29,7 @@
 #include "game/core/decision.hpp"
 #include "game/core/effect.hpp"
 #include "game/core/state.hpp"
+#include "game/query/equip.hpp"
 #include "util/types.hpp"
 
 namespace tkw
@@ -162,6 +163,7 @@ namespace tkw
                     continue;
                 auto keep = std::move(removed).unwrap();
                 discard_and_emit(ctx, player, keep);
+                apply_equip_lost(ctx, player, keep);
             }
         }
 
@@ -205,15 +207,26 @@ namespace tkw
          * @brief 造成伤害（流程入口）：扣血 → 濒死判定 → 死亡与击杀奖惩。
          * @param source 伤害来源（空串 = 无来源如闪电；为存活玩家时按模式与角色发奖惩）。
          * @param type 伤害属性（默认普通；火焰/雷电透传到受伤事件）。
+         * @param ignore_armor 本次伤害是否无视防具（青釭剑结算窗）：为真时白银狮子
+         *        的伤害上限不生效。
+         * @note 白银狮子上限在全部加成（酒/藤甲/古锭刀）累加之后施加，对每一次
+         *       伤害实例独立生效。
          */
         inline void deal_damage(
             GameContext &ctx, DecisionSource &ai, const std::string &source,
             const std::string &target, int amount,
-            card::DamageType type = card::DamageType::Normal)
+            card::DamageType type = card::DamageType::Normal,
+            bool ignore_armor = false)
         {
             const auto e = ctx.entities->find(target);
             if (e.is_none())
                 return;
+
+            // 白银狮子：单次伤害至多 1 点；青釭剑结算窗内无视防具则不封顶
+            if (!ignore_armor && amount > 1 &&
+                has_ability(ctx, target, card::Ability::SilverLion))
+                amount = 1;
+
             e.unwrap()->take_damage(source, amount, false, type);
             if (e.unwrap()->get_hp() > 0)
                 return;

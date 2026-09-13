@@ -251,6 +251,8 @@ namespace tkw
                         return GameResult<void>::Err(EffectError::InvalidChoice);
                     e.ctx.cards->add_to_hand(e.player, removed);
                     emit_card_moved(e.ctx, owner, e.player, removed, from, Zone::Hand);
+                    if (from == Zone::Equip)
+                        apply_equip_lost(e.ctx, owner, removed);
                 }
                 return GameResult<void>::Ok();
             }

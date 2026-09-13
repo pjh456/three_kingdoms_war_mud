@@ -8,6 +8,7 @@
 #ifndef INCLUDE_TKW_GAME_STATE_HPP
 #define INCLUDE_TKW_GAME_STATE_HPP
 
+#include <algorithm>
 #include <string>
 #include <utility>
 
@@ -125,6 +126,24 @@ namespace tkw
         }
 
         /**
+         * @brief 失去装备区一张牌后的触发结算：带「白银狮子」能力者回复 1 点体力。
+         * @param owner 失去装备的实体（回复对象，非取牌者）。
+         * @note 仅装备区失去触发；手牌/判定区的同名卡离场不触发（调用方保证来源为
+         *       Equip）。满体力时 heal 钳制为 0，无副作用。
+         */
+        inline void apply_equip_lost(
+            GameContext &ctx, const std::string &owner, const card::Card &card)
+        {
+            const card::CardDef *def = def_of(ctx, card.def_id);
+            if (def == nullptr)
+                return;
+            if (std::find(def->abilities.begin(), def->abilities.end(),
+                          card::Ability::SilverLion) == def->abilities.end())
+                return;
+            apply_heal(ctx, owner, 1);
+        }
+
+        /**
          * @brief 消费酒对本回合下一张「杀」的伤害加成：归属匹配才生效且只生效一次。
          * @param attacker 本次使用「杀」的玩家 id。
          * @return 应叠加的伤害基数（+1）；无待生效加成或归属不符时返回 0。
@@ -228,9 +247,14 @@ namespace tkw
             GameContext &ctx, const std::string &owner, const std::string &instance_id)
         {
             card::Card card;
-            if (!remove_card_from_zones(ctx, owner, instance_id, card))
+            Zone from = Zone::Limbo;
+            if (!remove_card_from_zones(ctx, owner, instance_id, card, &from))
                 return Option<card::Card>::None();
             discard_and_emit(ctx, owner, card);
+
+            // 装备区失去触发（过河/寒冰选装备区时）：弃置后结算回血
+            if (from == Zone::Equip)
+                apply_equip_lost(ctx, owner, card);
             return Option<card::Card>::Some(std::move(card));
         }
 

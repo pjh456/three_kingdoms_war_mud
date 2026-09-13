@@ -203,6 +203,7 @@ namespace tkw
                     {
                         card::Card old_card = std::move(old).unwrap();
                         discard_and_emit(ctx, player, old_card);
+                        apply_equip_lost(ctx, player, old_card);
                     }
                 }
             }

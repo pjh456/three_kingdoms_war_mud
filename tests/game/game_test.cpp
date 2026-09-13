@@ -4168,6 +4168,257 @@ TEST_CASE("game: guanshi discards two cards to force the sha")
     CHECK(g.cards.hand_size("a") == 0);  // 弃了两张手牌
 }
 
+// ── 杀结算：古锭刀 ───────────────────────────────────────────────────
+
+TEST_CASE("game: guding blade boosts sha on empty-hand target")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    g.equip("a", "guding", "e#0");
+    g.give("a", "sha", "s#1");
+    g.give("a", "sha", "s#2");
+    g.give("c", "tao", "h#0");  // c 有手牌：不 +1
+
+    TestDecider decider;
+    const auto first = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", first, {"b"}).is_ok());
+    CHECK(b->get_hp() == 2);  // 空手目标：基数 1 + 古锭刀 1
+
+    const auto second = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", second, {"c"}).is_ok());
+    CHECK(c->get_hp() == 3);  // 有手牌：不加成
+}
+
+TEST_CASE("game: guding blade counts hand only")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "guding", "e#0");
+    g.equip("b", "qinggang", "e#1");  // 满装备但无手牌
+    g.give("a", "sha", "s#1");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+    CHECK(b->get_hp() == 2);  // 只看手牌数：装备不影响
+}
+
+TEST_CASE("game: guding blade stacks with jiu")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "guding", "e#0");
+    g.give("a", "jiu", "j#0");
+    g.give("a", "sha", "s#0");
+
+    TestDecider decider;
+    const Card jiu = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", jiu, {"a"}).is_ok());
+    const Card sha = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", sha, {"b"}).is_ok());
+    CHECK(b->get_hp() == 1);  // 1 + 酒 1 + 古锭刀 1
+}
+
+TEST_CASE("game: guding blade is a lock skill and never prompts")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.equip("a", "guding", "e#0");
+    g.give("a", "sha", "s#1");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+    CHECK(decider.trigger_calls.empty());
+}
+
+// ── 杀结算：白银狮子 ─────────────────────────────────────────────────
+
+TEST_CASE("game: silver lion caps damage to one")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("b", "silver_lion", "e#0");
+    g.give("a", "sha", "s#0");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+    CHECK(b->get_hp() == 3);  // 普通杀 1 点
+
+    // 非杀路径（闪电类）同样封顶：3 点 → 1 点
+    deal_damage(g.ctx, decider, "", "b", 3, tkw::card::DamageType::Thunder);
+    CHECK(b->get_hp() == 2);
+}
+
+TEST_CASE("game: silver lion caps jiu-boosted sha")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("b", "silver_lion", "e#0");
+    g.give("a", "jiu", "j#0");
+    g.give("a", "sha", "s#0");
+
+    TestDecider decider;
+    const Card jiu = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", jiu, {"a"}).is_ok());
+    const Card sha = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", sha, {"b"}).is_ok());
+    CHECK(b->get_hp() == 3);  // 酒 +1 后仍封顶 1
+}
+
+TEST_CASE("game: silver lion caps guding blade sha")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "guding", "e#0");
+    g.equip("b", "silver_lion", "e#1");
+    g.give("a", "sha", "s#0");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+    CHECK(b->get_hp() == 3);  // 空手 +1 与防具封顶：最终 1
+}
+
+TEST_CASE("game: qinggang pierces silver lion")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "qinggang", "e#0");
+    g.equip("b", "silver_lion", "e#1");
+    g.give("a", "jiu", "j#0");
+    g.give("a", "sha", "s#0");
+
+    TestDecider decider;
+    const Card jiu = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", jiu, {"a"}).is_ok());
+    const Card sha = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", sha, {"b"}).is_ok());
+    CHECK(b->get_hp() == 2);  // 青釭剑无视防具：酒 +1 不被封顶
+}
+
+TEST_CASE("game: tengjia keeps jiu fire bonus uncapped")
+{
+    // 对照：白银狮子上限只作用于自身，藤甲场景酒加成照常生效
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    equip_tengjia(g, "b", "e#0");
+    g.give("a", "jiu", "j#0");
+    g.give("a", "huosha", "h#0");
+
+    TestDecider decider;
+    const Card jiu = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", jiu, {"a"}).is_ok());
+    const Card huosha = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", huosha, {"b"}).is_ok());
+    CHECK(b->get_hp() == 1);  // 1 火焰 + 藤甲 1 + 酒 1（上限不适用于藤甲）
+}
+
+// ── 白银狮子：失去装备区回复 1 ──────────────────────────────────────
+
+TEST_CASE("game: silver lion heals on armor replacement")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("b", 1, 4);
+    g.equip("b", "silver_lion", "e#0");
+    g.give("b", "tengjia", "h#0");
+    auto *b = g.entities.find("b").unwrap();
+    b->take_damage("", 1, false);  // 4 → 3
+
+    const auto armor = g.cards.hand("b")[0];
+    REQUIRE(equip_card(g.ctx, "b", armor).is_ok());
+    CHECK(b->get_hp() == 4);              // 旧白银狮子离场 → 回复 1
+    CHECK(g.cards.equip_size("b") == 1);  // 新防具已就位
+}
+
+TEST_CASE("game: silver lion heals when discarded from the equip zone")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("b", "silver_lion", "e#0");
+    b->take_damage("", 1, false);  // 4 → 3
+
+    // 过河拆桥 / 寒冰剑共用的移除入口：装备区失去即触发
+    REQUIRE(remove_any_and_discard(g.ctx, "b", "e#0").is_some());
+    CHECK(b->get_hp() == 4);
+    CHECK(g.cards.equip_size("b") == 0);
+}
+
+TEST_CASE("game: silver lion heals on steal")
+{
+    // 军争骨架不含顺手牵羊：临时牌表让顺手与白银狮子同场
+    const auto dir = pjh::platform::Fs::temp_directory() / "tkw_silver_lion_steal";
+    std::filesystem::remove_all(dir);
+    REQUIRE(pjh::platform::Fs::create_directories(dir / "cards").is_ok());
+    CHECK(tkw::io::write_text(dir / "deck.json",
+                              R"({"name": "mix", "cards": ["shunshou", "silver_lion"]})")
+              .is_ok());
+    CHECK(tkw::io::write_text(dir / "cards" / "shunshou.json", R"({
+        "id": "shunshou", "name": "顺手牵羊", "type": "trick", "subtype": "instant",
+        "copies": [ {"suit": "spade", "number": 3} ],
+        "effect": {"kind": "steal", "count": 1, "scope": "one_other", "range": 1}
+    })").is_ok());
+    CHECK(tkw::io::write_text(dir / "cards" / "silver_lion.json", R"({
+        "id": "silver_lion", "name": "白银狮子", "type": "equipment", "subtype": "armor",
+        "copies": [ {"suit": "club", "number": 1} ],
+        "equip": {"slot": "armor"}, "abilities": ["silver_lion"]
+    })").is_ok());
+
+    const std::string root = dir.string();
+    TestGame g("deck", 1, root.c_str());
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    b->take_damage("", 1, false);  // 4 → 3
+    g.equip("b", "silver_lion", "e#0");
+    g.give("a", "shunshou", "t#0");
+
+    TestDecider decider;
+    decider.target_pick = Option<TargetPick>::Some(TargetPick{
+        tkw::card::Zone::Equip, 0,
+        Option<Card>::Some(g.cards.equip("b")[0])});
+    const auto played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+    CHECK(b->get_hp() == 4);                  // 失去装备区白银狮子 → 回复 1
+    CHECK(g.cards.hand_size("a") == 1);       // 白银狮子进了使用者手牌
+    CHECK(g.cards.equip_size("b") == 0);
+}
+
+TEST_CASE("game: silver lion heals when lord kills loyalist")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    auto *b = g.add_player("b", 1, 4);
+    b->take_damage("", 1, false);  // 4 → 3
+    g.equip("b", "silver_lion", "e#0");
+    g.give("b", "sha", "h#0");
+
+    discard_hand_and_equip(g.ctx, "b");
+    CHECK(b->get_hp() == 4);  // 失去装备区白银狮子 → 回复 1
+    CHECK(g.cards.equip_size("b") == 0);
+    CHECK(g.cards.hand_size("b") == 0);
+}
+
+TEST_CASE("game: silver lion in hand does not heal when discarded")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    auto *b = g.add_player("b", 1, 4);
+    b->take_damage("", 1, false);  // 4 → 3
+    g.give("b", "silver_lion", "h#0");
+
+    REQUIRE(remove_any_and_discard(g.ctx, "b", "h#0").is_some());
+    CHECK(b->get_hp() == 3);  // 仅装备区失去触发；手牌离场不回复
+}
+
 TEST_CASE("game: guanshi does not fire when the attacker holds fewer than two cards")
 {
     TestGame g("deck");

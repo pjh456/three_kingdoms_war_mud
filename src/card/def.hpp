@@ -96,6 +96,8 @@ namespace tkw
             JudgementJink,         /**< 八卦阵：判定成功视为闪 */
             BlackShaImmune,        /**< 仁王盾：黑杀无效 */
             VineArmor,             /**< 藤甲：普通杀与南蛮/万箭无效；受到火焰伤害时 +1 */
+            GudingBlade,           /**< 古锭刀：杀造成伤害时目标无手牌则 +1 */
+            SilverLion,            /**< 白银狮子：单次伤害至多 1；失去装备区此牌回复 1 */
         };
 
         /** @brief 效果作用范围（决定结算时如何选目标）。 */

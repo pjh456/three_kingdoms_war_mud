@@ -13,6 +13,7 @@
  *       - 寒冰剑：命中前可防止伤害改为弃置目标两张牌（仅手牌/装备区；对手手牌
  *         不可见，由引擎随机暗抽）；
  *       - 麒麟弓：造成伤害后可弃置目标一匹坐骑（由使用者选哪一匹）；
+ *       - 古锭刀：杀造成伤害时目标无手牌则伤害 +1（锁定技，无决策窗）；
  *       - 方天画戟：杀为最后一张手牌时可额外指定至多两名目标
  *         （作用于目标集合，经目标数校验放宽实现，不走本表钩子）；
  *       - 丈八蛇矛：两张手牌当一张「杀」（虚拟杀无花色，仁王盾黑杀
@@ -336,6 +337,16 @@ namespace tkw
         }
 
         /**
+         * @brief 古锭刀：目标没有手牌时，此杀伤害 +1。
+         * @note 锁定技，无决策窗口；方天多目标杀逐目标判定（各看自身手牌数）。
+         */
+        inline void hook_guding(ShaContext &sc)
+        {
+            if (sc.ctx.cards->hand_size(sc.target) == 0)
+                sc.damage_bonus += 1;
+        }
+
+        /**
          * @brief 麒麟弓：造成伤害后，目标装备区有坐骑时询问攻击方是否弃置其一。
          * @note 无坐骑不询问（避免空操作）；由使用者选弃哪一匹，决策源返回
          *       None 或引用不在候选中时回落首个（已发动则必弃一张）。
@@ -407,6 +418,7 @@ namespace tkw
                 {card::Ability::DiscardTwoForceDamage, ShaPhase::PostJink, true,
                  hook_guanshi},
                 {card::Ability::DamageAsDiscard, ShaPhase::PreDamage, true, hook_hanbing},
+                {card::Ability::GudingBlade, ShaPhase::PreDamage, true, hook_guding},
                 {card::Ability::DiscardHorseOnDamage, ShaPhase::OnHit, true, hook_qilin},
             };
             return table;
@@ -495,7 +507,7 @@ namespace tkw
                     return;
                 deal_damage(
                     ctx, ai, attacker, target, amount + sc.damage_bonus,
-                    sc.damage_type);
+                    sc.damage_type, sc.ignore_armor);
                 run_sha_phase(sc, ShaPhase::OnHit);
             }
         }

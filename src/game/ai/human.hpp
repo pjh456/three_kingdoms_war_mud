@@ -430,6 +430,10 @@ namespace tkw
                         return "黑色杀对你无效";
                     case card::Ability::VineArmor:
                         return "普通杀与南蛮/万箭对你无效，火焰伤害 +1";
+                    case card::Ability::GudingBlade:
+                        return "杀的目标没有手牌时此伤害 +1";
+                    case card::Ability::SilverLion:
+                        return "单次受到的伤害至多 1 点；失去此装备回复 1 点体力";
                     }
                     return "装备能力";
                 }
