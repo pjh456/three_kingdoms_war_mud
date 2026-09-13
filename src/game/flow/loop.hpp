@@ -264,13 +264,10 @@ namespace tkw
             if (failed)
                 return LoopResult<void>::Err(LoopError::TurnFailed);
 
-            // 终局判定先于回合上限：本回合已终局则上限不再适用。乱斗逐字保留
-            // 「唯一存活」表达式（0 存活且越上限仍报 MaxRounds）；身份局用
-            // !over 容纳 >1 存活者的终局。
+            // 终局判定先于回合上限：本回合已终局（含乱斗 0 存活同归于尽）则上限
+            // 不再适用；仅未终局且越上限才算无法分出胜负的僵局。
             const bool over = session_over(ctx);
-            const bool at_cap_without_winner =
-                mode_of(ctx) == GameMode::Brawl ? (ctx.entities->size() != 1) : !over;
-            if (at_cap_without_winner && session.turns > rules_of(ctx).max_turns)
+            if (!over && session.turns > rules_of(ctx).max_turns)
                 return LoopResult<void>::Err(LoopError::MaxRounds);
             return LoopResult<void>::Ok();
         }

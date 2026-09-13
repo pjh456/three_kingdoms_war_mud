@@ -63,6 +63,26 @@ namespace
         g.mode = GameMode::Identity;
         g.roles = roles;
     }
+
+    /** 出牌阶段把所有存活实体宣告死亡，构造「同回合全灭」终态。 */
+    struct WipeDecider : TestDecider
+    {
+        GameContext *ctx = nullptr;
+        bool wiped = false;
+
+        Option<PlayAction> choose_play(
+            const ReadOnlyContext &, const TurnContext &) override
+        {
+            if (!wiped)
+            {
+                wiped = true;
+                // 遍历按值取出的 id 列表，避免边删边序遍历悬垂
+                for (const std::string id : ctx->entities->ordered_ids())
+                    declare_death(*ctx, id);
+            }
+            return Option<PlayAction>::None();
+        }
+    };
 }
 
 TEST_CASE("game: seat distance on a circle")
@@ -2739,6 +2759,51 @@ TEST_CASE("game: play_game still reports MaxRounds when no sole survivor at the 
     CHECK(r.unwrap_err() == LoopError::MaxRounds);
     CHECK(g.ctx.entities->find("a").is_some());
     CHECK(g.ctx.entities->find("b").is_some());
+}
+
+TEST_CASE("game: brawl total wipe past the cap ends as a draw not MaxRounds")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.rules.max_turns = 0;  // 第 1 回合即越上限（turns=1 > 0）
+
+    // 标准牌堆无法同回合全灭（群体伤害排除使用者、单体伤害只死一方），
+    // 用死亡原语在出牌阶段构造等价的 ≥2 → 0 终态。
+    WipeDecider decider;
+    decider.ctx = &g.ctx;
+
+    GameSession session;
+    REQUIRE(start_session(g.ctx, session, "a").is_ok());
+    auto r = step_session(g.ctx, decider, session);
+
+    // 终局判定先于回合上限：已终局（0 存活）不再报 MaxRounds。
+    CHECK(r.is_ok());
+    CHECK(session.turns == 1);
+    CHECK(g.ctx.entities->empty());
+    CHECK(session_over(g.ctx));
+    CHECK(session_winner(g.ctx).empty());
+    CHECK(session_camp(g.ctx) == WinCamp::None);
+}
+
+TEST_CASE("game: brawl total wipe below the cap ends Ok")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.rules.max_turns = 9;  // 远未到上限
+
+    WipeDecider decider;
+    decider.ctx = &g.ctx;
+
+    GameSession session;
+    REQUIRE(start_session(g.ctx, session, "a").is_ok());
+    auto r = step_session(g.ctx, decider, session);
+
+    CHECK(r.is_ok());
+    CHECK(session.turns == 1);
+    CHECK(session_over(g.ctx));
+    CHECK(session_winner(g.ctx).empty());
 }
 
 TEST_CASE("game: play_game with no players is an error")
