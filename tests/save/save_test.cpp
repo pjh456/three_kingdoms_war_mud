@@ -13,6 +13,7 @@
 #include "game/ai/simple.hpp"
 #include "game/flow/loop.hpp"
 #include "game/flow/table.hpp"
+#include "game/resolve/combat.hpp"
 #include "io/file.hpp"
 #include "save/error.hpp"
 #include "save/reader.hpp"
@@ -619,6 +620,43 @@ TEST_CASE("save: identity mode and roles round-trip")
     CHECK(save::write(*b, sb, "deck") == text);  // 规范化往返稳定
 }
 
+TEST_CASE("save: identity save round-trips after a player death")
+{
+    // 阵亡只移出实体、角色表保留阵亡者：存读必须接受「角色表 ⊇ 存活实体」
+    auto a = make_game(42);
+    make_identity(*a);
+    auto ctxa = a->context();
+
+    // P0 主公与 P2 反贼阵亡 → 主公主张落败，反贼阵营代表仍取角色表首个反贼 P2
+    declare_death(ctxa, "P0");
+    declare_death(ctxa, "P2");
+    REQUIRE(a->entities.find("P2").is_none());
+
+    const WinCamp camp = session_camp(ctxa);
+    const std::string winner = session_winner(ctxa);
+    REQUIRE(camp == WinCamp::RebelCamp);
+    REQUIRE(winner == "P2");  // 阵营代表允许已阵亡
+
+    GameSession sa;
+    const std::string text = save::write(*a, sa, "deck");
+    // 阵亡者角色仍在写出文本中（写全量角色表）
+    CHECK(text.find("\"P2\":\"rebel\"") != std::string::npos);
+
+    auto b = make_game(999);
+    GameSession sb;
+    REQUIRE(save::read(text, *b, sb).is_ok());
+    auto ctxb = b->context();
+
+    // 阵亡者角色读回后仍在表中，且全表与写档前一致
+    CHECK(b->roles == a->roles);
+    CHECK(b->roles.count("P2") == 1);
+
+    // 阵营代表稳定：读档前后终局口径与代表 id 均不变
+    CHECK(session_camp(ctxb) == camp);
+    CHECK(session_winner(ctxb) == winner);
+    CHECK(save::write(*b, sb, "deck") == text);  // 规范化往返稳定
+}
+
 TEST_CASE("save: brawl saves contain no mode key")
 {
     auto a = make_game(1);  // 默认乱斗
@@ -697,14 +735,14 @@ TEST_CASE("save: invalid role value is a structure error")
     CHECK(r.unwrap_err().detail == "roles.P0");
 }
 
-TEST_CASE("save: identity roles must cover saved entities")
+TEST_CASE("save: identity roles must cover every living entity")
 {
     auto a = make_game(42);
     make_identity(*a);
     GameSession sa;
     const std::string base = save::write(*a, sa, "deck");
 
-    // 缺 P3：存档实体未被角色表覆盖
+    // 缺 P3：存活实体未被角色表覆盖
     {
         std::string text = base;
         const auto pos = text.find(",\"P3\":\"traitor\"");
@@ -718,7 +756,8 @@ TEST_CASE("save: identity roles must cover saved entities")
         CHECK(r.unwrap_err().detail == "roles");
     }
 
-    // 多 P9：角色表含不属于存档实体的键
+    // 多 P9：角色分配对整场固定，表内允许保留已阵亡玩家的条目；存档无法
+    // 区分「阵亡者」与「未知键」，故一并接受并原样保留
     {
         std::string text = base;
         const auto pos = text.find("\"P3\":\"traitor\"}");
@@ -726,10 +765,10 @@ TEST_CASE("save: identity roles must cover saved entities")
         text.replace(pos, 15, "\"P3\":\"traitor\",\"P9\":\"rebel\"}");
         auto b = make_game(7);
         GameSession sb;
-        auto r = save::read(text, *b, sb);
-        REQUIRE(r.is_err());
-        CHECK(r.unwrap_err().kind == save::SaveErrorKind::StructureError);
-        CHECK(r.unwrap_err().detail == "roles.P9");
+        REQUIRE(save::read(text, *b, sb).is_ok());
+        CHECK(b->roles.count("P9") == 1);
+        CHECK(b->roles.at("P9") == Role::Rebel);
+        CHECK(save::write(*b, sb, "deck") == text);  // 多余条目规范化往返不丢
     }
 }
 
@@ -738,17 +777,37 @@ TEST_CASE("save: identity roles must contain exactly one lord")
     auto a = make_game(42);
     make_identity(*a);
     GameSession sa;
-    std::string text = save::write(*a, sa, "deck");
-    const auto pos = text.find("\"P0\":\"lord\"");
-    REQUIRE(pos != std::string::npos);
-    text.replace(pos, 11, "\"P0\":\"rebel\"");  // 覆盖仍完整，主公数为 0
+    const std::string base = save::write(*a, sa, "deck");
 
-    auto b = make_game(7);
-    GameSession sb;
-    auto r = save::read(text, *b, sb);
-    REQUIRE(r.is_err());
-    CHECK(r.unwrap_err().kind == save::SaveErrorKind::StructureError);
-    CHECK(r.unwrap_err().detail == "roles");
+    // 0 主公：唯一主公被改成反贼，覆盖仍完整
+    {
+        std::string text = base;
+        const auto pos = text.find("\"P0\":\"lord\"");
+        REQUIRE(pos != std::string::npos);
+        text.replace(pos, 11, "\"P0\":\"rebel\"");
+
+        auto b = make_game(7);
+        GameSession sb;
+        auto r = save::read(text, *b, sb);
+        REQUIRE(r.is_err());
+        CHECK(r.unwrap_err().kind == save::SaveErrorKind::StructureError);
+        CHECK(r.unwrap_err().detail == "roles");
+    }
+
+    // 2 主公：忠臣被改成主公
+    {
+        std::string text = base;
+        const auto pos = text.find("\"P1\":\"loyalist\"");
+        REQUIRE(pos != std::string::npos);
+        text.replace(pos, 15, "\"P1\":\"lord\"");
+
+        auto b = make_game(7);
+        GameSession sb;
+        auto r = save::read(text, *b, sb);
+        REQUIRE(r.is_err());
+        CHECK(r.unwrap_err().kind == save::SaveErrorKind::StructureError);
+        CHECK(r.unwrap_err().detail == "roles");
+    }
 }
 
 TEST_CASE("save: failed mode or roles validation leaves the target untouched")

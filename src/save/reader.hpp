@@ -200,8 +200,9 @@ namespace tkw
          * @param meta     非空时接收可选会话元数据；解析失败不写入。
          * @return Ok 或 Err(SaveError)；牌表指纹不符时拒绝。
          * @note 旧档缺失 ai/stats 字段时回落默认，不拒绝；缺 mode/roles 时回落
-         *       乱斗 + 空角色表；身份局档要求 roles 恰好覆盖存档实体且恰含一名
-         *       主公；全部校验通过后才落子，出参 meta 与目标状态同批赋值，早退不污染。
+         *       乱斗 + 空角色表；身份局档要求角色表覆盖全部存活实体且恰含一名
+         *       主公，允许保留已阵亡玩家的角色条目；全部校验通过后才落子，出参
+         *       meta 与目标状态同批赋值，早退不污染。
          */
         inline SaveResult<void> read(
             std::string_view text, game::Game &g, game::GameSession &session,
@@ -384,25 +385,18 @@ namespace tkw
                 ents.push_back(std::move(e));
             }
 
-            // 身份局：roles 必须存在且恰好覆盖存档实体、含且仅含一名主公
+            // 身份局：角色表须覆盖全部存活实体且恰含一名主公；角色分配对整场
+            // 固定，阵亡只移出实体，故角色表允许保留已阵亡玩家的条目
             if (parsed_mode == game::GameMode::Identity)
             {
                 if (!obj->contains("roles"))
                     return detail::fail(SaveErrorKind::StructureError, "roles");
 
-                std::set<std::string> entity_ids;
-                for (const auto &e : ents)
-                    entity_ids.insert(e.id);
-
                 int lord_count = 0;
                 for (const auto &entry : parsed_roles)
-                {
-                    if (entity_ids.find(entry.first) == entity_ids.end())
-                        return detail::fail(
-                            SaveErrorKind::StructureError, "roles." + entry.first);
                     if (entry.second == game::Role::Lord)
                         ++lord_count;
-                }
+
                 for (const auto &e : ents)
                     if (parsed_roles.find(e.id) == parsed_roles.end())
                         return detail::fail(SaveErrorKind::StructureError, "roles");
