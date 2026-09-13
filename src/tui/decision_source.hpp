@@ -55,6 +55,7 @@ namespace tkw
             std::string second_card_meta;   /**< pair 第二张牌花色点数串；非 pair 为空 */
             std::string second_card_text;   /**< pair 第二张牌效果文案；空 = 无说明 */
             bool hidden = false;            /**< 对手手牌占位：card_* 三项恒空 */
+            bool recast = false;            /**< Play：重铸动作（弃置此牌并摸一张，targets 为空） */
         };
 
         /**
@@ -397,7 +398,8 @@ namespace tkw
             }
 
             /**
-             * @brief Play 候选的一行文本：牌名 + 实例 + 可选第二张 + 可选目标 + 借刀警示。
+             * @brief Play 候选的一行文本：牌名 + 实例 + 可选第二张 + 可选目标 +
+             *        重铸后缀 + 借刀警示。
              */
             inline std::string play_option_text(
                 const tkw::game::ai::DecisionRequest &req,
@@ -410,6 +412,8 @@ namespace tkw
                     text += " + " + act.second_instance_id;
                 if (!act.targets.empty())
                     text += " -> " + join_targets(act.targets);
+                if (act.recast)
+                    text += "（重铸：弃置并摸一张）";
                 std::string holder;
                 if (is_self_target_borrowed_sword(req, act, holder))
                     text += "（警告：" + holder +
@@ -466,6 +470,7 @@ namespace tkw
                     opt.instance_id = act.card.instance_id;
                     opt.second_instance_id = act.second_instance_id;
                     opt.targets = act.targets;
+                    opt.recast = act.recast;
                     detail::fill_card_fields(opt, req, act.card);
                     if (!act.second_instance_id.empty())
                         detail::fill_second_card_fields(opt, req,
@@ -688,6 +693,7 @@ namespace tkw
                 out.instance_id = tkw::Option<std::string>::Some(opt.instance_id);
                 out.second_instance_id = opt.second_instance_id;
                 out.targets = opt.targets;
+                out.recast = opt.recast;
                 return true;
             case DecisionKind::Response:
                 out.instance_id = tkw::Option<std::string>::Some(opt.instance_id);

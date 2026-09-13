@@ -545,3 +545,35 @@ TEST_CASE("tui: cancel unblocks decide with default choice")
     CHECK_FALSE(source.fetch_new(after));
     CHECK_FALSE(source.submit({0}, false));
 }
+
+TEST_CASE("tui: play panel marks recast candidates and passes the flag through")
+{
+    const auto catalog = load_catalog();
+    auto req = base_request(DecisionKind::Play, catalog);
+    tkw::game::LegalAction sha;
+    sha.card = card_of("c1", "sha");
+    sha.targets = {"P1"};
+    tkw::game::LegalAction recast;
+    recast.card = card_of("c2", "guohe");
+    recast.recast = true;
+    req.legal = {sha, recast};
+
+    const DecisionPanelView panel = make_panel(req);
+    REQUIRE(panel.options.size() == 2);
+    CHECK_FALSE(panel.options[0].recast);
+    CHECK(panel.options[0].text.find("重铸") == std::string::npos);
+    CHECK(panel.options[1].recast);
+    CHECK(panel.options[1].text.find("（重铸：弃置并摸一张）") !=
+          std::string::npos);
+
+    DecisionChoice recast_out;
+    REQUIRE(make_choice(panel, {1}, false, recast_out));
+    CHECK(recast_out.recast);
+    REQUIRE(recast_out.instance_id.is_some());
+    CHECK(recast_out.instance_id.unwrap() == "c2");
+    CHECK(recast_out.targets.empty());
+
+    DecisionChoice normal_out;
+    REQUIRE(make_choice(panel, {0}, false, normal_out));
+    CHECK_FALSE(normal_out.recast);
+}
