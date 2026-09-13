@@ -66,7 +66,8 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 - 必须在仓库根目录运行：默认牌表 `resources/` 相对当前工作目录；且需要交互式终端
   （标准输入与标准输出均为 TTY）。任一非 TTY 时打印「需要交互式终端」并以 1 退出，
   请改用 `tkw repl`。
-- 四面板展示棋盘/手牌/日志/状态，底部命令栏：`new [--players N] [--seed S]
+- 四面板展示棋盘/手牌/日志/状态（棋盘逐座显示体力/手牌数/装备/判定/距离，
+  空区显示「无」），底部命令栏：`new [--players N] [--seed S]
   [--mode brawl|identity] [--ai simple|aggressive] [--deck P] [--hand N]
   [--human <座位>] [--no-human]`、`deal <players> <seed>`、`step`、`run`/`r`、
   `status`/`st`、`save <file>`、`load <file>`、`quit`/`q`、`help`/`?`；`Esc`/`Ctrl-C`

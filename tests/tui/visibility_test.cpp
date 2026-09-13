@@ -76,6 +76,25 @@ TEST_CASE("tui: public_zone reveals equipment and judge zones")
     CHECK(judge.revealed);
     CHECK(judge.count == 0);
     CHECK(judge.cards.empty());
+
+    // 数据 → 文本接缝：目录展示名以斜杠连接，空区回落「无」。
+    CHECK(tkw::tui::zone_names(equip) == "杀");
+    CHECK(tkw::tui::zone_names(judge) == "无");
+}
+
+TEST_CASE("tui: zone_names joins revealed cards and falls back to none")
+{
+    tkw::tui::ZoneView named;
+    named.revealed = true;
+    named.count = 2;
+    named.cards.push_back(tkw::tui::CardRow{
+        "i", "sha", "杀", tkw::card::Suit::Spade, 1});
+    named.cards.push_back(tkw::tui::CardRow{
+        "j", "shan", "闪", tkw::card::Suit::Heart, 2});
+    CHECK(tkw::tui::zone_names(named) == "杀/闪");
+
+    const tkw::tui::ZoneView empty;
+    CHECK(tkw::tui::zone_names(empty) == "无");
 }
 
 TEST_CASE("tui: visible_hand tolerates unknown viewer without leaking")

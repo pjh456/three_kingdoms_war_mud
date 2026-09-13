@@ -915,7 +915,7 @@ if(TKW_ENABLE_TUI)
              COMMAND sh -c
                      "d=$(mktemp -d); ln -s '${CMAKE_SOURCE_DIR}/resources' $d/resources; \
                       out=$(cd $d && { sleep 0.5; printf 'quit\\n'; sleep 0.5; } | script -qec 'stty rows 40 cols 120; $<TARGET_FILE:tkw-tui>' /dev/null 2>&1); rc=$?; rm -rf $d; \
-                      printf '%s' \"$out\" | grep -aq '棋盘' && [ $rc -eq 0 ]")
+                      printf '%s' \"$out\" | grep -aq '棋盘' && printf '%s' \"$out\" | grep -aq '装备' && printf '%s' \"$out\" | grep -aq '判定' && [ $rc -eq 0 ]")
     set_tests_properties(tui_pty_smoke PROPERTIES
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         TIMEOUT 30)

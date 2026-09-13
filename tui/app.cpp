@@ -54,11 +54,13 @@ namespace
     }
 
     /**
-     * @brief 棋盘面板：每座一行体力/手牌数/距离，身份局附加角色标签。
+     * @brief 棋盘面板：每座一行体力/手牌数/装备/判定/距离，身份局附加角色标签。
      * @param snap 值快照。
      * @return 每座位一行的 vbox；无玩家时单行占位。
-     * @note 身份局的隐藏座位已在快照层收敛为 Role::None，此处无条件输出其标签
-     *       （None → 「未知」占位），与 CLI status 口径一致，不泄漏真实角色。
+     * @note 装备区/判定区为明置信息，经快照值展开牌名，空区回落「无」，与 CLI
+     *       status 同措辞；手牌仍只出数量。身份局的隐藏座位已在快照层收敛为
+     *       Role::None，此处无条件输出其标签（None → 「未知」占位），与 CLI
+     *       status 口径一致，不泄漏真实角色。
      */
     ftxui::Element render_board(const UiSnapshot &snap)
     {
@@ -70,7 +72,9 @@ namespace
             std::string line = "P" + std::to_string(p.seat) + "  体力 " +
                                std::to_string(p.hp) + "/" +
                                std::to_string(p.max_hp) + "  手牌 " +
-                               std::to_string(p.hand.count) + "  距 " +
+                               std::to_string(p.hand.count) + "  装备 " +
+                               tkw::tui::zone_names(p.equip) + "  判定 " +
+                               tkw::tui::zone_names(p.judge) + "  距 " +
                                std::to_string(p.distance);
             if (p.in_attack_range)
                 line += "  攻击范围";

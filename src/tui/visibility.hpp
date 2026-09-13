@@ -46,6 +46,28 @@ namespace tkw
         };
 
         /**
+         * @brief 把一个明置牌区渲染为「卡名/卡名」；空区回落「无」。
+         * @param zone 牌区视图；须已展开，装备/判定经 public_zone 填充。
+         * @return 斜杠分隔的中文展示名；cards 为空返回「无」。
+         * @note 与 CLI status 的装备/判定口径一致；不得传入未展开的对手手牌
+         *       （count>0 但 cards 空会误显「无」）。
+         */
+        inline std::string zone_names(const ZoneView &zone)
+        {
+            if (zone.cards.empty())
+                return "无";
+
+            std::string out;
+            for (std::size_t i = 0; i < zone.cards.size(); ++i)
+            {
+                if (i > 0)
+                    out += "/";
+                out += zone.cards[i].display_name;
+            }
+            return out;
+        }
+
+        /**
          * @brief 身份局角色是否向人类视角可见。
          * @param humans 本会话真人座位 id 集合；空 = 无真人视角。
          * @param over   对局是否已结束（终局全公开）。
