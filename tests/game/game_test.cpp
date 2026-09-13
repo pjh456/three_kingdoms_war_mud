@@ -1799,6 +1799,73 @@ TEST_CASE("game: dying rescued by another player's peach")
     CHECK(g.cards.hand_size("c") == 0);        // c 的桃被消耗
 }
 
+TEST_CASE("game: dying rescue starts from the current turn player")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    g.give("a", "sha", "s#0");
+    g.give("a", "tao", "t#a");
+    g.give("c", "tao", "t#c");
+    c->take_damage("a", 3, false);  // c: 4 → 1
+
+    TestDecider d;
+    d.save = true;
+    d.plays = {PlayAction{"s#0", {"c"}}};
+    auto tr = execute_turn(g.ctx, d, "a");
+    REQUIRE(tr.is_ok());
+
+    // 回合角色 a 先被询问：a 的桃救回 c，c 自持的桃保留。
+    CHECK(g.entities.find("c").is_some());
+    CHECK(c->get_hp() == 1);
+    CHECK(g.cards.hand_size("a") == 0);
+    CHECK(g.cards.hand_size("c") == 1);
+}
+
+TEST_CASE("game: direct deal_damage keeps querying from the dying player")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    g.give("a", "tao", "t#a");
+    g.give("c", "tao", "t#c");
+    c->take_damage("a", 3, false);  // c: 4 → 1
+
+    TestDecider d;
+    d.save = true;
+    // 无回合上下文（ctx.turn_player 为空）→ 回落濒死者 c 起问，c 自理。
+    deal_damage(g.ctx, d, "a", "c", 1);
+
+    CHECK(g.entities.find("c").is_some());
+    CHECK(c->get_hp() == 1);
+    CHECK(g.cards.hand_size("a") == 1);
+    CHECK(g.cards.hand_size("c") == 0);
+}
+
+TEST_CASE("game: dying rescue uses the turn player not the damage source")
+{
+    TestGame g("deck");
+    auto *c = g.add_player("c", 0, 4);
+    g.add_player("a", 1, 4);
+    g.add_player("b", 2, 4);
+    g.give("a", "tao", "t#a");
+    g.give("b", "tao", "t#b");
+    c->take_damage("a", 3, false);  // c: 4 → 1
+    g.ctx.turn_player = "a";        // 白盒置位：回合角色 a ≠ 伤害来源 b
+
+    TestDecider d;
+    d.save = true;
+    deal_damage(g.ctx, d, "b", "c", 1);
+
+    // 座位序 c(0) → a(1) → b(2)：从回合角色 a 起问，消耗 a 的桃而非来源 b 的桃。
+    CHECK(g.entities.find("c").is_some());
+    CHECK(c->get_hp() == 1);
+    CHECK(g.cards.hand_size("a") == 0);
+    CHECK(g.cards.hand_size("b") == 1);
+}
+
 TEST_CASE("game: unrescued death removes entity and rewards killer")
 {
     TestGame g("deck");

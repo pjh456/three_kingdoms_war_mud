@@ -254,6 +254,15 @@ TEST_CASE("replay: golden fingerprints pin the rule semantics")
     //   价值点名最优牌，新档只能对无身份占位槽按期望常量估值并接受引擎暗抽，
     //   起手被抢的牌不再最优，后续死亡/装备级联改变。这是有意消除全知信息优势
     //   的规则保真取舍（强度下调）。
+    //
+    // 濒死询问起点由「濒死者起」改为「当前回合角色起」（无回合上下文回落濒死者）
+    // 后的核对（新旧日志逐行 diff + 每处濒死救援的回合角色/濒死者/桃持有者三元组
+    // 核对过）：两条 simple 线均逐字节不变，未进入「多个供桃者且顺序影响结果」的
+    // 触发态，故不重钉。
+    // - 2 人 seed 1：唯一濒死（P1 被击杀至 -2）全环无人持桃，救援顺序不影响事件。
+    // - 4 人 seed 42：4 处濒死中 1 处为闪电自伤（濒死者 == 当前回合角色 P0），
+    //   其余 3 处（回合 7 P2 桃救 P1、回合 26/28 P3 桃救 P0）起问起点替换后首个
+    //   实际出桃者不变，手牌与后续级联不变。
     const auto two = run_game(1, 2);
     CHECK(two.size() == 69);
     CHECK(fingerprint(two) == 9283070076194552029ULL);
@@ -268,6 +277,7 @@ TEST_CASE("replay: four-player seed 42 reaches a decisive result")
     // 旗舰默认对局（裸 tkw = deal 4 42）必须分出唯一胜者，而不是摸空僵持到
     // 回合上限：摸牌洗回口径统一后，牌堆耗尽会从弃牌堆补牌，对局在 max_turns
     // 之前结束。此用例直接钉住该结果，防止退回 1001 回合平局。
+    // 濒死询问起点对齐当前回合角色后该结论不变（日志逐行未漂移，winner 仍 P2）。
     TestGame g("deck", 42);
     for (int i = 0; i < 4; ++i)
         g.add_player("P" + std::to_string(i), i, 4);
@@ -350,6 +360,10 @@ TEST_CASE("replay: aggressive ai is deterministic and pins its golden fingerprin
     // 真实牌价值取走万箭齐发，新档对无身份占位槽只按期望常量估值并接受引擎
     // 暗抽，取到杀，后续出牌/伤害/死亡序列级联改变。规则保真取舍：Aggressive
     // 不再能精确抢走对手高价值手牌。
+    //
+    // 濒死询问起点改为「当前回合角色起」后的核对（新旧日志逐行 diff 核对过）：
+    // 逐字节不变——唯一濒死（P1 被击杀至 -1 死亡）全环无人持桃，救援顺序不影响
+    // 事件，未进入顺序差异触发态。
     tkw::game::AggressiveAI aggr;
     const auto a = run_game_ai(aggr, 1, 2);
     const auto b = run_game_ai(aggr, 1, 2);
@@ -385,6 +399,11 @@ TEST_CASE("replay: aggressive 4-player seed 42 is deterministic and pinned")
     // 391 → 378 行。首个分叉在 P0 顺手牵羊取 P1 手牌（首个隐藏暗抽）：旧档
     // 按真实牌价值取走南蛮入侵，新档暗抽取到过河拆桥，后续出牌/装备/死亡级联
     // 改变。
+    //
+    // 濒死询问起点改为「当前回合角色起」后的核对（新旧日志逐行 diff 核对过）：
+    // 逐字节不变——5 处濒死中 1 处为闪电自伤（濒死者 == 当前回合角色 P0），其余
+    // 4 处（回合 15/17 P2 桃救 P1、回合 35/37 P2 桃救 P3）起问起点替换后首个实际
+    // 出桃者不变，未进入顺序差异触发态。
     tkw::game::AggressiveAI aggr;
     const auto a = run_game_ai(aggr, 42, 4);
     const auto b = run_game_ai(aggr, 42, 4);

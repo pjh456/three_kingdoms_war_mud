@@ -2,7 +2,8 @@
  * @file combat.hpp
  * @brief 战斗流程：伤害 → 濒死救场（桃）→ 死亡声明与击杀奖惩。
  * @note 这是 entity/event.hpp 注释里「由 combat 发布」的职责归属：
- *       - hp 扣到非正 → 进入濒死：从濒死角色起按座位序轮询打桃；
+ *       - hp 扣到非正 → 进入濒死：从当前回合角色起按座位序轮询打桃
+ *         （无回合上下文时回落濒死者起）；
  *       - 一轮无人可救/不救 → 死亡：区域牌弃置、发布 EntityDiedEvent、移除实体；
  *       - 击杀奖惩：乱斗按通用规则给击杀者发奖励，身份局按死者角色与击杀者
  *         身份结算（击杀反贼发奖励；主公击杀忠臣弃光其手牌与装备；其余无奖）。
@@ -65,7 +66,9 @@ namespace tkw
         }
 
         /**
-         * @brief 濒死救场：hp ≤ 0 时从濒死角色起按座位序轮询打桃。
+         * @brief 濒死救场：hp ≤ 0 时从当前回合角色起按座位序轮询打桃。
+         * @note 起点取 ctx.turn_player；为空或该角色已离场时回落濒死者，
+         *       以保留 execute_turn 外直接调用的语义。
          * @return true = 死亡；false = 救回（hp > 0）。
          */
         inline bool resolve_dying(
@@ -81,8 +84,11 @@ namespace tkw
                 ctx.bus->publish(ev);
             }
 
-            // 座位序，从濒死角色开始
-            const auto order = ctx.entities->order_from(dying);
+            // 座位序：从当前回合角色开始；无回合上下文或该角色已离场时回落濒死者
+            const bool has_turn = !ctx.turn_player.empty() &&
+                                  ctx.entities->find(ctx.turn_player).is_some();
+            const auto order =
+                ctx.entities->order_from(has_turn ? ctx.turn_player : dying);
 
             int rounds = 0;
             while (true)

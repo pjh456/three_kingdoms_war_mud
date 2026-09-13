@@ -53,6 +53,7 @@ namespace tkw
             const RulesConfig *rules = nullptr;  /**< 规则数值（由对局持有） */
             const GameMode *mode = nullptr;      /**< 对局模式（由对局持有） */
             const RoleTable *roles = nullptr;    /**< 身份局角色表（由对局持有） */
+            std::string turn_player;             /**< 当前回合角色 id；空 = 无回合上下文 */
 
             /** @brief 隐式转出只读视图（值拷贝六个 const 指针），供决策接缝使用。 */
             operator ReadOnlyContext() const
