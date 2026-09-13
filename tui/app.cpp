@@ -57,6 +57,8 @@ namespace
      * @brief 棋盘面板：每座一行体力/手牌数/距离，身份局附加角色标签。
      * @param snap 值快照。
      * @return 每座位一行的 vbox；无玩家时单行占位。
+     * @note 身份局的隐藏座位已在快照层收敛为 Role::None，此处无条件输出其标签
+     *       （None → 「未知」占位），与 CLI status 口径一致，不泄漏真实角色。
      */
     ftxui::Element render_board(const UiSnapshot &snap)
     {
@@ -72,7 +74,7 @@ namespace
                                std::to_string(p.distance);
             if (p.in_attack_range)
                 line += "  攻击范围";
-            if (show_role && p.role != tkw::game::Role::None)
+            if (show_role)
                 line += "  [" + std::string(tkw::cli::detail::role_label_zh(p.role)) + "]";
             rows.push_back(ftxui::text(line));
         }

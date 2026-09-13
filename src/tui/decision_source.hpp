@@ -640,13 +640,15 @@ namespace tkw
              * @brief 提交当前待决的选择并唤醒 worker。
              * @param selected 选中候选的 0 基下标；Discard 为多选。
              * @param pass     是否放弃。
-             * @return 提交被接受返回 true；无待决/已取消/选择非法返回 false，
-             *         且不改变待决状态（面板保持可继续提交）。
+             * @return 提交被接受返回 true；无待决/已提交尚未唤醒/已取消/选择非法返回
+             *         false，且不改变待决状态（面板保持可继续提交）。
              */
             bool submit(std::vector<std::size_t> selected, bool pass)
             {
                 std::lock_guard<std::mutex> lock(m_);
-                if (!has_pending_ || cancelled_.load())
+                // submitted_ 关掉「首次提交到 worker 唤醒之间」的连击覆盖窗口；
+                // worker 每次 decide 起始会重置它。
+                if (!has_pending_ || submitted_ || cancelled_.load())
                     return false;
                 tkw::game::ai::DecisionChoice choice;
                 if (!panel_ || !make_choice(*panel_, selected, pass, choice))

@@ -944,5 +944,18 @@ if(TKW_ENABLE_TUI)
     set_tests_properties(tui_pty_human_quit_pending PROPERTIES
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         TIMEOUT 30)
+
+    # 身份局角色占位：argv 直接开身份局（首帧即出棋盘，省一次 new 交互），只钉两个
+    # 稳定事实——P0 恒主公可见 [主公]、非真人非主公座位（P2/P3）隐藏为 [未知] 占位；
+    # 不赌隐藏座具体是忠/反/内（角色按 identity rng 洗牌），grep -F 避免方括号被当
+    # 正则字符类；grep -a 处理 FTXUI 输出里的 ANSI 转义。
+    add_test(NAME tui_pty_identity_hidden_role
+             COMMAND sh -c
+                     "d=$(mktemp -d); ln -s '${CMAKE_SOURCE_DIR}/resources' $d/resources; \
+                      out=$(cd $d && { sleep 1; printf 'quit\\n'; sleep 0.8; } | script -qec 'stty rows 40 cols 120; $<TARGET_FILE:tkw-tui> --mode identity --human P1 --players 4 --seed 1' /dev/null 2>&1); rc=$?; rm -rf $d; \
+                      printf '%s' \"$out\" | grep -aqF '[主公]' && printf '%s' \"$out\" | grep -aqF '[未知]' && [ $rc -eq 0 ]")
+    set_tests_properties(tui_pty_identity_hidden_role PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        TIMEOUT 30)
   endif()
 endif()

@@ -328,6 +328,28 @@ TEST_CASE("tui: invalid submit keeps the decision pending")
     CHECK(result.option_index.unwrap() == 0);
 }
 
+TEST_CASE("tui: second submit before wake rejected")
+{
+    const auto catalog = load_catalog();
+    TuiDecisionSource source({"P0"},
+                             std::make_unique<tkw::game::ai::SimpleDecider>());
+    auto req = base_request(DecisionKind::PickRevealed, catalog);
+    req.options = {card_of("c1", "sha")};
+
+    DecisionChoice result;
+    std::jthread worker([&] { result = source.decide(req); });
+
+    DecisionPanelView panel;
+    REQUIRE(wait_pending(source, panel));
+    REQUIRE(source.submit({0}, false));      // 首次提交被接受
+    CHECK_FALSE(source.submit({0}, false));  // worker 唤醒前二次提交被拒
+    worker.join();
+
+    REQUIRE(result.option_index.is_some());
+    CHECK(result.option_index.unwrap() == 0);
+    CHECK_FALSE(source.has_pending());
+}
+
 TEST_CASE("tui: cancel unblocks decide with default choice")
 {
     const auto catalog = load_catalog();
