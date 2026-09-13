@@ -123,6 +123,14 @@ namespace tkw
                     return "需出闪时可判定，红色结果视为闪";
                 case tkw::card::Ability::BlackShaImmune:
                     return "黑色杀对你无效";
+                case tkw::card::Ability::VineArmor:
+                    return "普通杀与南蛮/万箭对你无效，火焰伤害 +1";
+                case tkw::card::Ability::GudingBlade:
+                    return "杀的目标没有手牌时此伤害 +1";
+                case tkw::card::Ability::SilverLion:
+                    return "单次受到的伤害至多 1 点；失去此装备回复 1 点体力";
+                case tkw::card::Ability::FireShaConvert:
+                    return "普通杀可当具火焰伤害的杀使用（可放弃）";
                 }
                 return "装备能力";
             }
@@ -175,12 +183,21 @@ namespace tkw
                 return title;
             }
 
-            /** @brief 亮牌窗口标题：按来源结算分别渲染五谷丰登/麒麟弓。 */
+            /** @brief 亮牌窗口标题：按来源结算分别渲染五谷丰登/麒麟弓/火攻。 */
             inline std::string reveal_title(
                 const tkw::game::ai::DecisionRequest &req)
             {
-                if (req.reveal_source == tkw::game::RevealSource::Qilin)
+                switch (req.reveal_source)
+                {
+                case tkw::game::RevealSource::Qilin:
                     return "麒麟弓：选择目标坐骑";
+                case tkw::game::RevealSource::FireAttackReveal:
+                    return "火攻：展示一张手牌";
+                case tkw::game::RevealSource::FireAttackDiscard:
+                    return "火攻：弃一张同花色手牌（可放弃）";
+                case tkw::game::RevealSource::Wugu:
+                    break;
+                }
                 return "五谷丰登亮牌（每名角色依次选一张）";
             }
 
@@ -561,7 +578,9 @@ namespace tkw
             case DecisionKind::PickRevealed:
             {
                 panel.title = detail::reveal_title(req);
-                panel.allow_pass = false;
+                panel.allow_pass =
+                    req.reveal_source ==
+                    tkw::game::RevealSource::FireAttackDiscard;
                 for (std::size_t i = 0; i < req.options.size(); ++i)
                 {
                     PanelOption opt;

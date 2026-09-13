@@ -320,6 +320,64 @@ TEST_CASE("tui: revealed pick panel is mandatory")
     CHECK(out.option_index.unwrap() == 1);
 }
 
+TEST_CASE("tui: trigger panel carries junzheng ability hints")
+{
+    const auto catalog = load_catalog();
+
+    const auto hint = [&catalog](tkw::card::Ability ability)
+    {
+        auto req = base_request(DecisionKind::Trigger, catalog);
+        req.ability = ability;
+        return make_panel(req).title;
+    };
+
+    CHECK(hint(tkw::card::Ability::VineArmor).find("火焰伤害 +1") !=
+          std::string::npos);
+    CHECK(hint(tkw::card::Ability::GudingBlade).find("没有手牌") !=
+          std::string::npos);
+    CHECK(hint(tkw::card::Ability::SilverLion).find("至多 1") !=
+          std::string::npos);
+    CHECK(hint(tkw::card::Ability::FireShaConvert).find("可当具火焰伤害") !=
+          std::string::npos);
+}
+
+TEST_CASE("tui: revealed pick covers junzheng reveal sources")
+{
+    const auto catalog = load_catalog();
+
+    const auto panel_for = [&catalog](tkw::game::RevealSource source)
+    {
+        auto req = base_request(DecisionKind::PickRevealed, catalog);
+        req.reveal_source = source;
+        req.options = {card_of("c1", "sha")};
+        return make_panel(req);
+    };
+
+    const DecisionPanelView qilin = panel_for(tkw::game::RevealSource::Qilin);
+    CHECK(qilin.title.find("麒麟弓") != std::string::npos);
+    CHECK_FALSE(qilin.allow_pass);
+
+    const DecisionPanelView reveal =
+        panel_for(tkw::game::RevealSource::FireAttackReveal);
+    CHECK(reveal.title.find("火攻") != std::string::npos);
+    CHECK(reveal.title.find("展示") != std::string::npos);
+    CHECK_FALSE(reveal.allow_pass);
+    DecisionChoice forced;
+    CHECK_FALSE(make_choice(reveal, {}, true, forced));  // 展示窗强制选择
+
+    const DecisionPanelView discard =
+        panel_for(tkw::game::RevealSource::FireAttackDiscard);
+    CHECK(discard.title.find("同花色") != std::string::npos);
+    CHECK(discard.allow_pass);
+    DecisionChoice passed;
+    REQUIRE(make_choice(discard, {}, true, passed));
+    CHECK(passed.option_index.is_none());
+
+    const DecisionPanelView wugu = panel_for(tkw::game::RevealSource::Wugu);
+    CHECK(wugu.title.find("五谷") != std::string::npos);
+    CHECK_FALSE(wugu.allow_pass);
+}
+
 TEST_CASE("tui: discard panel enforces count uniqueness and reason pass")
 {
     const auto catalog = load_catalog();
