@@ -9,6 +9,7 @@
 #include "card/catalog.hpp"
 #include "config/resource.hpp"
 #include "entity/hp.hpp"
+#include "game/core/roles.hpp"
 #include "game/ai/simple.hpp"
 #include "game/flow/loop.hpp"
 #include "game/flow/table.hpp"
@@ -52,6 +53,28 @@ namespace
             REQUIRE(g->add_player("P" + std::to_string(i), i,
                                   entity::Hp::make(4), genders[i]).is_ok());
         return g;
+    }
+
+    /** 在 4 人夹具上置身份局模式与一套标准角色（P0 主公）。 */
+    void make_identity(Game &g)
+    {
+        g.mode = GameMode::Identity;
+        g.roles = {{"P0", Role::Lord},
+                   {"P1", Role::Loyalist},
+                   {"P2", Role::Rebel},
+                   {"P3", Role::Traitor}};
+    }
+
+    /** 整段擦除 ",\"roles":{...}"（roles 对象无嵌套）；无该段时原样返回。 */
+    std::string strip_roles(std::string text)
+    {
+        const auto pos = text.find(",\"roles\":");
+        if (pos == std::string::npos)
+            return text;
+        const auto close = text.find('}', pos);
+        if (close != std::string::npos)
+            text.erase(pos, close - pos + 1);
+        return text;
     }
 }
 
@@ -575,4 +598,242 @@ TEST_CASE("save: per-section structure errors carry their field path")
            save::SaveErrorKind::StructureError, "entities");
     expect(mutate(base, "\"gender\":\"male\"", "\"gender\":\"x\""),
            save::SaveErrorKind::StructureError, "entities.gender");
+}
+
+TEST_CASE("save: identity mode and roles round-trip")
+{
+    auto a = make_game(42);
+    make_identity(*a);
+    GameSession sa;
+    const std::string text = save::write(*a, sa, "deck");
+
+    CHECK(text.find("\"mode\":\"identity\"") != std::string::npos);
+    CHECK(text.find("\"roles\":{\"P0\":\"lord\",\"P1\":\"loyalist\","
+                    "\"P2\":\"rebel\",\"P3\":\"traitor\"}") != std::string::npos);
+
+    auto b = make_game(999);  // 不同种子，应被存档覆盖
+    GameSession sb;
+    REQUIRE(save::read(text, *b, sb).is_ok());
+    CHECK(b->mode == GameMode::Identity);
+    CHECK(b->roles == a->roles);
+    CHECK(save::write(*b, sb, "deck") == text);  // 规范化往返稳定
+}
+
+TEST_CASE("save: brawl saves contain no mode key")
+{
+    auto a = make_game(1);  // 默认乱斗
+    GameSession sa;
+    const std::string text = save::write(*a, sa, "deck");
+    // 乱斗不写新键：默认路径输出与旧格式逐字节一致
+    CHECK(text.find("\"mode\"") == std::string::npos);
+    CHECK(text.find("\"roles\"") == std::string::npos);
+}
+
+TEST_CASE("save: legacy saves without mode load as brawl")
+{
+    auto a = make_game(1);
+    GameSession sa;
+    const std::string text = save::write(*a, sa, "deck");  // 等价无 mode 的旧档
+
+    // 目标预置身份局，验证旧档缺失字段回落并重置脏状态
+    auto b = make_game(999);
+    make_identity(*b);
+    GameSession sb;
+    REQUIRE(save::read(text, *b, sb).is_ok());
+    CHECK(b->mode == GameMode::Brawl);
+    CHECK(b->roles.empty());
+    CHECK(save::write(*b, sb, "deck") == text);
+}
+
+TEST_CASE("save: unknown mode value is a structure error")
+{
+    auto a = make_game(42);
+    make_identity(*a);
+    GameSession sa;
+    std::string text = save::write(*a, sa, "deck");
+    const auto pos = text.find("\"mode\":\"identity\"");
+    REQUIRE(pos != std::string::npos);
+    text.replace(pos, 17, "\"mode\":\"x\"");
+
+    auto b = make_game(7);
+    GameSession sb;
+    auto r = save::read(text, *b, sb);
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err().kind == save::SaveErrorKind::StructureError);
+    CHECK(r.unwrap_err().detail == "mode");
+}
+
+TEST_CASE("save: identity mode without roles is a structure error")
+{
+    auto a = make_game(42);
+    make_identity(*a);
+    GameSession sa;
+    const std::string text = strip_roles(save::write(*a, sa, "deck"));
+    REQUIRE(text.find("\"roles\"") == std::string::npos);
+
+    auto b = make_game(7);
+    GameSession sb;
+    auto r = save::read(text, *b, sb);
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err().kind == save::SaveErrorKind::StructureError);
+    CHECK(r.unwrap_err().detail == "roles");
+}
+
+TEST_CASE("save: invalid role value is a structure error")
+{
+    auto a = make_game(42);
+    make_identity(*a);
+    GameSession sa;
+    std::string text = save::write(*a, sa, "deck");
+    const auto pos = text.find("\"P0\":\"lord\"");
+    REQUIRE(pos != std::string::npos);
+    text.replace(pos, 11, "\"P0\":\"king\"");
+
+    auto b = make_game(7);
+    GameSession sb;
+    auto r = save::read(text, *b, sb);
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err().kind == save::SaveErrorKind::StructureError);
+    CHECK(r.unwrap_err().detail == "roles.P0");
+}
+
+TEST_CASE("save: identity roles must cover saved entities")
+{
+    auto a = make_game(42);
+    make_identity(*a);
+    GameSession sa;
+    const std::string base = save::write(*a, sa, "deck");
+
+    // 缺 P3：存档实体未被角色表覆盖
+    {
+        std::string text = base;
+        const auto pos = text.find(",\"P3\":\"traitor\"");
+        REQUIRE(pos != std::string::npos);
+        text.erase(pos, 15);
+        auto b = make_game(7);
+        GameSession sb;
+        auto r = save::read(text, *b, sb);
+        REQUIRE(r.is_err());
+        CHECK(r.unwrap_err().kind == save::SaveErrorKind::StructureError);
+        CHECK(r.unwrap_err().detail == "roles");
+    }
+
+    // 多 P9：角色表含不属于存档实体的键
+    {
+        std::string text = base;
+        const auto pos = text.find("\"P3\":\"traitor\"}");
+        REQUIRE(pos != std::string::npos);
+        text.replace(pos, 15, "\"P3\":\"traitor\",\"P9\":\"rebel\"}");
+        auto b = make_game(7);
+        GameSession sb;
+        auto r = save::read(text, *b, sb);
+        REQUIRE(r.is_err());
+        CHECK(r.unwrap_err().kind == save::SaveErrorKind::StructureError);
+        CHECK(r.unwrap_err().detail == "roles.P9");
+    }
+}
+
+TEST_CASE("save: identity roles must contain exactly one lord")
+{
+    auto a = make_game(42);
+    make_identity(*a);
+    GameSession sa;
+    std::string text = save::write(*a, sa, "deck");
+    const auto pos = text.find("\"P0\":\"lord\"");
+    REQUIRE(pos != std::string::npos);
+    text.replace(pos, 11, "\"P0\":\"rebel\"");  // 覆盖仍完整，主公数为 0
+
+    auto b = make_game(7);
+    GameSession sb;
+    auto r = save::read(text, *b, sb);
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err().kind == save::SaveErrorKind::StructureError);
+    CHECK(r.unwrap_err().detail == "roles");
+}
+
+TEST_CASE("save: failed mode or roles validation leaves the target untouched")
+{
+    auto a = make_game(42);
+    make_identity(*a);
+    GameSession sa;
+    std::string bad = save::write(*a, sa, "deck");
+    const auto pos = bad.find("\"P1\":\"loyalist\"");
+    REQUIRE(pos != std::string::npos);
+    bad.replace(pos, 15, "\"P1\":\"spy\"");
+
+    auto b = make_game(7);
+    make_identity(*b);  // 目标预置身份局状态，任何半写都可见
+    GameSession sb;
+    const std::string before = save::write(*b, sb, "deck");
+
+    auto r = save::read(bad, *b, sb);
+    REQUIRE(r.is_err());
+    CHECK(save::write(*b, sb, "deck") == before);
+}
+
+TEST_CASE("save: mode and roles do not change the deck hash")
+{
+    auto a = make_game(1);  // 乱斗
+    auto b = make_game(1);  // 同牌表、同种子
+    make_identity(*b);
+    GameSession sa;
+    GameSession sb;
+
+    CHECK(save::deck_hash(a->catalog) == save::deck_hash(b->catalog));
+
+    const std::string ba = save::write(*a, sa, "deck");
+    const std::string bb = save::write(*b, sb, "deck");
+    const auto hash_span = [](const std::string &t)
+    {
+        const auto k = t.find("\"hash\":");
+        REQUIRE(k != std::string::npos);
+        const auto begin = k + 7;
+        auto end = begin;
+        while (end < t.size() && t[end] != ',' && t[end] != '}')
+            ++end;
+        return t.substr(begin, end - begin);
+    };
+    CHECK(hash_span(ba) == hash_span(bb));
+
+    // 身份局文本可读，证明指纹未随模式变化
+    auto c = make_game(1);
+    GameSession sc;
+    CHECK(save::read(bb, *c, sc).is_ok());
+}
+
+TEST_CASE("save: brawl save with a roles object is a structure error")
+{
+    auto a = make_game(1);  // 乱斗
+    GameSession sa;
+    const std::string base = save::write(*a, sa, "deck");
+
+    std::string text = base;
+    const auto pos = text.find(",\"entities\":[");
+    REQUIRE(pos != std::string::npos);
+    text.replace(pos, 13, ",\"roles\":{\"P0\":\"lord\"},\"entities\":[");
+
+    auto b = make_game(7);
+    GameSession sb;
+    auto r = save::read(text, *b, sb);
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err().kind == save::SaveErrorKind::StructureError);
+    CHECK(r.unwrap_err().detail == "roles");
+}
+
+TEST_CASE("save: explicit brawl mode loads as brawl")
+{
+    auto a = make_game(42);
+    make_identity(*a);
+    GameSession sa;
+    std::string text = save::write(*a, sa, "deck");
+    const auto pos = text.find("\"mode\":\"identity\"");
+    REQUIRE(pos != std::string::npos);
+    text.replace(pos, 17, "\"mode\":\"brawl\"");
+    text = strip_roles(text);
+
+    auto b = make_game(7);
+    GameSession sb;
+    REQUIRE(save::read(text, *b, sb).is_ok());
+    CHECK(b->mode == GameMode::Brawl);
+    CHECK(b->roles.empty());
 }

@@ -21,6 +21,7 @@
 #include "card/catalog.hpp"
 #include "card/def.hpp"
 #include "entity/manager.hpp"
+#include "game/core/roles.hpp"
 #include "game/core/rules.hpp"
 #include "game/flow/loop.hpp"
 #include "game/flow/table.hpp"
@@ -134,6 +135,22 @@ namespace tkw
                 return out;
             }
 
+            /** 序列化 id→Role 映射；std::map 迭代有序，输出确定。 */
+            inline std::string role_map_json(const game::RoleTable &m)
+            {
+                std::string out = "{";
+                bool first = true;
+                for (const auto &[k, v] : m)
+                {
+                    if (!first)
+                        out += ",";
+                    first = false;
+                    out += jstr(k) + ":" + jstr(role_name(v));
+                }
+                out += "}";
+                return out;
+            }
+
             /** 序列化 string 集合为数组；std::set 迭代有序，输出确定。 */
             inline std::string str_set_json(const std::set<std::string> &s)
             {
@@ -207,6 +224,12 @@ namespace tkw
                    << detail::str_map_json(meta.stats.last_hit_source)
                    << ",\"died\":" << detail::str_set_json(meta.stats.died) << "}";
             os << "}";
+            // 身份局才写出模式与角色；乱斗不写新键，保持旧档逐字节不变
+            if (g.mode == game::GameMode::Identity)
+            {
+                os << ",\"mode\":" << jstr(mode_name(g.mode));
+                os << ",\"roles\":" << detail::role_map_json(g.roles);
+            }
             os << ",\"cards\":{\"instance_seq\":" << snap.instance_seq
                << ",\"draw\":" << cards_json(snap.draw)
                << ",\"discard\":" << cards_json(snap.discard);

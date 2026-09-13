@@ -10,6 +10,7 @@
 
 #include "card/def.hpp"
 #include "entity/base.hpp"
+#include "game/core/roles.hpp"
 
 namespace tkw
 {
@@ -71,6 +72,66 @@ namespace tkw
                 out = card::Suit::Heart;
             else if (s == "diamond")
                 out = card::Suit::Diamond;
+            else
+                return false;
+            return true;
+        }
+
+        /** @brief 对局模式 → 存档文本。 */
+        inline constexpr const char *mode_name(game::GameMode m)
+        {
+            switch (m)
+            {
+            case game::GameMode::Brawl:
+                return "brawl";
+            case game::GameMode::Identity:
+                return "identity";
+            }
+            return "brawl";
+        }
+
+        /** @brief 存档文本 → 对局模式；未知返回 false。 */
+        inline bool mode_from(std::string_view s, game::GameMode &out)
+        {
+            if (s == "brawl")
+                out = game::GameMode::Brawl;
+            else if (s == "identity")
+                out = game::GameMode::Identity;
+            else
+                return false;
+            return true;
+        }
+
+        /** @brief 角色 → 存档文本（None 为防御性兜底，合法存档不写出）。 */
+        inline constexpr const char *role_name(game::Role r)
+        {
+            switch (r)
+            {
+            case game::Role::Lord:
+                return "lord";
+            case game::Role::Loyalist:
+                return "loyalist";
+            case game::Role::Rebel:
+                return "rebel";
+            case game::Role::Traitor:
+                return "traitor";
+            case game::Role::None:
+                return "none";
+            }
+            return "none";
+        }
+
+        /** @brief 存档文本 → 角色；仅四个合法角色文本，未知与 "none" 返回 false。 */
+        inline bool role_from(std::string_view s, game::Role &out)
+        {
+            if (s == "lord")
+                out = game::Role::Lord;
+            else if (s == "loyalist")
+                out = game::Role::Loyalist;
+            else if (s == "rebel")
+                out = game::Role::Rebel;
+            else if (s == "traitor")
+                out = game::Role::Traitor;
             else
                 return false;
             return true;

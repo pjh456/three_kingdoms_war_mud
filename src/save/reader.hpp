@@ -23,6 +23,7 @@
 #include "card/card.hpp"
 #include "card/manager.hpp"
 #include "entity/manager.hpp"
+#include "game/core/roles.hpp"
 #include "game/core/rules.hpp"
 #include "game/flow/loop.hpp"
 #include "game/flow/table.hpp"
@@ -198,8 +199,9 @@ namespace tkw
          * @param session  接收会话进度。
          * @param meta     非空时接收可选会话元数据；解析失败不写入。
          * @return Ok 或 Err(SaveError)；牌表指纹不符时拒绝。
-         * @note 旧档缺失 ai/stats 字段时回落默认，不拒绝；全部校验通过后才落子，
-         *       出参 meta 与目标状态同批赋值，早退不污染。
+         * @note 旧档缺失 ai/stats 字段时回落默认，不拒绝；缺 mode/roles 时回落
+         *       乱斗 + 空角色表；身份局档要求 roles 恰好覆盖存档实体且恰含一名
+         *       主公；全部校验通过后才落子，出参 meta 与目标状态同批赋值，早退不污染。
          */
         inline SaveResult<void> read(
             std::string_view text, game::Game &g, game::GameSession &session,
@@ -300,6 +302,36 @@ namespace tkw
                         SaveErrorKind::StructureError, "session.stats");
             }
 
+            // mode / roles（均可选；缺失回落乱斗 + 空表；值域在此先行校验）
+            game::GameMode parsed_mode = game::GameMode::Brawl;
+            if (obj->contains("mode"))
+            {
+                std::string mode_text;
+                if (!detail::read_str(*obj, "mode", mode_text) ||
+                    !mode_from(mode_text, parsed_mode))
+                    return detail::fail(SaveErrorKind::StructureError, "mode");
+            }
+
+            game::RoleTable parsed_roles;
+            if (obj->contains("roles"))
+            {
+                const auto *ro = (*obj)["roles"].try_as_object();
+                if (!ro)
+                    return detail::fail(SaveErrorKind::StructureError, "roles");
+                for (std::string_view key : ro->keys())
+                {
+                    auto rv = (*ro)[key].try_as_string();
+                    game::Role role{};
+                    if (!rv || !role_from(*rv, role))
+                        return detail::fail(
+                            SaveErrorKind::StructureError,
+                            "roles." + std::string(key));
+                    parsed_roles[std::string(key)] = role;
+                }
+            }
+            if (parsed_mode != game::GameMode::Identity && !parsed_roles.empty())
+                return detail::fail(SaveErrorKind::StructureError, "roles");
+
             // cards
             if (!obj->contains("cards") || !(*obj)["cards"].try_as_object())
                 return detail::fail(SaveErrorKind::StructureError, "cards");
@@ -352,10 +384,38 @@ namespace tkw
                 ents.push_back(std::move(e));
             }
 
+            // 身份局：roles 必须存在且恰好覆盖存档实体、含且仅含一名主公
+            if (parsed_mode == game::GameMode::Identity)
+            {
+                if (!obj->contains("roles"))
+                    return detail::fail(SaveErrorKind::StructureError, "roles");
+
+                std::set<std::string> entity_ids;
+                for (const auto &e : ents)
+                    entity_ids.insert(e.id);
+
+                int lord_count = 0;
+                for (const auto &entry : parsed_roles)
+                {
+                    if (entity_ids.find(entry.first) == entity_ids.end())
+                        return detail::fail(
+                            SaveErrorKind::StructureError, "roles." + entry.first);
+                    if (entry.second == game::Role::Lord)
+                        ++lord_count;
+                }
+                for (const auto &e : ents)
+                    if (parsed_roles.find(e.id) == parsed_roles.end())
+                        return detail::fail(SaveErrorKind::StructureError, "roles");
+                if (lord_count != 1)
+                    return detail::fail(SaveErrorKind::StructureError, "roles");
+            }
+
             // ── 全部校验通过后再落子；rng 恢复是唯一可能失败的阶段，先于其余赋值 ──
             if (g.rng && !g.rng->load_state(RngState{rng_data}))
                 return detail::fail(SaveErrorKind::RngError, "rng.data");
             g.rules = rc;
+            g.mode = parsed_mode;
+            g.roles = std::move(parsed_roles);
             session = std::move(s);
             g.cards.restore(snap);
             g.entities.restore(ents);
