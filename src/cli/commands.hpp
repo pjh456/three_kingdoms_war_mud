@@ -976,6 +976,27 @@ namespace tkw
             }
 
             /**
+             * @brief 可用牌表一览：拒绝真人座位后，把 decks_lines 逐行打印到标准输出。
+             * @param opt 对局选项；仅 deck 作为扫描根目录（位置参数在命令层覆盖）。
+             * @return Ok；Err 为扫描根不存在时的中文加载错误。
+             * @note 打印包装：human 策略留在本层；只读扫描不建局、不消耗随机源，
+             *       行构造复用查询纯函数。
+             */
+            inline CliResult<void> decks_list(const Options &opt)
+            {
+                const std::string herr = reject_humans(opt.humans, "decks");
+                if (!herr.empty())
+                    return CliFailure{CliError(herr)};
+
+                auto lines = decks_lines(opt.deck);
+                if (lines.is_err())
+                    return CliFailure{CliError(lines.unwrap_err())};
+                for (const auto &line : lines.unwrap())
+                    std::cout << line << "\n";
+                return CliResult<void>::Ok();
+            }
+
+            /**
              * @brief 规则/卡牌说明查询：拒绝真人座位后，把 rules_lines 逐行打印到
              *        标准输出。
              * @param opt     对局选项；仅 --deck 决定被读取的牌表目录。
@@ -1220,6 +1241,22 @@ namespace tkw
                     return detail::cards_list(
                         detail::options_from_for_query(ctx, session),
                         ctx.get_or<bool, fixed_string("text")>(false));
+                });
+
+            // decks：列出可用牌表（扫描根目录自身与直接子目录，只读文件系统）
+            auto &decks =
+                app.add_leaf("decks", "列出可用牌表（预设一览；用 --deck 选择）");
+            detail::declare_common_options(decks, rules);
+            decks.arg<std::string, 0>(
+                "目录", "扫描根目录（缺省取 --deck/会话，否则 resources）");
+            decks.action(
+                [&session](ParseContext &ctx) -> CliResult<void>
+                {
+                    Options opt = detail::options_from_for_query(ctx, session);
+                    const std::string dir = ctx.get_or<std::string, 0>("");
+                    if (!dir.empty())
+                        opt.deck = dir;
+                    return detail::decks_list(opt);
                 });
 
             // rules：卡牌效果说明查询（只读牌堆查询，数据源 CardDef.text）

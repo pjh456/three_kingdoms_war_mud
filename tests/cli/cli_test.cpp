@@ -1182,6 +1182,7 @@ TEST_CASE("cli: audit/cards/simulate reject --human")
     const std::vector<std::pair<std::string, std::string>> reject_cases = {
         {"audit", "audit --human P0"},
         {"cards", "cards --human P0"},
+        {"decks", "decks --human P0"},
         {"rules", "rules --human P0"},
         {"simulate", "simulate 1 --human P0"}};
     for (const auto &c : reject_cases)
@@ -1196,6 +1197,7 @@ TEST_CASE("cli: audit/cards/simulate reject --human")
     const std::string deck = TKW_TEST_RESOURCE_DIR;
     CHECK(repl.run("audit --deck " + deck).ok);
     CHECK(repl.run("cards --deck " + deck).ok);
+    CHECK(repl.run("decks --deck " + deck).ok);
     CHECK(repl.run("simulate 1 2 --deck " + deck).ok);
 }
 
@@ -1831,6 +1833,41 @@ TEST_CASE("cli: query_lines pure vectors are byte-exact")
     std::filesystem::remove_all(ghost, ec);
 }
 
+TEST_CASE("cli: decks_lines scans root and direct subdirectories")
+{
+    const std::filesystem::path root = temp_dir("tkw_cli_decks_root");
+    const std::filesystem::path sub = root / "sub";
+    const std::filesystem::path broken = root / "broken";
+    const std::filesystem::path ignored = root / "ignored";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+
+    // 根自身是牌表，sub 是直接子牌表；broken 有 deck.json 但 JSON 非法；ignored 无 deck.json。
+    REQUIRE(write_mini_deck(root, "甲", "A测"));
+    REQUIRE(write_mini_deck(sub, "乙", "B测"));
+    REQUIRE(std::filesystem::create_directories(broken));
+    REQUIRE(tkw::io::write_text(broken / "deck.json", "{not json").is_ok());
+    REQUIRE(std::filesystem::create_directories(ignored));
+
+    auto lines = tkw::cli::detail::decks_lines(root);
+    REQUIRE(lines.is_ok());
+    const auto &v = lines.unwrap();
+    REQUIRE(v.size() == 4);
+    CHECK(v[0] == "可用牌表（tkw decks [目录] 扫描；用 --deck <路径> 选择）:");
+    CHECK(v[1] == "  " + root.string() + "  甲 1 种/30 张");
+    CHECK(v[2].rfind("  " + broken.string() + "  加载牌堆失败（JSON 非法）: ", 0) ==
+          0);
+    CHECK(v[3] == "  " + sub.string() + "  乙 1 种/30 张");
+
+    // 扫描根不存在：中文加载错误而非空清单。
+    auto missing = tkw::cli::detail::decks_lines(root / "nope");
+    REQUIRE(missing.is_err());
+    CHECK(missing.unwrap_err().find("加载牌堆失败（文件不存在）") !=
+          std::string::npos);
+
+    std::filesystem::remove_all(root, ec);
+}
+
 TEST_CASE("cli: query wrappers print pure lines with trailing newline")
 {
     const std::filesystem::path deck = temp_dir("tkw_cli_lines_deck_print");
@@ -1884,6 +1921,13 @@ TEST_CASE("cli: query wrappers print pure lines with trailing newline")
         REQUIRE(pure.is_ok());
         const std::string out =
             capture_cout([&] { (void)tkw::cli::detail::audit_deck(ghost_opt); });
+        CHECK(out == join_lines(pure.unwrap()));
+    }
+    {
+        auto pure = tkw::cli::detail::decks_lines(deck);
+        REQUIRE(pure.is_ok());
+        const std::string out =
+            capture_cout([&] { (void)tkw::cli::detail::decks_list(opt); });
         CHECK(out == join_lines(pure.unwrap()));
     }
 

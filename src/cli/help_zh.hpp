@@ -127,6 +127,11 @@ namespace tkw
                            "    tkw cards                        列出默认牌表构成\n"
                            "    tkw cards --text                 列出并附每张卡效果文案\n"
                            "    tkw --deck resources cards       显式指定牌表目录后再列出\n";
+                if (name == "decks")
+                    return "示例:\n"
+                           "    tkw decks                        列出默认目录下的可用牌表\n"
+                           "    tkw decks resources              指定扫描根目录\n"
+                           "    tkw --deck resources/junzheng cards  选定军争篇后列出其构成\n";
                 if (name == "rules")
                     return "示例:\n"
                            "    tkw rules                        列出全部卡牌效果说明\n"
@@ -207,6 +212,8 @@ namespace tkw
                     "    tkw --mode identity deal 4 1  身份局跑一局（4–8 人）\n"
                     "    tkw audit                审计牌堆\n"
                     "    tkw cards                列出牌表构成\n"
+                    "    tkw decks                列出可用牌表（标准版/军争篇）\n"
+                    "    tkw --deck resources/junzheng deal 2 1  用军争篇牌表跑一局\n"
                     "    tkw rules 过河拆桥      查询卡牌效果说明\n"
                     "    tkw simulate 100 2     批量模拟 100 局（2 人）\n"
                     "  REPL 会话（先 tkw repl，再逐条输入）:\n"

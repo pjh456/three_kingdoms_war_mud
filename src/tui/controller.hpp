@@ -183,6 +183,10 @@ namespace tkw
                     if (require_idle())
                         do_audit(cmd);
                     break;
+                case CommandKind::Decks:
+                    if (require_idle())
+                        do_decks(cmd);
+                    break;
                 case CommandKind::Simulate:
                     if (require_idle())
                         start_simulate_job(cmd);
@@ -703,6 +707,13 @@ namespace tkw
             {
                 append_query_lines(
                     tkw::cli::detail::audit_lines(query_options(cmd)));
+            }
+
+            /** @brief decks 结果就地写日志（扫描根取查询牌表目录）。 */
+            void do_decks(const Command &cmd)
+            {
+                append_query_lines(
+                    tkw::cli::detail::decks_lines(query_options(cmd).deck));
             }
 
             /** @brief 显式存档：写 AI 档与统计元数据，失败给中文根因。 */

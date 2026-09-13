@@ -290,6 +290,26 @@ TEST_CASE("tui: cards/rules/audit parse into query commands")
     CHECK(audit_arg.unwrap_err().find("不接受参数") != std::string::npos);
 }
 
+TEST_CASE("tui: decks parses into a query command")
+{
+    const auto base = base_options();
+
+    auto decks = parse_command("decks", base);
+    REQUIRE(decks.is_ok());
+    CHECK(decks.unwrap().kind == CommandKind::Decks);
+    CHECK_FALSE(decks.unwrap().deck_provided);
+
+    auto with_deck = parse_command("decks --deck /tmp/d", base);
+    REQUIRE(with_deck.is_ok());
+    CHECK(with_deck.unwrap().kind == CommandKind::Decks);
+    CHECK(with_deck.unwrap().deck_provided);
+    CHECK(with_deck.unwrap().options.deck == "/tmp/d");
+
+    auto bad = parse_command("decks x", base);
+    REQUIRE(bad.is_err());
+    CHECK(bad.unwrap_err().find("只接受") != std::string::npos);
+}
+
 TEST_CASE("tui: query commands accept inline deck override")
 {
     const auto base = base_options();

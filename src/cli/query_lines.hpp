@@ -1,6 +1,6 @@
 /**
  * @file query_lines.hpp
- * @brief 只读牌表查询的纯行构造：audit/cards/rules 的展示行（不含打印与 human 策略）。
+ * @brief 只读牌表查询的纯行构造：audit/cards/decks/rules 的展示行（不含打印与 human 策略）。
  * @note 纯函数、无输出副作用：仅按 opt.deck 加载目录并构造行，不打印、不建局、
  *       不消耗随机源、不校验 humans（真人拒绝留在 CLI 命令包装层）。每行不含换行
  *       符，由消费方补 "\n"；CLI 与 TUI 共用同一行序，保证两处结果逐行一致。
@@ -8,7 +8,10 @@
 #ifndef INCLUDE_TKW_CLI_QUERY_LINES_HPP
 #define INCLUDE_TKW_CLI_QUERY_LINES_HPP
 
+#include <algorithm>
+#include <filesystem>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -18,6 +21,7 @@
 #include "cli/session.hpp"
 #include "config/resource.hpp"
 #include "game/resolve/audit.hpp"
+#include "io/file.hpp"
 #include "util/types.hpp"
 
 namespace tkw
@@ -104,6 +108,80 @@ namespace tkw
                     if (show_text)
                         line += ": " + card_text_of(def);
                     lines.push_back(std::move(line));
+                }
+                return QueryLines::Ok(std::move(lines));
+            }
+
+            /**
+             * @brief 可用牌表一览的纯展示行：扫描根目录自身与其直接子目录中含 deck.json 者。
+             * @param root 扫描根目录（通常为默认牌表 resources）。
+             * @return Ok 为行序：`可用牌表（tkw decks [目录] 扫描；用 --deck <路径> 选择）:`，
+             *         随后每副牌表一行「  <目录>  <牌堆名> <N> 种/<M> 张」，牌堆名缺失回落
+             *         目录名；根目录不存在时 Err 为 format_load_error 的中文加载错误。
+             * @note 只读取文件系统与牌表目录，不建局、不消耗随机源；直接子目录按路径字典序
+             *       输出保证稳定。单个牌表加载失败只在该行渲染中文错误、不中断其余牌表列出。
+             */
+            inline QueryLines decks_lines(const std::filesystem::path &root)
+            {
+                if (!tkw::io::exists(root))
+                    return QueryLines::Err(format_load_error(tkw::config::ConfigError{
+                        tkw::config::ConfigErrorKind::FileNotFound,
+                        (root / "deck.json").string()}));
+
+                // 候选：根目录自身（根也是牌表时）+ 含 deck.json 的直接子目录，子目录按路径排序。
+                std::vector<std::filesystem::path> candidates;
+                if (tkw::io::exists(root / "deck.json"))
+                    candidates.push_back(root);
+                std::vector<std::filesystem::path> subs;
+                std::error_code ec;
+                for (std::filesystem::directory_iterator it(root, ec), end;
+                     !ec && it != end; it.increment(ec))
+                {
+                    if (!it->is_directory(ec))
+                        continue;
+                    const std::filesystem::path &dir = it->path();
+                    if (tkw::io::exists(dir / "deck.json"))
+                        subs.push_back(dir);
+                }
+                std::sort(subs.begin(), subs.end());
+                candidates.insert(candidates.end(), subs.begin(), subs.end());
+
+                std::vector<std::string> lines;
+                lines.push_back(
+                    "可用牌表（tkw decks [目录] 扫描；用 --deck <路径> 选择）:");
+                if (candidates.empty())
+                {
+                    lines.push_back("  未发现含 deck.json 的牌表目录");
+                    return QueryLines::Ok(std::move(lines));
+                }
+
+                for (const auto &dir : candidates)
+                {
+                    tkw::config::ResourceStore store(dir);
+                    auto catalog = tkw::card::CardDefCatalog::load(store, "deck");
+                    if (catalog.is_err())
+                    {
+                        lines.push_back("  " + dir.string() + "  " +
+                                        format_load_error(catalog.unwrap_err()));
+                        continue;
+                    }
+                    const auto &cat = catalog.unwrap();
+
+                    std::string deck_name;
+                    const auto deck_doc = store.load("deck");
+                    if (deck_doc.is_ok())
+                    {
+                        const auto nm = tkw::config::opt_string(
+                            deck_doc.unwrap().root(), "name", "", "deck");
+                        if (nm.is_ok())
+                            deck_name = nm.unwrap();
+                    }
+                    if (deck_name.empty())
+                        deck_name = dir.filename().string();
+
+                    lines.push_back("  " + dir.string() + "  " + deck_name + " " +
+                                    std::to_string(cat.size()) + " 种/" +
+                                    std::to_string(cat.total_copies()) + " 张");
                 }
                 return QueryLines::Ok(std::move(lines));
             }

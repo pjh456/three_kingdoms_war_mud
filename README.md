@@ -71,7 +71,7 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
   [--mode brawl|identity] [--ai simple|aggressive] [--deck P] [--hand N]
   [--human <座位>] [--no-human]`、`deal <players> <seed>`、`step`、`run`/`r`、
    `status`/`st`、`save`/`w <file>`、`load`/`l <file>`、`cards [--text] [--deck 路径]`、
-    `rules [关键词] [--deck 路径]`、`audit [--deck 路径]`、
+    `rules [关键词] [--deck 路径]`、`audit [--deck 路径]`、`decks [--deck 路径]`、
     `simulate <局数> [玩家数] [--seed S] [--ai simple|aggressive] [--hand N]
     [--mode brawl|identity] [--deck 路径]`、`quit`/`q`、
    `help [命令]`/`? [关键词]`；`Esc`/`Ctrl-C` 退出。
@@ -97,7 +97,8 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
   只显示主公与真人座位的角色，其余座位显示「未知」占位（终局揭示全部）；手牌面板
   只展开**首个**真人座位（多真人同时展开属后续里程碑），其余只给数量；选择对手区域
   的牌时手牌出「未知手牌」占位，装备/判定区明置。
-- 卡牌查询与批量模拟：命令栏 `cards [--text]`、`rules [关键词]`、`audit` 就地出结果，
+- 卡牌查询与批量模拟：命令栏 `cards [--text]`、`rules [关键词]`、`audit`、
+  `decks` 就地出结果，
   逐行写入日志面板（长列表用日志翻阅）；牌表来源优先序为行内 `--deck` > 活动会话 >
   启动 `--deck`（与 REPL 只读命令同口径），行内坏路径写一行「加载牌堆失败」提示、
   不阻断会话。`simulate <局数> [玩家数]` 在后台线程跑完全 AI 批量并把跨局聚合结果
@@ -125,6 +126,7 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 | `tkw`（无子命令） | — | 直接跑一局 AI 对局（默认 4 人、种子 42） |
 | `audit` | — | 审计牌堆，列出引擎未实现的卡 |
 | `cards` | — | 列出牌表（牌堆种类与张数；`--text` 附效果文案） |
+| `decks [目录]` | — | 列出可用牌表（扫描根目录及直接子目录，缺省 `resources`） |
 | `rules [关键词]` | — | 查询卡牌效果说明（`CardDef.text`，可按关键词过滤） |
 | `deal <玩家数> <种子>` | — | 跑一局：deal <玩家数> <种子> |
 | `simulate <局数> [玩家数]` | — | 批量模拟：simulate <局数> [玩家数] |
@@ -210,6 +212,28 @@ tkw repl
 - 命令历史默认仅本次会话；`--history <path>` 指定文件后跨进程保留，重启后
   可用上下方向键召回。文件为 UTF-8 一行一条，相对路径按当前工作目录解析、`~` 不展开，
   父目录须已存在（缺失时打印告警并回落内存）；写失败不阻塞 REPL。
+
+## 内置牌表
+
+仓库自带两副牌表，`tkw decks` 一览：默认目录 `resources/` 是标准版，其子目录
+`resources/junzheng/` 是军争篇。
+
+```sh
+tkw decks
+# 可用牌表（tkw decks [目录] 扫描；用 --deck <路径> 选择）:
+#   resources  标准版 32 种/108 张
+#   resources/junzheng  军争篇 17 种/83 张
+```
+
+用 `--deck <路径>` 选定牌表，例如军争篇首局：
+
+```sh
+tkw --deck resources/junzheng cards     # 先看军争篇牌表构成
+tkw --deck resources/junzheng deal 2 1  # 2 人、种子 1 用军争篇跑一局
+tkw --deck resources/junzheng repl      # 或进 REPL 逐回合玩（再 new/step）
+```
+
+TUI 命令栏同样支持 `decks [--deck 路径]` 就地列出，结果写入日志面板。
 
 ## 自定义牌表
 

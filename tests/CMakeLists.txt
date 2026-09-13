@@ -181,6 +181,21 @@ add_test(NAME cli_cards_list
 set_tests_properties(cli_cards_list PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# decks：列出可用牌表。钉两副内置牌表的中文名与种类/张数（数值由目录加载派生），
+# 缺省扫描根 resources，rc=0。
+add_test(NAME cli_decks_list
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> decks 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '标准版 32 种/108 张' && printf '%s' \"$out\" | grep -q '军争篇 17 种/83 张' && [ $rc -eq 0 ]")
+set_tests_properties(cli_decks_list PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# decks --help：可发现性（中文用法段 + 示例）并提示用 --deck 选定牌表。
+add_test(NAME cli_decks_help
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> decks --help); printf '%s' \"$out\" | grep -q '用法:' && printf '%s' \"$out\" | grep -q 'tkw decks' && printf '%s' \"$out\" | grep -q -- '--deck' && printf '%s' \"$out\" | grep -q '示例:'")
+set_tests_properties(cli_decks_help PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 扩展牌表骨架经既有 --deck 目录选择可发现：头行显示牌堆名，逐卡行显示基础杀、
 # 属性杀、防具与武器及其权威张数；默认牌表不动。
 add_test(NAME cli_junzheng_cards
@@ -313,7 +328,7 @@ set_tests_properties(cli_help_mode_option PROPERTIES
 # （repl）不附；REPL 内 help <命令> 走同一渲染，示例同样可见。
 add_test(NAME cli_help_leaf_examples_zh
          COMMAND sh -c
-                 "for c in new deal load save run step simulate cards audit rules; do out=$($<TARGET_FILE:tkw> $c --help); printf '%s' \"$out\" | grep -q '示例:' || exit 1; done && $<TARGET_FILE:tkw> deal --help | grep -q 'tkw --ai aggressive deal 2 1' && $<TARGET_FILE:tkw> cards --help | grep -q 'tkw cards --text' && $<TARGET_FILE:tkw> rules --help | grep -q 'tkw rules 过河拆桥' && ! $<TARGET_FILE:tkw> repl --help | grep -q '示例:' && rpl=$(printf 'help new\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave ''); printf '%s' \"$rpl\" | grep -q 'tkw new --players 2 --seed 1'")
+                 "for c in new deal load save run step simulate cards decks audit rules; do out=$($<TARGET_FILE:tkw> $c --help); printf '%s' \"$out\" | grep -q '示例:' || exit 1; done && $<TARGET_FILE:tkw> deal --help | grep -q 'tkw --ai aggressive deal 2 1' && $<TARGET_FILE:tkw> cards --help | grep -q 'tkw cards --text' && $<TARGET_FILE:tkw> decks --help | grep -q 'tkw --deck resources/junzheng cards' && $<TARGET_FILE:tkw> rules --help | grep -q 'tkw rules 过河拆桥' && ! $<TARGET_FILE:tkw> repl --help | grep -q '示例:' && rpl=$(printf 'help new\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave ''); printf '%s' \"$rpl\" | grep -q 'tkw new --players 2 --seed 1'")
 set_tests_properties(cli_help_leaf_examples_zh PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 

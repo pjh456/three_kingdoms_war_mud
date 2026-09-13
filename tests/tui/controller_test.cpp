@@ -224,6 +224,7 @@ TEST_CASE("tui: help mentions in-place query commands")
     bool mentions_cards = false;
     bool mentions_rules = false;
     bool mentions_audit = false;
+    bool mentions_decks = false;
     bool mentions_simulate = false;
     for (const auto &line : c.log_lines())
     {
@@ -233,12 +234,15 @@ TEST_CASE("tui: help mentions in-place query commands")
             mentions_rules = true;
         if (line.find("audit") != std::string::npos)
             mentions_audit = true;
+        if (line.find("decks") != std::string::npos)
+            mentions_decks = true;
         if (line.find("simulate <局数>") != std::string::npos)
             mentions_simulate = true;
     }
     CHECK(mentions_cards);
     CHECK(mentions_rules);
     CHECK(mentions_audit);
+    CHECK(mentions_decks);
     CHECK(mentions_simulate);
 }
 
@@ -357,6 +361,27 @@ TEST_CASE("tui: audit query reports settleable deck")
             line.find("未实现卡") != std::string::npos)
             reported = true;
     CHECK(reported);
+}
+
+TEST_CASE("tui: decks query lists built-in decks to log")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+
+    c.execute_line("decks");
+
+    bool standard = false;
+    bool junzheng = false;
+    for (const auto &line : c.log_lines())
+    {
+        if (line.find("标准版 32 种/108 张") != std::string::npos)
+            standard = true;
+        if (line.find("军争篇 17 种/83 张") != std::string::npos)
+            junzheng = true;
+    }
+    CHECK(standard);
+    CHECK(junzheng);
 }
 
 TEST_CASE("tui: query uses active session deck over startup")
