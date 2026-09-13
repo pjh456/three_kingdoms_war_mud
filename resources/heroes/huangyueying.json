@@ -1,0 +1,8 @@
+{
+  "id": "huangyueying",
+  "name": "黄月英",
+  "gender": "female",
+  "hp": 3,
+  "skills": ["qicai"],
+  "text": "奇才：锁定技，你使用锦囊牌无距离限制。"
+}

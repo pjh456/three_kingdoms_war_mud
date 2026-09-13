@@ -113,6 +113,10 @@ namespace tkw
                 return {true};
             case H::FanKui:
                 return {true};
+            case H::MaShu:
+                return {true};
+            case H::QiCai:
+                return {true};
             }
             return {};
         }

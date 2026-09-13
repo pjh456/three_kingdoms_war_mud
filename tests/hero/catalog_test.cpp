@@ -47,7 +47,7 @@ TEST_CASE("hero: standard catalog loads heroes and skill metadata")
     REQUIRE(cat.is_ok());
     const auto &catalog = cat.unwrap();
 
-    REQUIRE(catalog.size() == 4);
+    REQUIRE(catalog.size() == 6);
     const auto zhangfei = catalog.find("zhangfei");
     REQUIRE(zhangfei.is_some());
     const hero::HeroDef &zf = *zhangfei.unwrap();
@@ -79,11 +79,33 @@ TEST_CASE("hero: standard catalog loads heroes and skill metadata")
     CHECK(has_skill(sm, hero::HeroSkill::FanKui));
     CHECK(hero::display_skill_name(hero::HeroSkill::FanKui) == "反馈");
 
-    // 咆哮/武圣/英姿/反馈均已实现：审计面不再标记为未实现
+    const auto machao = catalog.find("machao");
+    REQUIRE(machao.is_some());
+    const hero::HeroDef &mc = *machao.unwrap();
+    CHECK(mc.name == "马超");
+    REQUIRE(mc.gender.is_some());
+    CHECK(mc.gender.unwrap() == entity::Gender::Male);
+    CHECK(mc.hp == 4);
+    CHECK(has_skill(mc, hero::HeroSkill::MaShu));
+    CHECK(hero::display_skill_name(hero::HeroSkill::MaShu) == "马术");
+
+    const auto huangyueying = catalog.find("huangyueying");
+    REQUIRE(huangyueying.is_some());
+    const hero::HeroDef &hy = *huangyueying.unwrap();
+    CHECK(hy.name == "黄月英");
+    REQUIRE(hy.gender.is_some());
+    CHECK(hy.gender.unwrap() == entity::Gender::Female);
+    CHECK(hy.hp == 3);
+    CHECK(has_skill(hy, hero::HeroSkill::QiCai));
+    CHECK(hero::display_skill_name(hero::HeroSkill::QiCai) == "奇才");
+
+    // 标准目录内全部技能均已实现：审计面不再标记为未实现
     CHECK_FALSE(game::is_unimplemented_skill(hero::HeroSkill::PaoXiao));
     CHECK_FALSE(game::is_unimplemented_skill(hero::HeroSkill::WuSheng));
     CHECK_FALSE(game::is_unimplemented_skill(hero::HeroSkill::YingZi));
     CHECK_FALSE(game::is_unimplemented_skill(hero::HeroSkill::FanKui));
+    CHECK_FALSE(game::is_unimplemented_skill(hero::HeroSkill::MaShu));
+    CHECK_FALSE(game::is_unimplemented_skill(hero::HeroSkill::QiCai));
 
     // 目录未命中回落 id
     CHECK(hero::display_hero_name(catalog, "nobody") == "nobody");

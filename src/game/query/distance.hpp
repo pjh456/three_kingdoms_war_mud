@@ -19,6 +19,7 @@
 
 #include "card/def.hpp"
 #include "game/core/context.hpp"
+#include "game/query/hero.hpp"
 #include "util/types.hpp"
 
 namespace tkw
@@ -92,6 +93,10 @@ namespace tkw
                 --d;
             if (ts.defensive_horse)
                 ++d;
+
+            // 锁定技「马术」：from 计算到其他角色的距离再 -1（下限 1 不变）
+            if (has_hero_skill(ctx, from, hero::HeroSkill::MaShu))
+                --d;
             return std::max(d, 1);
         }
 

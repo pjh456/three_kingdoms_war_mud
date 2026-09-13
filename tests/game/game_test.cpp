@@ -6456,3 +6456,89 @@ TEST_CASE("game: fankui is deterministic across identical games")
     CHECK(run() == run());
 }
 
+// ── 马术/奇才：锁定距离技 ───────────────────────────────────────────────
+
+TEST_CASE("game: mashu reduces distance from the hero seat by one")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Male, "machao");
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.add_player("d", 3, 4);
+
+    // 存活环 a0 b1 c2 d3：a→c 座次距离 2；马术 -1 后为 1
+    CHECK(seat_distance(g.ctx, "a", "c") == 2);
+    CHECK(distance_between(g.ctx, "a", "c") == 1);
+    // 无马术座位不受影响：相邻仍 1，隔座仍 2（含反向）
+    CHECK(distance_between(g.ctx, "b", "c") == 1);
+    CHECK(distance_between(g.ctx, "b", "d") == 2);
+    CHECK(distance_between(g.ctx, "d", "b") == 2);
+
+    // 下限仍为 1：自身与相邻座位不会因马术降到 0
+    CHECK(distance_between(g.ctx, "a", "b") == 1);
+    CHECK(distance_between(g.ctx, "a", "a") == 1);
+
+    // 无武将目录：同名座位距离不变
+    TestGame plain("deck");
+    plain.add_player("a", 0, 4);
+    plain.add_player("b", 1, 4);
+    plain.add_player("c", 2, 4);
+    plain.add_player("d", 3, 4);
+    CHECK(distance_between(plain.ctx, "a", "c") == 2);
+}
+
+TEST_CASE("game: qicai lifts the trick distance limit for the hero seat")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 3, Gender::Female, "huangyueying");
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.add_player("d", 3, 4);
+
+    const auto shunshou = g.catalog.find("shunshou");
+    REQUIRE(shunshou.is_some());
+    const CardDef &def = *shunshou.unwrap();
+
+    // 顺手牵羊 range 1；a→c 座次距离 2
+    CHECK(distance_between(g.ctx, "a", "c") == 2);
+
+    // 奇才座位：目标枚举与预校验都不再按距离拒绝
+    const auto legal = valid_targets(g.ctx, "a", def);
+    CHECK(std::find(legal.begin(), legal.end(), "c") != legal.end());
+    CHECK(validate_effect_targets(g.ctx, "a", def, {"c"}).is_ok());
+
+    // 无奇才座位：距离 2 的目标仍被拒绝
+    const auto legal_b = valid_targets(g.ctx, "b", def);
+    CHECK(std::find(legal_b.begin(), legal_b.end(), "d") == legal_b.end());
+    CHECK(validate_effect_targets(g.ctx, "b", def, {"d"}).is_err());
+
+    // 奇才只放宽锦囊：杀的攻击范围仍受距离限制
+    CHECK_FALSE(in_attack_range(g.ctx, "a", "c"));
+}
+
+TEST_CASE("game: qicai lifts the delayed trick range limit for the hero seat")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.load_heroes();  // 武将目录来自标准资源目录，与军争牌表解耦
+    g.add_player("a", 0, 3, Gender::Female, "huangyueying");
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.add_player("d", 3, 4);
+
+    const auto bingliang = g.catalog.find("bingliang");
+    REQUIRE(bingliang.is_some());
+    const CardDef &def = *bingliang.unwrap();
+
+    // 兵粮寸断 range 1；奇才座位可对距离 2 的 c 置入
+    CHECK(is_delayed_scope_target(g.ctx, "a", def, "c"));
+    const auto legal = delayed_legal_targets(g.ctx, "a", def);
+    CHECK(std::find(legal.begin(), legal.end(), "c") != legal.end());
+
+    // 无奇才座位对距离 2 的 d 仍不合法
+    CHECK_FALSE(is_delayed_scope_target(g.ctx, "b", def, "d"));
+    const auto legal_b = delayed_legal_targets(g.ctx, "b", def);
+    CHECK(std::find(legal_b.begin(), legal_b.end(), "d") == legal_b.end());
+}
+

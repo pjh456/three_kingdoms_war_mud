@@ -60,6 +60,19 @@ namespace tkw
         }
 
         /**
+         * @brief 实体使用锦囊牌时是否无视距离限制（锁定技「奇才」）。
+         * @return 无目录 / 实体无武将 / 无奇才 → false；有奇才 → true。
+         * @note 锦囊距离判定的唯一判定入口：主动锦囊（顺手牵羊）的目标枚举与
+         *       预校验、延时锦囊（兵粮寸断）的置入范围三处共用，保证口径一致。
+         *       仅锦囊成立；「杀」的攻击范围仍走 distance.hpp，不受本函数影响。
+         */
+        inline bool ignores_trick_distance(
+            const ReadOnlyContext &ctx, const std::string &entity_id)
+        {
+            return has_hero_skill(ctx, entity_id, hero::HeroSkill::QiCai);
+        }
+
+        /**
          * @brief 摸牌阶段摸牌张数：rules.draw_per_turn，锁定技「英姿」再 +1。
          * @return 无目录 / 实体无武将 / 无英姿 → rules.draw_per_turn；有英姿 +1。
          * @note 摸牌阶段张数的唯一采样点；兵粮寸断跳过整个摸牌阶段时不经本函数，

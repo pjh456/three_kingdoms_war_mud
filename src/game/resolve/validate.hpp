@@ -126,7 +126,8 @@ namespace tkw
                                        { return !in_attack_range(ctx, player, t); }),
                         out.end());
                 }
-                else if (eff.kind == card::CardEffectKind::Steal)
+                else if (eff.kind == card::CardEffectKind::Steal &&
+                         !ignores_trick_distance(ctx, player))
                 {
                     out.erase(
                         std::remove_if(out.begin(), out.end(),
@@ -168,7 +169,8 @@ namespace tkw
                     if (!in_attack_range(ctx, player, t))
                         return GameResult<void>::Err(EffectError::OutOfRange);
             }
-            else if (eff.kind == card::CardEffectKind::Steal)
+            else if (eff.kind == card::CardEffectKind::Steal &&
+                     !ignores_trick_distance(ctx, player))
             {
                 for (const auto &t : targets)
                     if (!distance_le(ctx, player, t, eff.range))

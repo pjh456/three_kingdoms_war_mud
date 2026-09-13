@@ -248,6 +248,9 @@ tkw heroes
 #   张飞(zhangfei) 4体力 男 技能: 咆哮
 #   关羽(guanyu) 4体力 男 技能: 武圣
 #   周瑜(zhouyu) 3体力 男 技能: 英姿
+#   司马懿(simayi) 3体力 男 技能: 反馈
+#   马超(machao) 4体力 男 技能: 马术
+#   黄月英(huangyueying) 3体力 女 技能: 奇才
 ```
 
 用 `--hero <座位>=<武将>` 指定（可重复）；`status` 逐座展示武将，存档保留选择：
@@ -255,6 +258,8 @@ tkw heroes
 ```sh
 tkw --hero P0=zhangfei deal 2 1     # P0 张飞：咆哮锁定技，使用【杀】无次数限制
 tkw --hero P0=zhouyu deal 2 1       # P0 周瑜：英姿锁定技，摸牌阶段多摸一张
+tkw --hero P0=machao deal 4 1       # P0 马超：马术锁定技，计算距离 -1
+tkw --hero P0=huangyueying deal 4 1 # P0 黄月英：奇才锁定技，锦囊无距离限制
 tkw --hero P0=zhangfei repl         # 或进 REPL：new --hero P0=zhangfei --players 2 --seed 1
 ```
 

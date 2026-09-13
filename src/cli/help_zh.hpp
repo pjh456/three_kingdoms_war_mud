@@ -137,7 +137,9 @@ namespace tkw
                     return "示例:\n"
                            "    tkw heroes                       列出默认目录下的可用武将\n"
                            "    tkw heroes resources             指定武将数据根目录\n"
-                           "    new --hero P0=zhangfei --players 2 --seed 1  REPL 内选将开局\n";
+                           "    new --hero P0=zhangfei --players 2 --seed 1  REPL 内选将开局\n"
+                           "    tkw --hero P0=machao deal 4 1    选马超：马术锁定技，计算距离 -1\n"
+                           "    tkw --hero P0=huangyueying deal 4 1  选黄月英：奇才锁定技，锦囊无距离限制\n";
                 if (name == "rules")
                     return "示例:\n"
                            "    tkw rules                        列出全部卡牌效果说明\n"
@@ -219,7 +221,7 @@ namespace tkw
                     "    tkw audit                审计牌堆\n"
                     "    tkw cards                列出牌表构成\n"
                     "    tkw decks                列出可用牌表（标准版/军争篇）\n"
-                    "    tkw heroes               列出可用武将（张飞/关羽/周瑜）\n"
+                    "    tkw heroes               列出可用武将（张飞/关羽/周瑜/司马懿/马超/黄月英）\n"
                     "    tkw --hero P0=zhangfei deal 2 1  指定 P0 为张飞后跑一局\n"
                     "    tkw --deck resources/junzheng deal 2 1  用军争篇牌表跑一局\n"
                     "    tkw rules 过河拆桥      查询卡牌效果说明\n"

@@ -179,6 +179,8 @@ namespace tkw
                 case tkw::hero::HeroSkill::PaoXiao:
                 case tkw::hero::HeroSkill::WuSheng:
                 case tkw::hero::HeroSkill::YingZi:
+                case tkw::hero::HeroSkill::MaShu:
+                case tkw::hero::HeroSkill::QiCai:
                     break;
                 }
                 return "发动 " +

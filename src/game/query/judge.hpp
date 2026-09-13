@@ -13,6 +13,7 @@
 #include "card/def.hpp"
 #include "game/core/context.hpp"
 #include "game/query/distance.hpp"
+#include "game/query/hero.hpp"
 
 namespace tkw
 {
@@ -61,7 +62,8 @@ namespace tkw
                 return target == player;
             if (target == player)
                 return false;
-            return judge.range <= 0 || distance_le(ctx, player, target, judge.range);
+            return judge.range <= 0 || ignores_trick_distance(ctx, player) ||
+                   distance_le(ctx, player, target, judge.range);
         }
 
         /**

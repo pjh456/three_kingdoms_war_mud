@@ -1,0 +1,8 @@
+{
+  "id": "machao",
+  "name": "马超",
+  "gender": "male",
+  "hp": 4,
+  "skills": ["mashu"],
+  "text": "马术：锁定技，你计算与其他角色的距离-1。"
+}
