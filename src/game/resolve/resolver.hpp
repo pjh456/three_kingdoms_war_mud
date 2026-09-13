@@ -103,7 +103,8 @@ namespace tkw
                 const std::vector<std::string> &targets;
                 bool is_trick;
 
-                /** @brief 无懈窗口：仅锦囊开；窗口目标由调用点决定（逐目标或全量）。 */
+                /** @brief 无懈窗口：仅锦囊开；窗口目标由调用点决定——多目标效果
+                 *         逐目标传 `{t}`，单目标/组合效果传 `targets`。 */
                 bool nullified(const std::vector<std::string> &window_targets) const
                 {
                     return is_trick &&
@@ -259,17 +260,18 @@ namespace tkw
             }
 
             /**
-             * @brief 五谷丰登：亮出等同存活人数的牌，按座位序各选一张，余牌弃置。
-             * @note 亮牌取自摸牌堆（堆空则弃牌堆洗回）。选择先按座位序只读收集
-             *       并校验（须命中当前亮牌中的一张），再统一落子；任一选择为空
-             *       或不在亮牌中即 InvalidChoice 整体失败（五谷为强制选择），
-             *       已亮的牌原样放回摸牌堆，打出的牌由 resolve_play 回滚。
+             * @brief 五谷丰登：亮出等同存活人数的牌，未被抵消的目标按座位序各选一张，余牌弃置。
+             * @note 亮牌取自摸牌堆（堆空则弃牌堆洗回）；亮牌数不因逐目标无懈减少
+             *       （卡面「亮出等同于角色数的牌」）。每个目标选牌前各开一个单元素
+             *       无懈窗口，被抵消者不参与选牌。选择先按座位序只读收集并校验（须
+             *       命中当前亮牌中的一张），再统一落子；任一未被抵消的目标选择为空
+             *       或不在亮牌中即 InvalidChoice 整体失败（五谷为强制选择），已亮的
+             *       牌原样放回摸牌堆，打出的牌由 resolve_play 回滚。
+             * @note 无牌可亮（摸牌堆与弃牌堆皆空）时提前结束收集，后续目标不再开窗，
+             *       余牌为空。
              */
             inline GameResult<void> resolve_reveal_pick(const EffectInvocation &e)
             {
-                if (e.nullified(e.targets))
-                    return GameResult<void>::Ok();
-
                 // 亮出等同存活人数的牌（摸牌堆空则弃牌堆洗回，口径同摸牌/判定）
                 std::vector<card::Card> revealed;
                 const int n = static_cast<int>(e.ctx.entities->size());
@@ -282,13 +284,16 @@ namespace tkw
                 }
                 const std::vector<card::Card> revealed_order = revealed;
 
-                // 按座位序（从使用者开始）收集选择并校验：命中当前亮牌之一并
-                // 从候选池移除，供后位玩家选择；不下子、不发事件
+                // 按座位序（从使用者开始）收集选择并校验：每个目标先开单元素
+                // 无懈窗口，被抵消者跳过不选牌；命中当前亮牌之一并从候选池移除，
+                // 供后位玩家选择；不下子、不发事件
                 std::vector<std::pair<std::string, card::Card>> picks;
                 for (const auto &p : e.ctx.entities->order_from(e.player))
                 {
                     if (revealed.empty())
                         break;
+                    if (e.nullified({p}))
+                        continue;
                     const auto picked =
                         e.ai.pick_from_revealed(e.ctx, p, revealed, RevealSource::Wugu);
                     std::size_t idx = revealed.size();

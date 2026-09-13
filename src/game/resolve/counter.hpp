@@ -86,8 +86,8 @@ namespace tkw
          *        须非空；轮询起点 = 使用者非空 → 使用者，否则 → 首位目标。
          * @return true = 被无懈抵消（奇数张无懈）。
          * @note 窗口粒度 = 每个受影响目标一次（调用方按目标调用）：一张锦囊
-         *       可开多个独立窗口，每个目标窗口需各自出奇数无懈才全部抵消；
-         *       这是现行规则的简化，与官方「锦囊级抵消」表述不等价。
+         *       可开多个独立窗口，每个目标窗口各自出奇数张无懈才抵消该目标
+         *       （卡面「对一名角色产生的效果」）。
          */
         inline bool resolve_nullification(
             GameContext &ctx, DecisionSource &ai, const card::CardDef &trick,

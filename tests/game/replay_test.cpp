@@ -25,8 +25,8 @@ namespace
     // 攻击优先档自钉值（2p seed 1 / 4p seed 42，实跑钉入，见对应用例注释）
     constexpr std::size_t AGGRESSIVE_2P_LINES = 73;
     constexpr std::uint64_t AGGRESSIVE_2P_FP = 4647716859109022064ULL;
-    constexpr std::size_t AGGRESSIVE_4P_LINES = 378;
-    constexpr std::uint64_t AGGRESSIVE_4P_FP = 7802608474367805529ULL;
+    constexpr std::size_t AGGRESSIVE_4P_LINES = 413;
+    constexpr std::uint64_t AGGRESSIVE_4P_FP = 16001951569717656035ULL;
 
     /** 跑一局并返回完整事件日志（Ok 或 MaxRounds 都算完整对局）。 */
     std::vector<std::string> run_game(std::uint32_t seed, int players)
@@ -263,13 +263,24 @@ TEST_CASE("replay: golden fingerprints pin the rule semantics")
     // - 4 人 seed 42：4 处濒死中 1 处为闪电自伤（濒死者 == 当前回合角色 P0），
     //   其余 3 处（回合 7 P2 桃救 P1、回合 26/28 P3 桃救 P0）起问起点替换后首个
     //   实际出桃者不变，手牌与后续级联不变。
+    //
+    // 五谷丰登无懈窗口由「整张全量单窗」改为「逐目标单元素窗」后的漂移
+    // （新旧日志逐行 diff + 使用者/五谷选牌/无懈窗三元组核对过）：
+    // - 2 人 seed 1：逐字节不变——五谷两个目标窗内均未出现「非当前目标的
+    //   持无懈者被询问」的触发态，无懈事件与选牌序列与旧线一致。
+    // - 4 人 seed 42：549 → 361 行，指纹更新。首个分叉在原第 26 行：P0 首回合
+    //   五谷，旧线 P1、P2 各出一张无懈于同一全量窗（偶数相抵，效果仍生效），
+    //   四人各选一张；新线逐目标开窗，P1、P2 的无懈各自抵消自己那一窗，二人
+    //   不选牌，亮 4 张只被 P0、P3 选走 2 张，余 2 张空 owner 弃置（多出 2 条
+    //   discard 行）。P1、P2 少得五谷牌，此后出牌/弃牌/死亡序列整体级联，
+    //   行数与指纹随之改变。
     const auto two = run_game(1, 2);
     CHECK(two.size() == 69);
     CHECK(fingerprint(two) == 9283070076194552029ULL);
 
     const auto four = run_game(42, 4);
-    CHECK(four.size() == 549);
-    CHECK(fingerprint(four) == 3786026515969191070ULL);
+    CHECK(four.size() == 361);
+    CHECK(fingerprint(four) == 12592335471416647501ULL);
 }
 
 TEST_CASE("replay: four-player seed 42 reaches a decisive result")
@@ -278,6 +289,9 @@ TEST_CASE("replay: four-player seed 42 reaches a decisive result")
     // 回合上限：摸牌洗回口径统一后，牌堆耗尽会从弃牌堆补牌，对局在 max_turns
     // 之前结束。此用例直接钉住该结果，防止退回 1001 回合平局。
     // 濒死询问起点对齐当前回合角色后该结论不变（日志逐行未漂移，winner 仍 P2）。
+    // 五谷丰登无懈窗口改逐目标后 winner 由 P2 翻为 P3：P1、P2 各失一张五谷牌，
+    // 后续伤害/死亡顺序级联改变（漂移归因见黄金指纹用例），仍分胜负且在回合
+    // 上限前结束。
     TestGame g("deck", 42);
     for (int i = 0; i < 4; ++i)
         g.add_player("P" + std::to_string(i), i, 4);
@@ -286,7 +300,7 @@ TEST_CASE("replay: four-player seed 42 reaches a decisive result")
     const auto r = tkw::game::play_game(g.ctx, ai, "P0");
     REQUIRE(r.is_ok());
     const auto outcome = r.unwrap();
-    CHECK(outcome.winner == "P2");
+    CHECK(outcome.winner == "P3");
     CHECK(!outcome.winner.empty());
     CHECK(outcome.turns < 1000);
     CHECK(g.ctx.entities->find(outcome.winner).is_some());
@@ -364,6 +378,10 @@ TEST_CASE("replay: aggressive ai is deterministic and pins its golden fingerprin
     // 濒死询问起点改为「当前回合角色起」后的核对（新旧日志逐行 diff 核对过）：
     // 逐字节不变——唯一濒死（P1 被击杀至 -1 死亡）全环无人持桃，救援顺序不影响
     // 事件，未进入顺序差异触发态。
+    //
+    // 五谷丰登无懈窗口改逐目标后的核对（新旧日志逐行 diff 核对过）：逐字节
+    // 不变——本线首回合打杀而非五谷，整局未进入「五谷结算且目标持无懈」的
+    // 触发态，故不重钉。
     tkw::game::AggressiveAI aggr;
     const auto a = run_game_ai(aggr, 1, 2);
     const auto b = run_game_ai(aggr, 1, 2);
@@ -404,6 +422,13 @@ TEST_CASE("replay: aggressive 4-player seed 42 is deterministic and pinned")
     // 逐字节不变——5 处濒死中 1 处为闪电自伤（濒死者 == 当前回合角色 P0），其余
     // 4 处（回合 15/17 P2 桃救 P1、回合 35/37 P2 桃救 P3）起问起点替换后首个实际
     // 出桃者不变，未进入顺序差异触发态。
+    //
+    // 五谷丰登无懈窗口改逐目标后的漂移（新旧日志逐行 diff 核对过）：378 → 413
+    // 行。首个分叉在原第 26 行：P0 首回合五谷，旧线 P1、P2 各出一张无懈于同一
+    // 全量窗（偶数相抵、效果仍生效），四人各选一张；新线逐目标各窗抵消自己，
+    // P1、P2 不选牌，亮 4 张只被 P0、P3 选走 2 张，余 2 张空 owner 弃置。P0 的
+    // 顺手牵羊由此改夺 P1 留下的南蛮入侵（旧线 P1 多得的过河拆桥被夺），出牌/
+    // 响应/死亡序列级联，行数增加、指纹更新。
     tkw::game::AggressiveAI aggr;
     const auto a = run_game_ai(aggr, 42, 4);
     const auto b = run_game_ai(aggr, 42, 4);

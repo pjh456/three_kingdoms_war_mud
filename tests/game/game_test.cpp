@@ -877,6 +877,56 @@ TEST_CASE("game: wugu refill rolls back the played card on an illegal reveal pic
               g.cards.draw_size() + g.cards.discard_size() == 2);
 }
 
+TEST_CASE("game: wugu wuxie windows carry one target each")
+{
+    // 逐目标契约：每个存活目标各开一个无懈窗口，窗内只携带该目标。
+    // 用拒绝出牌的决策源只记录窗口（counter=false），避免无懈在首窗
+    // 被打出后后续窗口不再询问。
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "wugu", "w#0");
+    g.give("b", "wuxie", "wx#0");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"a", "b", "c"});
+    REQUIRE(r.is_ok());
+
+    // 仅 b 持无懈，故每窗只在轮到 b 被轮询时记录一次；三窗各只带当前目标
+    REQUIRE(decider.counter_windows.size() == 3);
+    CHECK(decider.counter_windows[0] == std::vector<std::string>{"a"});
+    CHECK(decider.counter_windows[1] == std::vector<std::string>{"b"});
+    CHECK(decider.counter_windows[2] == std::vector<std::string>{"c"});
+}
+
+TEST_CASE("game: wugu wuxie cancels only the wuxie holder's pick")
+{
+    // 行为级：一张无懈只抵消其持有者的那一窗，其余目标照常选牌；
+    // 亮牌数仍为存活人数，未选走的余牌弃置。必须用 SimpleAI——
+    // 其无懈决策按窗口目标是否含自己判定，逐目标窗下自动只抵消自己。
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "wugu", "w#0");
+    g.give("b", "wuxie", "wx#0");
+
+    SimpleAI ai;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, ai, "a", played, {"a", "b", "c"});
+    REQUIRE(r.is_ok());
+
+    CHECK(g.cards.hand_size("a") == 1);  // 打出五谷 -1，选得 1
+    CHECK(g.cards.hand_size("b") == 0);  // 无懈消费，被抵消不选牌
+    CHECK(g.cards.hand_size("c") == 1);  // 未被抵消，照常选牌
+    CHECK(g.cards.draw_size() == 108 - 3);  // 亮牌数仍为存活人数（3）
+    CHECK(g.cards.discard_size() == 3);     // 五谷 + 无懈 + 1 张余牌
+}
+
 TEST_CASE("game: guohe discards target card")
 {
     TestGame g("deck");
