@@ -42,6 +42,7 @@ namespace tkw
             Cards,  /**< 列出牌表（结果写日志面板） */
             Rules,  /**< 查询卡牌说明（结果写日志面板） */
             Audit,  /**< 审计牌堆（结果写日志面板） */
+            Simulate, /**< 批量模拟全 AI 对局（结果写日志面板，worker 执行） */
         };
 
         /** 解析后的命令值：类别 + new/deal 选项 + save/load 路径 + 查询参数。 */
@@ -53,7 +54,8 @@ namespace tkw
             bool run_to_end = false;                /**< deal/run 建局或起跑后跑到底 */
             std::string keyword;                    /**< rules：过滤关键词；空 = 全部 */
             bool with_text = false;                 /**< cards：附 CardDef.text 效果文案 */
-            bool deck_provided = false;             /**< cards/rules/audit：行内 --deck 是否显式给出 */
+            bool deck_provided = false;             /**< cards/rules/audit/simulate：行内 --deck 是否显式给出 */
+            int games = 0;                          /**< simulate：局数（≥1） */
         };
 
         /** 解析结果：Ok(Command) 或 Err(中文提示)。 */
@@ -428,6 +430,135 @@ namespace tkw
             }
 
             /**
+             * @brief 解析 simulate <局数> [玩家数] 与行内 --seed/--ai/--mode/--hand/--deck。
+             * @param tokens 全 token 列表（tokens[0] == "simulate"）。
+             * @param base   启动选项；未显式给出的项沿用 base，但 seed 基值固定为 1。
+             * @return Ok(Command{Simulate, games, options})；缺局数/局数非正/玩家数
+             *         越界或非法/多余位置参数/未知选项返回中文 Err。
+             * @note 基种子缺省 1（局种子 1..N）对齐 CLI simulate，与 Options.seed
+             *       缺省 42 不同；行内 --deck 置 deck_provided，控制器据此覆盖活动
+             *       会话/启动牌表。
+             */
+            inline CommandParseResult parse_simulate(
+                const std::vector<std::string> &tokens,
+                const tkw::cli::Options &base)
+            {
+                Command cmd;
+                cmd.kind = CommandKind::Simulate;
+                cmd.options = base;
+                cmd.options.seed = 1;
+
+                bool games_set = false;
+                bool players_set = false;
+                for (std::size_t i = 1; i < tokens.size(); ++i)
+                {
+                    const std::string &t = tokens[i];
+                    const auto value_of = [&](std::string &out) -> bool
+                    {
+                        if (i + 1 >= tokens.size())
+                            return false;
+                        out = tokens[++i];
+                        return true;
+                    };
+
+                    auto deck = take_query_deck(tokens, i, cmd);
+                    if (deck.is_err())
+                        return CommandParseResult::Err(deck.unwrap_err());
+                    if (deck.unwrap())
+                        continue;
+
+                    std::string value;
+                    if (t == "--seed")
+                    {
+                        if (!value_of(value))
+                            return CommandParseResult::Err(
+                                missing_value_error(t));
+                        std::uint32_t seed = 0;
+                        if (!parse_u32(value, seed))
+                            return CommandParseResult::Err(
+                                "选项 '--seed' 的值 '" + value +
+                                "' 无效: 期望非负整数");
+                        cmd.options.seed = seed;
+                    }
+                    else if (t == "--hand")
+                    {
+                        if (!value_of(value))
+                            return CommandParseResult::Err(
+                                missing_value_error(t));
+                        int hand = 0;
+                        if (!parse_i32(value, hand) || hand < 0)
+                            return CommandParseResult::Err(
+                                "选项 '--hand' 的值 '" + value +
+                                "' 无效: 期望非负整数");
+                        cmd.options.hand = hand;
+                    }
+                    else if (t == "--mode")
+                    {
+                        if (!value_of(value))
+                            return CommandParseResult::Err(
+                                missing_value_error(t));
+                        tkw::game::GameMode mode = tkw::game::GameMode::Brawl;
+                        if (!mode_from(value, mode))
+                            return CommandParseResult::Err(
+                                "选项 '--mode' 的值 '" + value +
+                                "' 无效: 期望 brawl 或 identity");
+                        cmd.options.mode = mode;
+                    }
+                    else if (t == "--ai")
+                    {
+                        if (!value_of(value))
+                            return CommandParseResult::Err(
+                                missing_value_error(t));
+                        tkw::cli::AiLevel ai = tkw::cli::AiLevel::Simple;
+                        if (!ai_from(value, ai))
+                            return CommandParseResult::Err(
+                                "选项 '--ai' 的值 '" + value +
+                                "' 无效: 期望 simple 或 aggressive");
+                        cmd.options.ai = ai;
+                    }
+                    else if (t.rfind("--", 0) == 0)
+                    {
+                        return CommandParseResult::Err(unknown_option_error(t));
+                    }
+                    else if (!games_set)
+                    {
+                        int games = 0;
+                        if (!parse_i32(t, games))
+                            return CommandParseResult::Err(
+                                "simulate 的局数 '" + t +
+                                "' 无效: 期望正整数");
+                        if (games < 1)
+                            return CommandParseResult::Err("局数须为正整数");
+                        cmd.games = games;
+                        games_set = true;
+                    }
+                    else if (!players_set)
+                    {
+                        int players = 0;
+                        if (!parse_i32(t, players))
+                            return CommandParseResult::Err(
+                                "simulate 的玩家数 '" + t +
+                                "' 无效: 期望整数");
+                        if (players < tkw::game::RulesConfig{}.min_players ||
+                            players > tkw::game::RulesConfig{}.max_players)
+                            return CommandParseResult::Err(
+                                player_range_error(players));
+                        cmd.options.players = players;
+                        players_set = true;
+                    }
+                    else
+                    {
+                        return CommandParseResult::Err(
+                            "simulate 只接受两个位置参数（局数 [玩家数]）: '" +
+                            t + "'");
+                    }
+                }
+                if (!games_set)
+                    return CommandParseResult::Err("simulate 需要 <局数> 参数");
+                return CommandParseResult::Ok(std::move(cmd));
+            }
+
+            /**
              * @brief 解析 help/? 的可选关键词（至多一个）。
              * @param name   实际输入的命令名（help 或 ?），用于参数错误文案。
              * @return Ok(Command{Help, keyword})；多于一个参数返回 Err。
@@ -480,8 +611,8 @@ namespace tkw
             /**
              * @brief 命令栏可识别的命令名与别名表。
              * @return 规范名与别名的有序列表（命令表序），供 did-you-mean 建议使用。
-             * @note 与 `parse_command` 的分派面保持同步；simulate 虽指路回 CLI，
-             *       仍作为一个可识别名字参与纠错，避免手误时无候选。
+             * @note 与 `parse_command` 的分派面保持同步；simulate 作为可识别名字
+             *       参与纠错，避免手误时无候选。
              */
             inline const std::vector<std::string> &command_names()
             {
@@ -576,10 +707,13 @@ namespace tkw
                     "[--ai simple|aggressive] [--deck P] [--human <座位>] [--no-human]",
                     "  deal <players> <seed>；step；run/r；status/st；save/w <file>；"
                     "load/l <file>；quit/q；help/?",
+                    "  simulate <局数> [玩家数] [--seed S] [--ai simple|aggressive] "
+                    "[--hand N] [--mode brawl|identity] [--deck 路径]"
+                    "（全 AI 批量，基种子缺省 1，结果写入本面板；q 可取消）",
                     "  cards [--text] [--deck 路径]；rules [关键词] [--deck 路径]；"
                     "audit [--deck 路径]（只读牌表查询，结果写入本面板）",
-                    "  只读查询牌表优先序: 行内 --deck > 活动会话 > 启动 --deck",
-                    "  simulate: 请退出后运行 tkw simulate（TUI 暂不支持）",
+                    "  牌表优先序（只读查询与 simulate）: 行内 --deck > 活动会话 > 启动 --deck",
+                    "  极大批量（数百局以上）建议退出后用 tkw simulate 跑（脚本化、无 UI 线程）",
                     "  默认: --players " +
                         std::to_string(tkw::cli::Options{}.players) + "、--seed " +
                         std::to_string(tkw::cli::Options{}.seed) + "、--hand " +
@@ -631,7 +765,8 @@ namespace tkw
          *       --human/--no-human，不接受位置参数；cards 接受可选 --text 与
          *       --deck <路径>，rules 接受至多一个关键词与 --deck <路径>，audit
          *       接受 --deck <路径> 且无其它参数；help/? 接受至多一个关键词用于
-         *       过滤命令表；simulate 仍指路回 CLI。未知命令名附邻近拼写建议。
+         *       过滤命令表；simulate 接受 <局数> [玩家数] 与行内 --seed/--ai/
+         *       --mode/--hand/--deck，基种子缺省 1。未知命令名附邻近拼写建议。
          */
         inline CommandParseResult parse_command(
             std::string_view line, const tkw::cli::Options &base)
@@ -687,12 +822,8 @@ namespace tkw
                 return detail::parse_rules(tokens);
             if (name == "audit")
                 return detail::parse_audit(tokens);
-
-            // 批量模拟会长时间占用主线程且无 TUI 结果面：明确指路而非报“未知命令”。
             if (name == "simulate")
-                return CommandParseResult::Err(
-                    "TUI 暂不支持 simulate，请退出后运行 `tkw simulate`"
-                    "（REPL 内可直接用；help 查看 TUI 命令）");
+                return detail::parse_simulate(tokens, base);
 
             // 邻近拼写给 did-you-mean 候选；无候选时保持原有的泛化提示文案。
             const std::vector<std::string> suggestions =

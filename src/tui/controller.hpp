@@ -14,6 +14,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -60,8 +61,9 @@ namespace tkw
         /**
          * @class Controller
          * @brief 驱动一局会话的命令控制器：解析命令、调度 worker、回送快照、退出存档。
-         * @note 线程契约：new/load/save/status 只在 Idle 的主线程执行；step/run 在
-         *       worker 执行。worker 期间主线程不读 session_/log_，只读 UiModel。
+         * @note 线程契约：new/load/save/status/cards/rules/audit 只在 Idle 的主线程
+         *       执行；step/run/simulate 在 worker 执行。worker 期间主线程不读
+         *       session_/log_，只读 UiModel。
          *       析构不显式 join：成员声明序保证 worker_ 最先析构并自动 join。
          */
         class Controller
@@ -180,6 +182,10 @@ namespace tkw
                 case CommandKind::Audit:
                     if (require_idle())
                         do_audit(cmd);
+                    break;
+                case CommandKind::Simulate:
+                    if (require_idle())
+                        start_simulate_job(cmd);
                     break;
                 }
             }
@@ -559,6 +565,69 @@ namespace tkw
             {
                 auto model = model_;
                 post_([model = std::move(model)] { model->running = false; });
+            }
+
+            /**
+             * @brief 启动批量模拟 worker；不要求活动会话，运行中拒绝。
+             * @param cmd 解析后的 simulate 命令（局数 + 选项）。
+             * @note simulate 不读写 session_，只经合成选项自建独立对局，故单会话
+             *       状态机零冲突；运行期间 q 可取消（simulate_lines 在局边界检查
+             *       cancel_），最坏 join 延迟 = 单局时长。
+             */
+            void start_simulate_job(const Command &cmd)
+            {
+                if (model_->running.load())
+                {
+                    append_line("引擎运行中，请等待当前命令完成");
+                    return;
+                }
+                join_worker();
+                cancel_ = false;
+                model_->running = true;
+                worker_ = std::jthread([this, cmd] { simulate_job(cmd); });
+            }
+
+            /**
+             * @brief worker 作业体：批量模拟 N 局全 AI，聚合结果逐行写入日志。
+             * @param cmd 解析后的 simulate 命令。
+             * @note 选项合成复用 query_options（行内 --deck > 活动会话 > 启动），再
+             *       补非 deck 的行内覆盖；humans 已清空。simulate_lines 每局自建
+             *       Game/SeededRng，不读写 session_/活动会话 rng，亦不订阅事件。
+             */
+            void simulate_job(const Command &cmd)
+            {
+                tkw::cli::Options opt = query_options(cmd);
+                opt.players = cmd.options.players;
+                opt.seed = cmd.options.seed;
+                opt.ai = cmd.options.ai;
+                opt.mode = cmd.options.mode;
+                opt.hand = cmd.options.hand;
+
+                log_.push("开始模拟 " + std::to_string(cmd.games) + " 局（" +
+                          std::to_string(opt.players) + " 人，种子 " +
+                          std::to_string(opt.seed) + ".." +
+                          std::to_string(opt.seed +
+                                          static_cast<std::uint32_t>(
+                                              cmd.games) -
+                                          1) +
+                          "，ai=" + tkw::cli::detail::ai_level_name(opt.ai) +
+                          "），请稍候…（q 可取消）");
+                post_snapshot();
+
+                std::vector<std::string> warnings;
+                auto lines = tkw::cli::detail::simulate_lines(
+                    opt, cmd.games, &warnings,
+                    [this] { return cancel_.load(); });
+                for (auto &line : warnings)
+                    log_.push(std::move(line));
+                if (lines.is_err())
+                    log_.push(lines.unwrap_err());
+                else
+                    for (auto &line : lines.unwrap())
+                        log_.push(std::move(line));
+
+                post_snapshot();
+                post_done();
             }
 
             /** @brief 追加会话状态摘要；只读模型，不触引擎，运行中亦可用。 */

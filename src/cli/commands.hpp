@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -1004,60 +1005,68 @@ namespace tkw
                 std::int64_t turns_sum = 0;      /**< 全部局回合数总和 */
             };
 
+            /** 批量模拟结果：Ok 为汇总行（不含换行），Err 为中文错误文案。 */
+            using SimulateLines = tkw::Result<std::vector<std::string>, std::string>;
+
             /**
-             * @brief 批量模拟：N 局独立种子全 AI 跑完，打印跨局聚合摘要（胜者
-             *        分布 / 平局 / 平均回合）。
-             * @param opt 对局选项；seed 为基种子（第 i 局用 seed + i），
-             *        --deck/--players/--hand/--seed/--ai 生效。
-             * @param n   局数；须 ≥1（由调用方校验），耗时随 n 线性。
-             * @return Ok；Err 为牌堆加载失败 / 开局失败 / 对局失败（文案与
-             *         run_game 一致）。
-             * @note 基种子缺省 1（局种子 1..N，跨档对比口径可比），与
-             *       Options.seed 缺省 42 不同；--verbose/--autosave 接受但不读
-             *       （逐局不打事件日志、无会话），--human 因全 AI 批量模拟而拒绝。
+             * @brief 批量模拟的纯行构造：N 局独立种子全 AI 跑完，返回跨局聚合
+             *        摘要行（胜者分布 / 平局 / 平均回合），不打印、不写 stderr。
+             * @param opt       对局选项；seed 为基种子（第 i 局用 seed + i），
+             *                  --deck/--players/--hand/--seed/--ai 生效。
+             * @param n         局数；须 ≥1（由调用方校验），耗时随 n 线性。
+             * @param warnings  非空时写入未实现卡警告行（同目录扫描结果，0 或 1 行）。
+             * @param cancelled 可选取消谓词；非空且返回 true 时在局边界提前结束。
+             * @return Ok 汇总行序（牌表头 + 模拟头 + 胜场/阵营行 + 平均回合）；
+             *         Err 为牌堆加载失败 / 开局失败 / 对局失败（文案与 run_game 一致）。
+             * @note 基种子缺省由调用方定（CLI/TUI 均 1，局种子 1..N）；每局经
+             *       build_game 自建独立 Game 与 SeededRng，绝不读写调用方
+             *       session/Game/rng；不订阅事件、不打回合头与统计块。取消时按已
+             *       完成局数输出；一局未完成（仅取消路径可达）返回头行与取消提示。
              *       汇总头行先亮明本批实际使用的牌表目录；胜者空串 = 平局；身份局
              *       聚合键换阵营标签并按主公/反贼/内奸固定序输出，头行追加
-             *       mode=identity；平均回合为回合总和除以局数（向下取整）。每局不
-             *       打印胜者行与统计块，未实现卡警告在循环前打印一次。
+             *       mode=identity；平均回合为回合总和除以已完成局数（向下取整）。
              */
-            inline CliResult<void> simulate_games(const Options &opt, int n)
+            inline SimulateLines simulate_lines(
+                const Options &opt, int n,
+                std::vector<std::string> *warnings = nullptr,
+                const std::function<bool()> &cancelled = {})
             {
-                const std::string herr = reject_humans(opt.humans, "simulate");
-                if (!herr.empty())
-                    return CliFailure{CliError(herr)};
-                // 预载牌表：未实现卡警告循环前打一次，不逐局重复。
+                // 预载牌表：未实现卡警告由调用方一次性输出，不逐局重复。
                 tkw::config::ResourceStore store(opt.deck);
                 auto catalog = tkw::card::CardDefCatalog::load(store, "deck");
                 if (catalog.is_err())
-                {
-                    const auto &e = catalog.unwrap_err();
-                    return CliFailure{CliError(format_load_error(e))};
-                }
+                    return SimulateLines::Err(format_load_error(catalog.unwrap_err()));
                 const auto &cat = catalog.unwrap();
-                warn_unsupported_cards(cat);
+                if (warnings)
+                    *warnings = unsupported_cards_warning_lines(cat);
 
                 SimAggregate agg;
+                int completed = 0;
                 for (int i = 0; i < n; ++i)
                 {
+                    if (cancelled && cancelled())
+                        break;
+
                     // 每局独立随机源：种子 = 基种子 + 局序号。
                     Options per = opt;
                     per.seed = opt.seed + static_cast<std::uint32_t>(i);
                     auto built = tkw::game::build_game(build_options_from(per));
                     if (built.is_err())
-                        return CliFailure{
-                            CliError(format_build_error(built.unwrap_err()))};
+                        return SimulateLines::Err(
+                            format_build_error(built.unwrap_err()));
                     auto game = std::move(built).unwrap();
 
                     // 全 AI 局：无真人座位，决策源按难度档取单档。
                     auto ctx = game->context();
                     auto ai = make_decision_source({}, opt.ai);
                     tkw::game::GameSession session;
-                    if (tkw::game::start_session(ctx, session, "P0",
-                                                  opt.hand).is_err())
-                        return CliFailure{CliError("开局失败")};
+                    if (tkw::game::start_session(ctx, session, "P0", opt.hand)
+                            .is_err())
+                        return SimulateLines::Err("开局失败");
                     auto rr = run_to_completion(ctx, *ai, session);
                     if (rr.is_err())
-                        return CliFailure{CliError(format_loop_error(rr.unwrap_err()))};
+                        return SimulateLines::Err(
+                            format_loop_error(rr.unwrap_err()));
 
                     // 胜者空串 = 平局（达回合上限或同归于尽）；身份局按阵营聚合，
                     // 传空代表 id 得通用阵营标签，避免「内奸胜（P2）」拆成多键。
@@ -1071,17 +1080,31 @@ namespace tkw
                     else
                         ++agg.wins[winner];
                     agg.turns_sum += session.turns;
+                    ++completed;
                 }
+
+                // 一局未完成：仅取消可在首局前到达，给出头行与取消提示。
+                if (completed == 0)
+                    return SimulateLines::Ok(
+                        std::vector<std::string>{
+                            "牌表: " + opt.deck.string(),
+                            "模拟已取消（完成 0/" + std::to_string(n) + " 局）"});
 
                 // 汇总：头行（牌表来源 + 局数/人数/种子区间/AI 档）+ 逐座位胜场或
                 // 身份局阵营胜场与平局 + 平均回合。
-                std::cout << "牌表: " << opt.deck.string() << "\n";
-                std::cout << "模拟 " << n << " 局（" << opt.players << " 人，种子 "
-                          << opt.seed << ".." << opt.seed + n - 1 << "，ai="
-                          << ai_level_name(opt.ai);
+                std::vector<std::string> lines;
+                lines.push_back("牌表: " + opt.deck.string());
+                std::string header =
+                    "模拟 " + std::to_string(completed) + " 局（" +
+                    std::to_string(opt.players) + " 人，种子 " +
+                    std::to_string(opt.seed) + ".." +
+                    std::to_string(opt.seed + completed - 1) + "，ai=" +
+                    ai_level_name(opt.ai);
                 if (opt.mode == tkw::game::GameMode::Identity)
-                    std::cout << "，mode=identity";
-                std::cout << "）:\n";
+                    header += "，mode=identity";
+                header += "）:";
+                lines.push_back(std::move(header));
+
                 std::string line;
                 if (opt.mode == tkw::game::GameMode::Identity)
                 {
@@ -1109,8 +1132,34 @@ namespace tkw
                     }
                 }
                 line += "，平局 " + std::to_string(agg.draws);
-                std::cout << "  " << line << "\n";
-                std::cout << "  平均回合 " << (agg.turns_sum / n) << "\n";
+                lines.push_back("  " + line);
+                lines.push_back("  平均回合 " +
+                                std::to_string(agg.turns_sum / completed));
+                return SimulateLines::Ok(std::move(lines));
+            }
+
+            /**
+             * @brief 批量模拟的 CLI 包装：拒绝真人、逐行打印警告（stderr）与汇总
+             *        （stdout），保持 CLI 用户可见输出不变。
+             * @param opt 对局选项；seed 为基种子。
+             * @param n   局数；须 ≥1（由调用方校验）。
+             * @return Ok；Err 为牌堆加载失败 / 开局失败 / 对局失败。
+             * @note 先输出警告再输出汇总，与旧「警告在循环前、汇总在后」的合并流
+             *       序一致；--human 在全 AI 批量模拟下拒绝。
+             */
+            inline CliResult<void> simulate_games(const Options &opt, int n)
+            {
+                const std::string herr = reject_humans(opt.humans, "simulate");
+                if (!herr.empty())
+                    return CliFailure{CliError(herr)};
+                std::vector<std::string> warnings;
+                auto lines = simulate_lines(opt, n, &warnings);
+                for (const auto &w : warnings)
+                    std::cerr << w << "\n";
+                if (lines.is_err())
+                    return CliFailure{CliError(lines.unwrap_err())};
+                for (const auto &line : lines.unwrap())
+                    std::cout << line << "\n";
                 return CliResult<void>::Ok();
             }
 

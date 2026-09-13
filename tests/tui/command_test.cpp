@@ -110,17 +110,75 @@ TEST_CASE("tui: parse errors carry chinese hints")
     CHECK(empty.unwrap_err().find("空命令") != std::string::npos);
 }
 
-TEST_CASE("tui: simulate points to cli and unknown stays unknown")
+TEST_CASE("tui: simulate parses games players and inline options")
 {
     const auto base = base_options();
 
-    auto simulate = parse_command("simulate", base);
-    REQUIRE(simulate.is_err());
-    CHECK(simulate.unwrap_err().find("tkw simulate") != std::string::npos);
+    auto plain = parse_command("simulate 20", base);
+    REQUIRE(plain.is_ok());
+    const auto &p = plain.unwrap();
+    CHECK(p.kind == CommandKind::Simulate);
+    CHECK(p.games == 20);
+    // 未给 --seed 时基种子固定为 1（对齐 CLI simulate），不继承启动 seed 7。
+    CHECK(p.options.seed == 1);
+    CHECK_FALSE(p.deck_provided);
 
-    auto unknown = parse_command("frobnicate", base);
+    auto positional = parse_command("simulate 20 2", base);
+    REQUIRE(positional.is_ok());
+    CHECK(positional.unwrap().games == 20);
+    CHECK(positional.unwrap().options.players == 2);
+
+    auto full = parse_command(
+        "simulate 20 --seed 7 --ai aggressive --mode identity "
+        "--deck /tmp/d --hand 3",
+        base);
+    REQUIRE(full.is_ok());
+    const auto &f = full.unwrap();
+    CHECK(f.games == 20);
+    CHECK(f.options.seed == 7);
+    CHECK(f.options.ai == tkw::cli::AiLevel::Aggressive);
+    CHECK(f.options.mode == tkw::game::GameMode::Identity);
+    CHECK(f.options.hand == 3);
+    CHECK(f.deck_provided);
+    CHECK(f.options.deck == "/tmp/d");
+}
+
+TEST_CASE("tui: simulate parse errors carry chinese hints")
+{
+    const auto base = base_options();
+
+    auto missing = parse_command("simulate", base);
+    REQUIRE(missing.is_err());
+    CHECK(missing.unwrap_err().find("需要") != std::string::npos);
+
+    auto zero = parse_command("simulate 0", base);
+    REQUIRE(zero.is_err());
+    CHECK(zero.unwrap_err().find("正整数") != std::string::npos);
+
+    auto bad_n = parse_command("simulate x", base);
+    REQUIRE(bad_n.is_err());
+    CHECK(bad_n.unwrap_err().find("无效") != std::string::npos);
+
+    auto players_range = parse_command("simulate 20 99", base);
+    REQUIRE(players_range.is_err());
+    CHECK(players_range.unwrap_err().find("超出范围") != std::string::npos);
+
+    auto bad_players = parse_command("simulate 20 x", base);
+    REQUIRE(bad_players.is_err());
+    CHECK(bad_players.unwrap_err().find("无效") != std::string::npos);
+
+    auto unknown = parse_command("simulate 20 --bogus", base);
     REQUIRE(unknown.is_err());
-    CHECK(unknown.unwrap_err().find("未知命令") != std::string::npos);
+    CHECK(unknown.unwrap_err().find("未知选项") != std::string::npos);
+
+    auto extra = parse_command("simulate 20 2 3", base);
+    REQUIRE(extra.is_err());
+    CHECK(extra.unwrap_err().find("两个位置参数") != std::string::npos);
+
+    // 未知命令仍走「未知命令」。
+    auto frob = parse_command("frobnicate", base);
+    REQUIRE(frob.is_err());
+    CHECK(frob.unwrap_err().find("未知命令") != std::string::npos);
 }
 
 TEST_CASE("tui: unknown command suggests nearest command names")

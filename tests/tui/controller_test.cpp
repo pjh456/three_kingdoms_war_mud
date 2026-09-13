@@ -233,7 +233,7 @@ TEST_CASE("tui: help mentions in-place query commands")
             mentions_rules = true;
         if (line.find("audit") != std::string::npos)
             mentions_audit = true;
-        if (line.find("tkw simulate") != std::string::npos)
+        if (line.find("simulate <局数>") != std::string::npos)
             mentions_simulate = true;
     }
     CHECK(mentions_cards);
@@ -488,6 +488,112 @@ TEST_CASE("tui: query bad inline deck reports one error line")
     CHECK_FALSE(c.running());
     CHECK(c.log_lines().size() == before + 1);
     CHECK(log_has_prefix(c.log_lines(), "加载牌堆失败"));
+}
+
+TEST_CASE("tui: simulate writes aggregate result to log")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+
+    c.execute_line("simulate 2 2");
+    c.wait_idle();
+
+    CHECK_FALSE(c.running());
+    CHECK(log_contains(c.log_lines(), "开始模拟 2 局"));
+    CHECK(log_has_prefix(c.log_lines(), "牌表: "));
+    CHECK(log_contains(c.log_lines(), "模拟 2 局"));
+    CHECK(log_contains(c.log_lines(), "平局"));
+    CHECK(log_contains(c.log_lines(), "平均回合"));
+}
+
+TEST_CASE("tui: simulate without session uses startup deck")
+{
+    auto opt = test_options();
+    opt.mode = tkw::game::GameMode::Identity;
+    opt.players = 2;  // 身份局无 2 人配比 → bootstrap 建局失败，会话 inactive。
+    tkw::tui::Controller c;
+    c.set_base_options(opt);
+    c.bootstrap();
+    REQUIRE_FALSE(c.snapshot().active);
+
+    c.execute_line("simulate 1 2 --mode brawl");
+    c.wait_idle();
+
+    CHECK_FALSE(c.running());
+    CHECK(log_contains(c.log_lines(),
+                       "牌表: " + std::string(TKW_TEST_RESOURCE_DIR)));
+    CHECK(log_contains(c.log_lines(), "模拟 1 局"));
+}
+
+TEST_CASE("tui: simulate does not touch active session")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+    c.execute_line("new --players 2 --seed 1 --hand 0");
+    c.execute_line("step");
+    c.wait_idle();
+    REQUIRE(c.snapshot().active);
+
+    const int turns = c.snapshot().turns;
+    const std::string current = c.snapshot().current;
+    const std::size_t players = c.snapshot().players.size();
+
+    c.execute_line("simulate 2 2");
+    c.wait_idle();
+
+    CHECK(c.snapshot().active);
+    CHECK(c.snapshot().turns == turns);
+    CHECK(c.snapshot().current == current);
+    CHECK(c.snapshot().players.size() == players);
+    CHECK(log_contains(c.log_lines(), "模拟 2 局"));
+}
+
+TEST_CASE("tui: simulate bad deck reports one error line")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+    REQUIRE(c.snapshot().active);
+
+    const int turns = c.snapshot().turns;
+    c.execute_line("simulate 1 2 --deck /nonexistent-deck");
+    c.wait_idle();
+
+    CHECK(c.snapshot().active);
+    CHECK(c.snapshot().turns == turns);
+    CHECK_FALSE(c.running());
+    CHECK(log_has_prefix(c.log_lines(), "加载牌堆失败"));
+}
+
+TEST_CASE("tui: quit during simulate joins promptly")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options(2, 1));
+    c.bootstrap();
+
+    c.execute_line("simulate 200 2");
+    c.request_quit();
+    c.wait_idle();
+
+    CHECK_FALSE(c.running());
+}
+
+TEST_CASE("tui: simulate_lines is deterministic with stable prefixes")
+{
+    auto opt = test_options();
+    auto first = tkw::cli::detail::simulate_lines(opt, 3);
+    auto second = tkw::cli::detail::simulate_lines(opt, 3);
+    REQUIRE(first.is_ok());
+    REQUIRE(second.is_ok());
+    CHECK(first.unwrap() == second.unwrap());
+
+    const auto &lines = first.unwrap();
+    REQUIRE(lines.size() >= 4);
+    CHECK(lines.front().rfind("牌表: ", 0) == 0);
+    CHECK(lines[1].find("模拟 3 局") != std::string::npos);
+    CHECK(lines.back().rfind("  平均回合 ", 0) == 0);
 }
 
 TEST_CASE("tui: query during run is rejected")

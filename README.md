@@ -70,9 +70,11 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
   空区显示「无」），底部命令栏：`new [--players N] [--seed S]
   [--mode brawl|identity] [--ai simple|aggressive] [--deck P] [--hand N]
   [--human <座位>] [--no-human]`、`deal <players> <seed>`、`step`、`run`/`r`、
-  `status`/`st`、`save`/`w <file>`、`load`/`l <file>`、`cards [--text] [--deck 路径]`、
-   `rules [关键词] [--deck 路径]`、`audit [--deck 路径]`、`quit`/`q`、
-  `help [命令]`/`? [关键词]`；`Esc`/`Ctrl-C` 退出。
+   `status`/`st`、`save`/`w <file>`、`load`/`l <file>`、`cards [--text] [--deck 路径]`、
+    `rules [关键词] [--deck 路径]`、`audit [--deck 路径]`、
+    `simulate <局数> [玩家数] [--seed S] [--ai simple|aggressive] [--hand N]
+    [--mode brawl|identity] [--deck 路径]`、`quit`/`q`、
+   `help [命令]`/`? [关键词]`；`Esc`/`Ctrl-C` 退出。
 - 命令可发现性对齐 CLI：未知命令附邻近拼写建议（如 `runn` → `run`）；
   不带参数的 `help`/`?` 打印全量表，`help <命令>` 看单条命令用法，
   `? <关键词>` 过滤命令表（如 `? 牌`）。
@@ -95,10 +97,13 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
   只显示主公与真人座位的角色，其余座位显示「未知」占位（终局揭示全部）；手牌面板
   只展开**首个**真人座位（多真人同时展开属后续里程碑），其余只给数量；选择对手区域
   的牌时手牌出「未知手牌」占位，装备/判定区明置。
-- 卡牌查询：命令栏 `cards [--text]`、`rules [关键词]`、`audit` 就地出结果，逐行
-  写入日志面板（长列表用日志翻阅）；牌表来源优先序为行内 `--deck` > 活动会话 >
+- 卡牌查询与批量模拟：命令栏 `cards [--text]`、`rules [关键词]`、`audit` 就地出结果，
+  逐行写入日志面板（长列表用日志翻阅）；牌表来源优先序为行内 `--deck` > 活动会话 >
   启动 `--deck`（与 REPL 只读命令同口径），行内坏路径写一行「加载牌堆失败」提示、
-  不阻断会话。`simulate` 仍在 CLI 执行，命令栏输入会提示改用 `tkw`。
+  不阻断会话。`simulate <局数> [玩家数]` 在后台线程跑完全 AI 批量并把跨局聚合结果
+  （牌表来源/局数/种子区间/AI 档/胜场或阵营/平局/平均回合）就地写入日志面板，
+  基种子缺省 1；运行期间可翻阅日志，`q` 在局边界取消退出；数百局以上的极大批量
+  建议退出后用 `tkw simulate`（脚本化、无 UI 线程）。
 - 退出时若有进行中的会话，自动存档到当前目录的 `tkw-autosave.json`（与 REPL 同口径），
   退出信息写 stderr。
 - FTXUI 获取：优先 `find_package(ftxui CONFIG QUIET)`，未安装则 `FetchContent` 钉
