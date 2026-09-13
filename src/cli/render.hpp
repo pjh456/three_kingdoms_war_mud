@@ -30,6 +30,9 @@ namespace tkw
     {
         namespace detail
         {
+            /** 横置（连环）状态标签：CLI status 与 TUI 棋盘共用，防两侧文案漂移。 */
+            inline constexpr const char *kChainedTag = "[横置]";
+
             /** 未实现卡展示名：目录中文名 + (id) 后缀；目录未收录时回落 id。 */
             inline std::string audit_entry_name(
                 const tkw::card::CardDefCatalog &catalog, const std::string &def_id)

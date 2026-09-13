@@ -19,6 +19,7 @@
 #include "cli/render.hpp"
 #include "config/error.hpp"
 #include "game/core/roles.hpp"
+#include "game/core/state.hpp"
 #include "game/flow/loop.hpp"
 #include "io/file.hpp"
 
@@ -211,6 +212,8 @@ TEST_CASE("cli: new/step/status/run advance the session")
     CHECK(status.out.find("下一回合") != std::string::npos);
     CHECK(status.out.find("真人座位: 无") != std::string::npos);
     CHECK(status.out.find("P0 体力 4/4 手牌 4 装备") != std::string::npos);
+    // 标准牌表无铁索连环，横置恒 false：局面段不得出现状态标记。
+    CHECK(status.out.find("[横置]") == std::string::npos);
 
     auto ran = repl.run("run");
     CHECK(ran.ok);
@@ -248,6 +251,36 @@ TEST_CASE("cli: status expands public equip and judge zone names")
     CHECK(status.out.find("P0 体力 4/4 手牌 4 装备 无 判定 乐不思蜀") !=
           std::string::npos);
     CHECK(status.out.find("P1 体力 4/4 手牌 4 装备 八卦阵 判定 无") !=
+          std::string::npos);
+}
+
+TEST_CASE("cli: status marks chained seats")
+{
+    Repl repl;
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+    auto ctx = repl.session.game->context();
+    tkw::game::set_chained(ctx, "P1", true);
+
+    auto status = repl.run("status");
+    REQUIRE(status.ok);
+    CHECK(status.out.find("P1 体力 4/4 手牌 4 装备 无 判定 无 [横置]") !=
+          std::string::npos);
+    CHECK(status.out.find("P0 体力 4/4 手牌 4 装备 无 判定 无 [横置]") ==
+          std::string::npos);
+    CHECK(count_substr(status.out, "[横置]") == 1);
+}
+
+TEST_CASE("cli: status marks chained seat despite hidden role")
+{
+    Repl repl;
+    REQUIRE(repl.run("new --mode identity --players 4 --seed 1 --human P0").ok);
+    auto ctx = repl.session.game->context();
+    tkw::game::set_chained(ctx, "P2", true);
+
+    auto status = repl.run("status");
+    REQUIRE(status.ok);
+    // 横置独立于身份可见性收敛：隐藏角色座位仍显示状态标记。
+    CHECK(status.out.find("P2 体力 4/4 手牌 4 装备 无 判定 无 角色 未知 [横置]") !=
           std::string::npos);
 }
 

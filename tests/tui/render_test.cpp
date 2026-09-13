@@ -239,6 +239,24 @@ TEST_CASE("tui render: single panels keep board fields and viewer hand")
     CHECK(hand.find("1. 杀") != std::string::npos);
 }
 
+TEST_CASE("tui render: board marks chained seats")
+{
+    UiSnapshot snap = base_snapshot();
+    const auto render_one = [](ftxui::Element element)
+    {
+        ftxui::Screen screen(60, 10);
+        ftxui::Render(screen, element);
+        return screen.ToString();
+    };
+
+    CHECK(render_one(tkw::tui::detail::render_board(snap)).find("[横置]") ==
+          std::string::npos);
+
+    snap.players[0].chained = true;
+    CHECK(render_one(tkw::tui::detail::render_board(snap)).find("[横置]") !=
+          std::string::npos);
+}
+
 TEST_CASE("tui render: status panel shows alive count")
 {
     UiSnapshot snap = base_snapshot();

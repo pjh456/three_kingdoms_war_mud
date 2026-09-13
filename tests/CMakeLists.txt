@@ -764,13 +764,15 @@ add_test(NAME cli_status_finished
 set_tests_properties(cli_status_finished PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-# status 展示真人座位己方手牌牌名；对手行仍只给数量且不泄漏牌名。
+# status 展示真人座位己方手牌牌名；对手行仍只给数量且不泄漏牌名；标准牌表无横置，
+# 局面段不得出现横置标记。
 add_test(NAME cli_status_human_hand
          COMMAND sh -c
                  "out=$(printf 'new --players 2 --seed 1\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> --human P0 repl --autosave '' 2>&1); rc=$?; \
                   printf '%s' \"$out\" | grep -q 'P0 体力 4/4 手牌 无懈可击/五谷丰登/无中生有/闪 装备 无 判定 无' && \
                   printf '%s' \"$out\" | grep -q 'P1 体力 4/4 手牌 4 装备 无 判定 无' && \
-                  ! printf '%s' \"$out\" | grep -q 'P1 体力 4/4 手牌 无懈' && [ $rc -eq 0 ]")
+                  ! printf '%s' \"$out\" | grep -q 'P1 体力 4/4 手牌 无懈' && \
+                  ! printf '%s' \"$out\" | grep -q '横置' && [ $rc -eq 0 ]")
 set_tests_properties(cli_status_human_hand PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 

@@ -695,6 +695,8 @@ namespace tkw
                                   << role_label_zh(
                                          visible ? role : tkw::game::Role::None);
                     }
+                    if (e->get_chained())
+                        std::cout << " " << kChainedTag;
                     std::cout << "\n";
                 }
             }

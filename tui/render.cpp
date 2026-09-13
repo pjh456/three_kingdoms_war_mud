@@ -104,13 +104,14 @@ namespace tkw
             }
 
             /**
-             * @brief 棋盘面板：每座一行体力/手牌数/装备/判定/距离，身份局附加角色标签。
+             * @brief 棋盘面板：每座一行体力/手牌数/装备/判定/距离，身份局附加角色标签，横置座位附状态标记。
              * @param snap 值快照。
              * @return 每座位一行的 vbox；无玩家时单行占位。
              * @note 装备区/判定区为明置信息，经快照值展开牌名，空区回落「无」，与 CLI
              *       status 同措辞；手牌仍只出数量。身份局的隐藏座位已在快照层收敛为
              *       Role::None，此处无条件输出其标签（None → 「未知」占位），与 CLI
-             *       status 口径一致，不泄漏真实角色。
+             *       status 口径一致，不泄漏真实角色。横置为公开信息，任何座位均显示，
+             *       不做 viewer 收敛。
              */
             ftxui::Element render_board(const UiSnapshot &snap)
             {
@@ -133,6 +134,8 @@ namespace tkw
                         line += "  [" +
                                 std::string(tkw::cli::detail::role_label_zh(p.role)) +
                                 "]";
+                    if (p.chained)
+                        line += std::string("  ") + tkw::cli::detail::kChainedTag;
                     rows.push_back(ftxui::text(line));
                 }
 

@@ -7,6 +7,7 @@
 #include "cli/session.hpp"
 #include "game/ai/simple.hpp"
 #include "game/core/roles.hpp"
+#include "game/core/state.hpp"
 #include "game/flow/factory.hpp"
 #include "game/flow/loop.hpp"
 #include "game/flow/table.hpp"
@@ -92,6 +93,18 @@ TEST_CASE("tui: snapshot mirrors seats, hands and deck counts")
     CHECK_FALSE(snap.players[1].hand.revealed);
     CHECK(snap.players[1].hand.count == s.game->cards.hand_size("P1"));
     CHECK(snap.players[1].hand.cards.empty());
+}
+
+TEST_CASE("tui: snapshot mirrors chained state")
+{
+    auto s = started_session(2, 1, 2);
+    auto ctx = s.game->context();
+    tkw::game::set_chained(ctx, "P1", true);
+
+    const auto snap = tkw::tui::make_snapshot(s, "P0");
+    REQUIRE(snap.players.size() == 2);
+    CHECK_FALSE(snap.players[0].chained);
+    CHECK(snap.players[1].chained);
 }
 
 TEST_CASE("tui: snapshot advances turn progress after one step")

@@ -41,6 +41,7 @@ namespace tkw
             int distance = 0;                  /**< viewer → 该玩家（调整后距离） */
             bool in_attack_range = false;      /**< viewer 能否用杀够到 */
             tkw::game::Role role = tkw::game::Role::None; /**< 身份局；乱斗 None */
+            bool chained = false;              /**< 横置（连环）状态；公开信息 */
 
             bool operator==(const PlayerRow &) const = default;
         };
@@ -130,6 +131,7 @@ namespace tkw
                 row.role = role_visible(s.humans, snap.over, id, role)
                                ? role
                                : tkw::game::Role::None;
+                row.chained = entity->get_chained();
                 snap.players.push_back(std::move(row));
             }
 
