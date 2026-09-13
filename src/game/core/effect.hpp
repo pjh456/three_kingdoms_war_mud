@@ -111,6 +111,8 @@ namespace tkw
                 return {true};
             case H::YingZi:
                 return {true};
+            case H::FanKui:
+                return {true};
             }
             return {};
         }

@@ -1,0 +1,8 @@
+{
+  "id": "simayi",
+  "name": "司马懿",
+  "gender": "male",
+  "hp": 3,
+  "skills": ["fankui"],
+  "text": "反馈：受到伤害后，你可以获得伤害来源的一张牌。"
+}

@@ -1,6 +1,6 @@
 /**
  * @file decider.hpp
- * @brief 统一决策接缝：把 DecisionSource 的 8 个分散回调收敛成单个
+ * @brief 统一决策接缝：把 DecisionSource 的分散回调收敛成单个
  *        decide(DecisionRequest)，并附带只读观察与候选枚举。
  * @note 状态机只需实现 Decider::decide；RequestDecisionSource 负责从
  *       ReadOnlyContext 抽取观察/候选并适配回引擎的 DecisionSource。请求只含
@@ -90,6 +90,10 @@ namespace tkw
 
                 // Trigger
                 card::Ability ability = card::Ability::NoShaLimit;
+                bool hero_trigger = false; /**< Trigger：true=武将触发技，false=装备能力 */
+                hero::HeroSkill hero_skill =
+                    hero::HeroSkill::PaoXiao; /**< Trigger：武将触发技技能 */
+                std::string trigger_cause; /**< Trigger：触发来源（反馈=伤害来源；空=无来源） */
 
                 // Discard
                 int count = 0;
@@ -201,6 +205,18 @@ namespace tkw
                     DecisionRequest req = base_request(ctx, player);
                     req.kind = DecisionKind::Trigger;
                     req.ability = ability;
+                    return decider_->decide(req).accepted;
+                }
+
+                bool trigger_hero_skill(
+                    const ReadOnlyContext &ctx, const std::string &player,
+                    hero::HeroSkill skill, const std::string &cause) override
+                {
+                    DecisionRequest req = base_request(ctx, player);
+                    req.kind = DecisionKind::Trigger;
+                    req.hero_trigger = true;
+                    req.hero_skill = skill;
+                    req.trigger_cause = cause;
                     return decider_->decide(req).accepted;
                 }
 

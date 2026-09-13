@@ -30,6 +30,7 @@
 #include "game/core/effect.hpp"
 #include "game/core/state.hpp"
 #include "game/query/equip.hpp"
+#include "game/resolve/skill.hpp"
 #include "util/types.hpp"
 
 namespace tkw
@@ -267,6 +268,9 @@ namespace tkw
 
             const int applied =
                 e.unwrap()->take_damage(source, amount, indirect, type);
+
+            // 伤害落定后的武将触发技：早于濒死判定（致死不豁免）
+            run_after_damage_skills(ctx, ai, target, source, applied);
 
             if (e.unwrap()->get_hp() > 0)
             {

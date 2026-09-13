@@ -519,6 +519,37 @@ namespace tkw
                     return "装备能力";
                 }
 
+                /** @brief 武将触发技一句话效果（只读展示；非触发技回落通用文案）。 */
+                static const char *hero_skill_hint(hero::HeroSkill skill)
+                {
+                    switch (skill)
+                    {
+                    case hero::HeroSkill::FanKui:
+                        return "受到伤害后，可获得伤害来源一张牌";
+                    case hero::HeroSkill::PaoXiao:
+                    case hero::HeroSkill::WuSheng:
+                    case hero::HeroSkill::YingZi:
+                        return "武将技能";
+                    }
+                    return "武将技能";
+                }
+
+                /** @brief 触发窗技能名：武将触发技取技能中文名，装备能力取装备名。 */
+                static std::string trigger_name(const DecisionRequest &req)
+                {
+                    if (req.hero_trigger)
+                        return hero::display_skill_name(req.hero_skill);
+                    return ability_name(req);
+                }
+
+                /** @brief 触发窗一句话提示：按装备能力/武将触发技分流。 */
+                static std::string trigger_hint(const DecisionRequest &req)
+                {
+                    if (req.hero_trigger)
+                        return hero_skill_hint(req.hero_skill);
+                    return ability_hint(req.ability);
+                }
+
                 /**
                  * @brief 借刀杀人候选的受害者是否为决策者本人。
                  * @param req    当前出牌决策请求。
@@ -954,8 +985,8 @@ namespace tkw
                     for (;;)
                     {
                         print_view(req);
-                        out_ << "[" << req.actor << "] 发动 " << ability_name(req)
-                             << "（" << ability_hint(req.ability) << "）？(y/n)（"
+                        out_ << "[" << req.actor << "] 发动 " << trigger_name(req)
+                             << "（" << trigger_hint(req) << "）？(y/n)（"
                              << kHelpHint << "）：" << std::flush;
 
                         const auto input = read_tokens();
@@ -1086,6 +1117,14 @@ namespace tkw
                     card::Ability ability) override
                 {
                     return route(player).trigger_effect(ctx, player, ability);
+                }
+
+                bool trigger_hero_skill(
+                    const ReadOnlyContext &ctx, const std::string &player,
+                    hero::HeroSkill skill, const std::string &cause) override
+                {
+                    return route(player).trigger_hero_skill(
+                        ctx, player, skill, cause);
                 }
 
             private:

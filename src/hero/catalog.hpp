@@ -42,7 +42,8 @@ namespace tkw
                 std::initializer_list<std::pair<std::string_view, HeroSkill>>
                     skill_table{{"paoxiao", HeroSkill::PaoXiao},
                                 {"wusheng", HeroSkill::WuSheng},
-                                {"yingzi", HeroSkill::YingZi}};
+                                {"yingzi", HeroSkill::YingZi},
+                                {"fankui", HeroSkill::FanKui}};
 
             /** 字符串 → 技能枚举：未知值报 InvalidValue（detail = 字段路径）。 */
             inline cfg::ConfigResult<HeroSkill> skill_value(
@@ -184,6 +185,8 @@ namespace tkw
                 return "武圣";
             case HeroSkill::YingZi:
                 return "英姿";
+            case HeroSkill::FanKui:
+                return "反馈";
             }
             return "";
         }

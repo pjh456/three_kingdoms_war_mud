@@ -127,6 +127,8 @@ namespace tkw
             std::string response_second_id; /**< 非空时与 response_id 成对（两张当杀） */
             std::vector<Ability> triggers;
             std::vector<Ability> trigger_calls; /**< 实际被询问的发动能力（按顺序） */
+            std::vector<hero::HeroSkill> hero_triggers; /**< 会发动的武将触发技 */
+            std::vector<hero::HeroSkill> hero_trigger_calls; /**< 实际被询问的武将触发技（按顺序） */
             std::vector<PlayAction> plays;
             std::size_t play_cursor = 0;
 
@@ -205,6 +207,15 @@ namespace tkw
                 trigger_calls.push_back(ability);
                 return std::find(triggers.begin(), triggers.end(), ability) !=
                        triggers.end();
+            }
+
+            bool trigger_hero_skill(
+                const ReadOnlyContext &, const std::string &,
+                hero::HeroSkill skill, const std::string &) override
+            {
+                hero_trigger_calls.push_back(skill);
+                return std::find(hero_triggers.begin(), hero_triggers.end(), skill) !=
+                       hero_triggers.end();
             }
 
             Option<TargetPick> pick_card_from_target(

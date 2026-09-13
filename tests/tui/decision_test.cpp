@@ -267,6 +267,38 @@ TEST_CASE("tui: trigger panel is a yes no choice")
     CHECK_FALSE(make_choice(panel, {2}, false, yes));
 }
 
+TEST_CASE("tui: hero trigger panel titles the skill and the source")
+{
+    const auto catalog = load_catalog();
+    auto req = base_request(DecisionKind::Trigger, catalog);
+    req.hero_trigger = true;
+    req.hero_skill = tkw::hero::HeroSkill::FanKui;
+    req.trigger_cause = "P1";
+
+    const DecisionPanelView panel = make_panel(req);
+    CHECK(panel.kind == DecisionKind::Trigger);
+    CHECK(panel.yes_no);
+    CHECK(panel.allow_pass);
+    CHECK(panel.title.find("反馈") != std::string::npos);
+    CHECK(panel.title.find("P1") != std::string::npos);
+    REQUIRE(panel.options.size() == 2);
+    CHECK(panel.options[0].accepted);
+    CHECK_FALSE(panel.options[1].accepted);
+
+    DecisionChoice yes;
+    REQUIRE(make_choice(panel, {0}, false, yes));
+    CHECK(yes.accepted);
+    DecisionChoice no;
+    REQUIRE(make_choice(panel, {1}, false, no));
+    CHECK_FALSE(no.accepted);
+
+    // 无来源时回落通用文案且仍以技能名起标题
+    req.trigger_cause.clear();
+    const DecisionPanelView bare = make_panel(req);
+    CHECK(bare.title.find("反馈") != std::string::npos);
+    CHECK(bare.title.find("伤害来源") != std::string::npos);
+}
+
 TEST_CASE("tui: pick card panel hides opponent hand and reveals equip")
 {
     const auto catalog = load_catalog();

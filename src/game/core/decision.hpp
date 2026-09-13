@@ -15,6 +15,7 @@
 
 #include "card/def.hpp"
 #include "game/core/context.hpp"
+#include "hero/def.hpp"
 
 namespace tkw
 {
@@ -193,6 +194,17 @@ namespace tkw
             virtual bool trigger_effect(
                 const ReadOnlyContext &ctx, const std::string &player,
                 card::Ability ability) = 0;
+
+            /**
+             * @brief 武将触发技是否发动：结算点直接询问（如受到伤害后的反馈）。
+             * @param skill 触发的武将技能。
+             * @param cause 触发来源（如伤害来源实体 id；无来源时为空串）。
+             * @return true = 发动；实现应只在有合法效果时返回 true。
+             * @note 与装备能力分属两条回调：语义不混用，装备走 trigger_effect。
+             */
+            virtual bool trigger_hero_skill(
+                const ReadOnlyContext &ctx, const std::string &player,
+                hero::HeroSkill skill, const std::string &cause) = 0;
         };
     }
 }

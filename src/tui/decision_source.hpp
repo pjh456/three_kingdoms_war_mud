@@ -28,6 +28,7 @@
 #include "game/ai/decider.hpp"
 #include "game/ai/legal.hpp"
 #include "game/core/decision.hpp"
+#include "hero/def.hpp"
 
 namespace tkw
 {
@@ -156,6 +157,33 @@ namespace tkw
                     }
                 }
                 return "装备能力";
+            }
+
+            /**
+             * @brief 武将触发技标题：技能中文名 + 一句话效果；反馈携带伤害来源。
+             * @note 与装备能力标题同构（yes/no 面板），只在 hero_trigger 时使用。
+             */
+            inline std::string hero_trigger_title(
+                const tkw::game::ai::DecisionRequest &req)
+            {
+                std::string body = "武将技能";
+                switch (req.hero_skill)
+                {
+                case tkw::hero::HeroSkill::FanKui:
+                    if (!req.trigger_cause.empty())
+                        body = "受到 " + req.trigger_cause +
+                               " 的伤害后，可获得其一张牌";
+                    else
+                        body = "受到伤害后，可获得伤害来源一张牌";
+                    break;
+                case tkw::hero::HeroSkill::PaoXiao:
+                case tkw::hero::HeroSkill::WuSheng:
+                case tkw::hero::HeroSkill::YingZi:
+                    break;
+                }
+                return "发动 " +
+                       std::string(tkw::hero::display_skill_name(req.hero_skill)) +
+                       "（" + body + "）？";
             }
 
             /**
@@ -552,8 +580,11 @@ namespace tkw
             }
             case DecisionKind::Trigger:
             {
-                panel.title = "发动 " + detail::ability_name(req) + "（" +
-                              detail::ability_hint(req.ability) + "）？";
+                if (req.hero_trigger)
+                    panel.title = detail::hero_trigger_title(req);
+                else
+                    panel.title = "发动 " + detail::ability_name(req) + "（" +
+                                  detail::ability_hint(req.ability) + "）？";
                 panel.allow_pass = true;
                 panel.yes_no = true;
                 PanelOption yes;

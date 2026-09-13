@@ -249,11 +249,15 @@ namespace tkw
                  * @brief 触发：按代价可付性决定是否发动装备能力。
                  * @note 贯石斧需弃两张，手牌不足 2 张不发动；免费能力一律发动
                  *       （目标侧代价在接缝内不可知，由引擎侧预检兜底）。
+                 * @note 武将触发技（hero_trigger）恒发动：首片反馈为纯收益、无
+                 *       可付代价，不新增档位分化。
                  */
                 static DecisionChoice decide_trigger(const DecisionRequest &req)
                 {
                     DecisionChoice out;
                     out.accepted = true;
+                    if (req.hero_trigger)
+                        return out;
                     if (req.ability == card::Ability::DiscardTwoForceDamage)
                         out.accepted = req.view.hand.size() >= 2;
                     return out;

@@ -6302,3 +6302,157 @@ TEST_CASE("game: bingliang skip draw suppresses yingzi")
     CHECK(g.cards.hand_size("a") == 1);  // 摸牌阶段整体跳过：英姿 +1 也不生效
     CHECK(g.cards.judge_size("a") == 0);
 }
+
+// ── 反馈：触发技，受到伤害后可获得伤害来源一张牌 ─────────────────────────
+
+TEST_CASE("game: fankui steals a card from the damage source")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    auto *a = g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 3, Gender::Male, "simayi");
+    g.give("a", "sha", "p0#1");
+    g.give("a", "tao", "p0#2");
+
+    EventLog log(g.bus);
+    TestDecider decider;
+    decider.hero_triggers = {tkw::hero::HeroSkill::FanKui};
+
+    deal_damage(g.ctx, decider, "a", "b", 1);
+
+    CHECK(b->get_hp() == 2);
+    CHECK(g.cards.hand_size("a") == 1);
+    CHECK(g.cards.hand_size("b") == 1);
+    REQUIRE(decider.hero_trigger_calls.size() == 1);
+    CHECK(decider.hero_trigger_calls.front() == tkw::hero::HeroSkill::FanKui);
+
+    const auto &lines = log.lines();
+    bool moved = false;
+    for (const auto &line : lines)
+        if (line.find("move a:hand->b:hand") != std::string::npos)
+            moved = true;
+    CHECK(moved);
+}
+
+TEST_CASE("game: fankui not offered without the hero")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 3);  // 无武将
+    g.give("a", "sha", "p0#1");
+
+    EventLog log(g.bus);
+    TestDecider decider;
+    decider.hero_triggers = {tkw::hero::HeroSkill::FanKui};
+
+    deal_damage(g.ctx, decider, "a", "b", 1);
+
+    CHECK(b->get_hp() == 2);
+    CHECK(decider.hero_trigger_calls.empty());
+    CHECK(g.cards.hand_size("a") == 1);
+    CHECK(g.cards.hand_size("b") == 0);
+    for (const auto &line : log.lines())
+        CHECK(line.find("move ") == std::string::npos);
+}
+
+TEST_CASE("game: fankui declines leaves cards untouched")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    auto *a = g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 3, Gender::Male, "simayi");
+    g.give("a", "sha", "p0#1");
+
+    EventLog log(g.bus);
+    TestDecider decider;  // hero_triggers 为空：询问后拒绝发动
+
+    deal_damage(g.ctx, decider, "a", "b", 1);
+
+    CHECK(b->get_hp() == 2);
+    REQUIRE(decider.hero_trigger_calls.size() == 1);
+    CHECK(g.cards.hand_size("a") == 1);
+    CHECK(g.cards.hand_size("b") == 0);
+    for (const auto &line : log.lines())
+        CHECK(line.find("move ") == std::string::npos);
+}
+
+TEST_CASE("game: fankui not offered when source has no cards")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4);  // 空手空装备
+    auto *b = g.add_player("b", 1, 3, Gender::Male, "simayi");
+
+    TestDecider decider;
+    decider.hero_triggers = {tkw::hero::HeroSkill::FanKui};
+
+    deal_damage(g.ctx, decider, "a", "b", 1);
+
+    CHECK(b->get_hp() == 2);
+    CHECK(decider.hero_trigger_calls.empty());
+}
+
+TEST_CASE("game: fankui not offered for sourceless damage")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 3, Gender::Male, "simayi");
+
+    TestDecider decider;
+    decider.hero_triggers = {tkw::hero::HeroSkill::FanKui};
+
+    deal_damage(g.ctx, decider, "", "b", 1);
+
+    CHECK(b->get_hp() == 2);
+    CHECK(decider.hero_trigger_calls.empty());
+}
+
+TEST_CASE("game: fankui triggers before dying resolution")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 1, Gender::Male, "simayi");  // 1 体力受 1 伤
+    g.give("a", "sha", "p0#1");
+
+    EventLog log(g.bus);
+    TestDecider decider;  // 不救：b 随后死亡
+    decider.hero_triggers = {tkw::hero::HeroSkill::FanKui};
+
+    deal_damage(g.ctx, decider, "a", "b", 1);
+
+    REQUIRE(decider.hero_trigger_calls.size() == 1);
+    const auto &lines = log.lines();
+    std::size_t move_at = lines.size();
+    std::size_t dying_at = lines.size();
+    for (std::size_t i = 0; i < lines.size(); ++i)
+    {
+        if (lines[i].find("move a:hand->b:hand") != std::string::npos)
+            move_at = i;
+        if (lines[i].find("dying b") != std::string::npos)
+            dying_at = i;
+    }
+    REQUIRE(move_at < lines.size());
+    REQUIRE(dying_at < lines.size());
+    CHECK(move_at < dying_at);  // 反馈取牌先于濒死结算
+}
+
+TEST_CASE("game: fankui is deterministic across identical games")
+{
+    auto run = []()
+    {
+        TestGame g("deck", 7);
+        g.load_heroes();
+        g.add_player("a", 0, 4, Gender::Male, "simayi");
+        g.add_player("b", 1, 4);
+        g.give("b", "sha", "p0#1");
+        EventLog log(g.bus);
+        TestDecider decider;
+        decider.hero_triggers = {tkw::hero::HeroSkill::FanKui};
+        deal_damage(g.ctx, decider, "b", "a", 1);
+        return log.lines();
+    };
+    CHECK(run() == run());
+}
+

@@ -38,6 +38,10 @@ namespace
         std::size_t option_index = 0;   /**< PickCard/PickRevealed 选中的候选下标 */
         std::string second_instance_id; /**< 最近一次透传的第二张手牌 */
         bool converted_sha = false;     /**< 最近一次透传的单张转化当杀标记 */
+        bool accept_trigger = false;    /**< Trigger：返回的发动结论 */
+        bool hero_trigger = false;      /**< Trigger：最近一次是否为武将触发技 */
+        tkw::hero::HeroSkill hero_skill = tkw::hero::HeroSkill::PaoXiao;
+        std::string trigger_cause;      /**< Trigger：最近一次触发来源 */
         std::vector<tkw::card::Card> options;     /**< 最近一次请求的候选牌 */
         std::vector<tkw::card::Zone> zone_labels; /**< 与 options 等长的来源分区 */
 
@@ -48,6 +52,13 @@ namespace
             options = req.options;
             zone_labels = req.zone_labels;
             DecisionChoice out;
+            if (req.kind == DecisionKind::Trigger)
+            {
+                hero_trigger = req.hero_trigger;
+                hero_skill = req.hero_skill;
+                trigger_cause = req.trigger_cause;
+                out.accepted = accept_trigger;
+            }
             if (req.kind == DecisionKind::Play && req.legal.size() > pick_index)
             {
                 const auto &act = req.legal[pick_index];
@@ -2114,6 +2125,51 @@ TEST_CASE("ai: human trigger window explains ability")
         g.ctx, "a", tkw::card::Ability::DiscardHorseOnDamage));
     CHECK(out.str().find("麒麟弓") != std::string::npos);
     CHECK(out.str().find("坐骑") != std::string::npos);
+}
+
+TEST_CASE("ai: hero trigger routes through the adapter")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, tkw::entity::Gender::Male, "simayi");
+    g.add_player("b", 1, 4);
+    g.give("b", "sha", "s#1");
+
+    RecordingDecider rec;
+    rec.accept_trigger = true;
+    RequestDecisionSource src(rec);
+    CHECK(src.trigger_hero_skill(
+        g.ctx, "a", tkw::hero::HeroSkill::FanKui, "b"));
+    CHECK(rec.last == DecisionKind::Trigger);
+    CHECK(rec.hero_trigger);
+    CHECK(rec.hero_skill == tkw::hero::HeroSkill::FanKui);
+    CHECK(rec.trigger_cause == "b");
+
+    // accepted=false 回落为不发动
+    RecordingDecider decline;
+    RequestDecisionSource src2(decline);
+    CHECK_FALSE(src2.trigger_hero_skill(
+        g.ctx, "a", tkw::hero::HeroSkill::FanKui, "b"));
+    CHECK(decline.hero_trigger);
+    CHECK(decline.hero_skill == tkw::hero::HeroSkill::FanKui);
+}
+
+TEST_CASE("ai: human hero trigger window names the skill")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, tkw::entity::Gender::Male, "simayi");
+    g.add_player("b", 1, 4);
+
+    std::istringstream in("y\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    CHECK(src.trigger_hero_skill(
+        g.ctx, "a", tkw::hero::HeroSkill::FanKui, "b"));
+    CHECK(out.str().find("反馈") != std::string::npos);
+    CHECK(out.str().find("伤害来源") != std::string::npos);
 }
 
 namespace
