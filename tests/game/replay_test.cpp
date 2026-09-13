@@ -222,6 +222,14 @@ TEST_CASE("replay: golden fingerprints pin the rule semantics")
     // - aggressive 4 人 seed 42：336 → 391 行。首个分叉在 P1 弃牌阶段：P1
     //   当前体力 1（被 P0 的杀 2→1），旧上限 4 不弃牌，新上限 1 弃八卦阵；
     //   后续防御/死亡顺序级联，行数增加。
+    //
+    // 万箭齐发接入八卦阵闪响应（「需闪」共用入口）后的核对（新旧日志逐行
+    // diff 核对过）：四条黄金线均未进入「万箭结算时目标持有八卦阵」的触发态，
+    // 故行数与指纹不变、不重钉。四方对局中唯一打出万箭的时点（simple 2 人
+    // 第 22 行 / simple 4 人第 14 行 / aggressive 两线第 189 行）之前，目标
+    // 均未装备八卦阵：simple 两线的对手无八卦阵；aggressive 两线的 P1 抽到
+    // 八卦阵后当回合即弃置、从未装备。装备八卦阵的一方均为万箭使用者 P0，
+    // 而 AllOthers 目标不含使用者；P0 装备八卦阵也都晚于其打出万箭。
     const auto two = run_game(1, 2);
     CHECK(two.size() == 69);
     CHECK(fingerprint(two) == 9283070076194552029ULL);

@@ -132,7 +132,7 @@ namespace tkw
                             e.def.id, e.player, e.eff.amount};
                         responded = kind == card::ResponseKind::Sha
                             ? respond_sha(e.ctx, e.ai, t, "", prompt)
-                            : request_response(e.ctx, e.ai, t, kind, prompt);
+                            : request_jink(e.ctx, e.ai, t, prompt);
                     }
                     if (!responded)
                         deal_damage(e.ctx, e.ai, e.player, t, e.eff.amount);

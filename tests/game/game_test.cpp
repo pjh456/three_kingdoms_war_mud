@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <map>
@@ -2876,6 +2877,90 @@ TEST_CASE("game: bagua black judge does not dodge")
     auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 3);  // 黑判定无效，又无闪 → 受伤
+}
+
+TEST_CASE("game: bagua red judge dodges wanjian")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    g.give("a", "wanjian", "wj#0");
+    g.equip("b", "bagua", "e#0");
+    g.cards.add_to_draw(Card{"j#0", "sha", Suit::Heart, 3});  // 判定：红桃
+
+    TestDecider decider;  // 发动八卦，无真闪
+    decider.triggers = {Ability::JudgementJink};
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 4);  // 红判定视为闪 → 免伤
+    CHECK(c->get_hp() == 3);  // 无八卦无闪 → 受伤
+    CHECK(std::find(decider.trigger_calls.begin(), decider.trigger_calls.end(),
+                    Ability::JudgementJink) != decider.trigger_calls.end());
+}
+
+TEST_CASE("game: bagua declined on wanjian does not dodge")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    g.give("a", "wanjian", "wj#0");
+    g.equip("b", "bagua", "e#0");
+    g.cards.add_to_draw(Card{"j#0", "sha", Suit::Heart, 3});  // 判定：红桃
+
+    TestDecider decider;  // 未登记 JudgementJink → 拒绝发动
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);             // 未判定，又无真闪 → 受伤
+    CHECK(c->get_hp() == 3);
+    CHECK(g.cards.draw_size() == 1);     // 判定牌未被消费
+    CHECK(g.cards.discard_size() == 1);  // 仅打出的万箭入弃牌堆
+}
+
+TEST_CASE("game: bagua black judge does not dodge wanjian")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    g.give("a", "wanjian", "wj#0");
+    g.equip("b", "bagua", "e#0");
+    g.cards.add_to_draw(Card{"j#0", "sha", Suit::Spade, 6});  // 判定：黑桃
+
+    TestDecider decider;  // 不打真闪
+    decider.triggers = {Ability::JudgementJink};
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);             // 黑判定无效，又无真闪 → 受伤
+    CHECK(c->get_hp() == 3);
+    CHECK(g.cards.draw_size() == 0);     // 判定牌已消费
+    CHECK(g.cards.discard_size() == 2);  // 万箭 + 判定牌
+}
+
+TEST_CASE("game: bagua does not fire on nanman")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    g.give("a", "nanman", "n#0");
+    g.equip("b", "bagua", "e#0");
+    g.cards.add_to_draw(Card{"j#0", "sha", Suit::Heart, 3});  // 判定：红桃
+
+    TestDecider decider;  // 登记八卦能力，但南蛮要的是杀
+    decider.triggers = {Ability::JudgementJink};
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "c"});
+    REQUIRE(r.is_ok());
+    CHECK(std::find(decider.trigger_calls.begin(), decider.trigger_calls.end(),
+                    Ability::JudgementJink) == decider.trigger_calls.end());
+    CHECK(b->get_hp() == 3);          // 无杀 → 受伤
+    CHECK(c->get_hp() == 3);
+    CHECK(g.cards.draw_size() == 1);  // 判定牌未被动用
 }
 
 TEST_CASE("game: guanshi discards two cards to force the sha")

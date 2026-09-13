@@ -181,6 +181,29 @@ namespace tkw
         }
 
         /**
+         * @brief 需打出闪时的八卦阵判定：目标可选发动，红色判定视为打出闪。
+         * @return true = 判定结果视为打出闪；false = 未发动/无防具/判定失败/非红。
+         * @note 只消费判定牌并发判定弃置事件；是否实际出闪由调用方决定。
+         */
+        inline bool trigger_bagua_jink(
+            GameContext &ctx, DecisionSource &ai, const std::string &target)
+        {
+            if (!ai.trigger_effect(ctx, target, card::Ability::JudgementJink))
+                return false;
+            const card::CardDef *armor =
+                find_equipment(ctx, target, card::Ability::JudgementJink);
+            if (!armor || armor->judge.is_none())
+                return false;
+            auto judge = perform_judgement(ctx);
+            if (judge.is_none())
+                return false;
+            const card::Card judge_card = std::move(judge).unwrap();
+            discard_and_emit(ctx, target, judge_card, DiscardKind::Judgement);
+            return judge_result(armor->judge.unwrap(), judge_card) ==
+                   card::JudgeAction::Jink;
+        }
+
+        /**
          * @brief 八卦阵：需出闪时可判定，判定描述来自装备数据。
          * @note 目标可选择发动（卡面「可进行判定」）：拒绝则跳过判定，
          *       由后续响应窗口决定是否出闪。
@@ -189,20 +212,7 @@ namespace tkw
         {
             if (sc.ignore_armor || sc.responded)
                 return;
-            if (!sc.ai.trigger_effect(
-                    sc.ctx, sc.target, card::Ability::JudgementJink))
-                return;
-            const card::CardDef *armor = find_equipment(
-                sc.ctx, sc.target, card::Ability::JudgementJink);
-            if (!armor || armor->judge.is_none())
-                return;
-            auto judge = perform_judgement(sc.ctx);
-            if (judge.is_none())
-                return;
-            const card::Card judge_card = std::move(judge).unwrap();
-            discard_and_emit(sc.ctx, sc.target, judge_card, DiscardKind::Judgement);
-            if (judge_result(armor->judge.unwrap(), judge_card) ==
-                card::JudgeAction::Jink)
+            if (trigger_bagua_jink(sc.ctx, sc.ai, sc.target))
                 sc.responded = true;
         }
 
@@ -378,6 +388,28 @@ namespace tkw
                 if (has_ability(sc.ctx, owner, h.ability))
                     h.fn(sc);
             }
+        }
+
+        /**
+         * @brief 需打出闪的共用响应入口：先跑八卦阵判定，未视为闪再开真闪响应窗。
+         * @param prompt 响应来源与后果（透传给决策源；八卦阵触发不消费来源牌）。
+         * @return 是否完成闪响应（视同闪或实际打出闪）。
+         * @note 杀响应与万箭共用「需闪」语义，既有 Respond 阶段目标侧被动
+         *       （当前仅八卦阵）由此对两者一致生效；无对应防具的目标不会被询问。
+         *       新增 Respond 阶段目标侧被动时，若也应作用于万箭，须同时接入本入口。
+         */
+        inline bool request_jink(
+            GameContext &ctx, DecisionSource &ai, const std::string &target,
+            const ResponsePrompt &prompt)
+        {
+            // 有对应防具才询问发动，避免对未装备者多开触发窗口
+            if (has_ability(ctx, target, card::Ability::JudgementJink) &&
+                trigger_bagua_jink(ctx, ai, target))
+                return true;
+
+            // 无装备生效：开真闪响应窗口（打出真闪）
+            return request_response(
+                ctx, ai, target, card::ResponseKind::Jink, prompt);
         }
 
         /**
