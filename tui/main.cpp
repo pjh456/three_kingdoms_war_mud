@@ -28,12 +28,25 @@ namespace
         std::string error;
     };
 
+    /** argv 是否请求帮助（--help/-h）；预扫描，遇 --human 等取值也不影响。 */
+    bool wants_help(int argc, char **argv)
+    {
+        for (int i = 1; i < argc; ++i)
+        {
+            const std::string_view arg = argv[i];
+            if (arg == "--help" || arg == "-h")
+                return true;
+        }
+        return false;
+    }
+
     /**
      * @brief 解析 tkw-tui 的 argv 到启动选项。
      * @param argc/argv 原始命令行。
      * @return 解析成功时 error 为空；否则 error 为中文提示，options 不可用。
      * @note 支持 --human/--no-human/--players/--seed/--ai/--deck/--autosave/
      *       --hand/--mode；选项值域复用命令栏同一解析器，保证两入口同语义。
+     *       --help/-h 由 main 在调用本函数前短路，不进入此处。
      */
     ParsedArgs parse_args(int argc, char **argv)
     {
@@ -172,7 +185,8 @@ namespace
             {
                 parsed.error = "未知选项: '" + arg +
                                "'（支持 --human/--no-human/--players/--seed/"
-                               "--hand/--ai/--mode/--deck/--autosave）";
+                               "--hand/--ai/--mode/--deck/--autosave/--help；"
+                               "查看 tkw-tui --help）";
                 return parsed;
             }
             else
@@ -187,6 +201,14 @@ namespace
 
 int main(int argc, char **argv)
 {
+    // --help/-h 是纯文本，必须在非 TTY 守卫前短路：管道下也应 rc=0 并打印命令表。
+    if (wants_help(argc, argv))
+    {
+        for (const auto &line : tkw::tui::detail::help_lines())
+            std::cout << line << "\n";
+        return 0;
+    }
+
     // 全屏渲染依赖可交互终端：stdin/stdout 任一被重定向都提前退出。
     if (!pjh::platform::Console::is_tty(0) ||
         !pjh::platform::Console::is_tty(1))

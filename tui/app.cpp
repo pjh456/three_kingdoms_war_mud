@@ -32,8 +32,9 @@ namespace tkw
     {
         void App::bootstrap()
         {
-            notice_ = "new / deal / step / run / status / save / load / quit；"
-                      "help 查看用法，Esc / Ctrl-C 退出";
+            notice_ = "new / deal / step / run(r) / status(st) / save(w) / "
+                      "load(l) / cards / rules / audit / quit(q)；"
+                      "help 或 ? 查看用法，Esc / Ctrl-C 退出";
             controller_.bootstrap();
         }
 
@@ -120,7 +121,7 @@ namespace tkw
 
             ftxui::InputOption input_option;
             input_option.content = &command_input_;
-            input_option.placeholder = "输入命令（help 查看用法）";
+            input_option.placeholder = "输入命令（help 或 ? 查看用法）";
             input_option.multiline = false;
             input_option.on_enter =
                 [this]

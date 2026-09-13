@@ -124,15 +124,19 @@ namespace tkw
             }
 
             /**
-             * @brief 打印对局统计块（对局结束时调用，追加在胜者/平局行之后）。
+             * @brief 对局统计块纯行（不含换行）：头行 + 回合/胜者 + 逐座体力/击杀/伤害/治疗。
              * @param stats  本局累计的统计聚合。
              * @param game   本局运行时；存活实体体力在此读取（阵亡者显示「阵亡」）。
              * @param winner 胜者 id；空串显示「无」（平局/同归于尽）。
              * @param turns  已执行回合数。
-             * @note 玩家清单 = 存活实体 ∪ 阵亡记录，按 id 排序输出；统计以已发布事件
-             *       为准，含存档恢复的部分与读档后新增的事件。
+             * @return 行序：`对局统计:`、`  回合数: N`、`  胜者: X`，随后每玩家
+             *         「  <id>: 体力 x/y，击杀 n，伤害 d，治疗 h」（阵亡者体力段为
+             *         「阵亡」）。
+             * @note 纯行构造无输出副作用：CLI 逐行打印与 TUI 逐行写日志共用，
+             *       保证两处统计块逐字一致。玩家清单 = 存活实体 ∪ 阵亡记录，按
+             *       id 排序输出；统计以已发布事件为准，含存档恢复的部分。
              */
-            inline void print_battle_stats(
+            inline std::vector<std::string> battle_stats_lines(
                 const tkw::save::BattleStats &stats, const tkw::game::Game &game,
                 const std::string &winner, int turns)
             {
@@ -142,9 +146,10 @@ namespace tkw
                     const auto it = m.find(k);
                     return it == m.end() ? 0 : it->second;
                 };
-                std::cout << "对局统计:\n";
-                std::cout << "  回合数: " << turns << "\n";
-                std::cout << "  胜者: " << (winner.empty() ? "无" : winner) << "\n";
+                std::vector<std::string> lines;
+                lines.push_back("对局统计:");
+                lines.push_back("  回合数: " + std::to_string(turns));
+                lines.push_back("  胜者: " + (winner.empty() ? "无" : winner));
                 std::set<std::string> ids = stats.died;
                 for (const auto *e : game.entities.const_view())
                     ids.insert(e->get_id());
@@ -157,11 +162,31 @@ namespace tkw
                              "/" + std::to_string(alive.unwrap()->get_hp_bar().get_max());
                     else
                         hp = "阵亡";
-                    std::cout << "  " << id << ": " << hp << "，击杀 "
-                              << val(stats.kills, id) << "，伤害 "
-                              << val(stats.damage_dealt, id) << "，治疗 "
-                              << val(stats.healing, id) << "\n";
+                    lines.push_back("  " + id + ": " + hp + "，击杀 " +
+                                    std::to_string(val(stats.kills, id)) +
+                                    "，伤害 " +
+                                    std::to_string(val(stats.damage_dealt, id)) +
+                                    "，治疗 " +
+                                    std::to_string(val(stats.healing, id)));
                 }
+                return lines;
+            }
+
+            /**
+             * @brief 打印对局统计块（对局结束时调用，追加在胜者/平局行之后）。
+             * @param stats  本局累计的统计聚合。
+             * @param game   本局运行时；存活实体体力在此读取（阵亡者显示「阵亡」）。
+             * @param winner 胜者 id；空串显示「无」（平局/同归于尽）。
+             * @param turns  已执行回合数。
+             * @note 逐行打印 battle_stats_lines 的纯行，输出与既有 CLI 逐字节一致。
+             */
+            inline void print_battle_stats(
+                const tkw::save::BattleStats &stats, const tkw::game::Game &game,
+                const std::string &winner, int turns)
+            {
+                for (const auto &line :
+                     battle_stats_lines(stats, game, winner, turns))
+                    std::cout << line << "\n";
             }
 
             /**

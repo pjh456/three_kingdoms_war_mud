@@ -192,6 +192,10 @@ TEST_CASE("tui: run and control aliases resolve")
     CHECK(parse_command("?", base_options()).unwrap().kind == CommandKind::Help);
     CHECK(parse_command("step", base_options()).unwrap().kind ==
           CommandKind::Step);
+    CHECK(parse_command("w /tmp/a.json", base_options()).unwrap().kind ==
+          CommandKind::Save);
+    CHECK(parse_command("l /tmp/a.json", base_options()).unwrap().kind ==
+          CommandKind::Load);
 
     auto extra = parse_command("step now", base_options());
     REQUIRE(extra.is_err());
@@ -208,6 +212,14 @@ TEST_CASE("tui: save and load require exactly one file")
     auto load = parse_command("load /tmp/a.json", base_options());
     REQUIRE(load.is_ok());
     CHECK(load.unwrap().kind == CommandKind::Load);
+
+    auto alias_save = parse_command("w /tmp/a.json", base_options());
+    REQUIRE(alias_save.is_ok());
+    CHECK(alias_save.unwrap().file == "/tmp/a.json");
+
+    auto alias_load = parse_command("l /tmp/a.json", base_options());
+    REQUIRE(alias_load.is_ok());
+    CHECK(alias_load.unwrap().file == "/tmp/a.json");
 
     auto missing = parse_command("save", base_options());
     REQUIRE(missing.is_err());

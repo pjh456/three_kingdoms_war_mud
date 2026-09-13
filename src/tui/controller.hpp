@@ -379,6 +379,12 @@ namespace tkw
                 }
                 auto game = std::move(built).unwrap();
 
+                // 未实现卡警告只提示不阻断，与 CLI new 同口径。
+                for (const auto &line :
+                     tkw::cli::detail::unsupported_cards_warning_lines(
+                         game->catalog))
+                    append_line(line);
+
                 const std::string verr =
                     tkw::cli::detail::validate_humans(*game, opt.humans);
                 if (!verr.empty())
@@ -424,7 +430,7 @@ namespace tkw
             {
                 if (!session_.active || !session_.game)
                 {
-                    append_line("没有进行中的对局（先运行 new 开局）");
+                    append_line("没有进行中的对局（先运行 new 开局；help 查看用法）");
                     return;
                 }
                 auto ctx = session_.game->context();
@@ -447,7 +453,7 @@ namespace tkw
                 }
                 if (!session_.active || !session_.game)
                 {
-                    append_line("没有进行中的对局（先运行 new 开局）");
+                    append_line("没有进行中的对局（先运行 new 开局；help 查看用法）");
                     return;
                 }
                 join_worker();
@@ -479,6 +485,7 @@ namespace tkw
                 post_snapshot();
                 while (!cancel_.load() && !tkw::game::session_over(ctx))
                 {
+                    log_.push(tkw::cli::detail::turn_header_text(session_.state));
                     const std::string actor =
                         session_.state.current;  // 失败会推进，须先捕获
                     tkw::game::TurnError root =
@@ -488,7 +495,10 @@ namespace tkw
                     if (r.is_err())
                     {
                         if (r.unwrap_err() == tkw::game::LoopError::MaxRounds)
+                        {
                             log_.push("平局（达到最大回合数）");
+                            append_battle_stats({});
+                        }
                         else
                             log_.push(tkw::cli::detail::format_turn_failure(
                                 r.unwrap_err(), root, actor));
@@ -499,14 +509,30 @@ namespace tkw
                     if (!to_end)
                         break;
                 }
-                // 正常终局补一条结束行（取消/平局/失败路径各自已有提示）。
+                // 正常终局补结束行与统计块（取消/失败路径各自已有提示）。
                 if (!cancel_.load() && tkw::game::session_over(ctx))
                 {
                     log_.push("对局结束，胜者: " +
                               make_snapshot(session_, viewer_).winner_label);
+                    append_battle_stats(
+                        tkw::cli::detail::game_stats_label(ctx));
                     post_snapshot();
                 }
                 post_done();
+            }
+
+            /**
+             * @brief 把 CLI 同口径统计块逐行写入日志（终局用）。
+             * @param winner 统计块「胜者」字段：乱斗原始 id（空 = 「无」）、身份局阵营标签。
+             * @note 只在 worker 内、终局后调用；纯文本构造自 cli::detail::
+             *       battle_stats_lines，与 CLI 统计块逐字一致。取消路径不调用。
+             */
+            void append_battle_stats(const std::string &winner)
+            {
+                for (auto &line : tkw::cli::detail::battle_stats_lines(
+                         session_.stats, *session_.game, winner,
+                         session_.state.turns))
+                    log_.push(std::move(line));
             }
 
             /** @brief worker 内构造值快照与日志拷贝，经 Post 交给主线程写模型。 */
@@ -539,10 +565,12 @@ namespace tkw
                 if (!snap.active)
                     text = "没有进行中的对局";
                 else if (snap.over)
-                    text = "会话: 已结束  胜者: " + snap.winner_label;
+                    text = "会话: 已结束  胜者: " + snap.winner_label +
+                           "，存活: " + std::to_string(snap.alive);
                 else
                     text = "第 " + std::to_string(snap.turns) +
-                           " 回合  下一回合: " + snap.current + "  AI: " +
+                           " 回合  下一回合: " + snap.current + "  存活: " +
+                           std::to_string(snap.alive) + "  AI: " +
                            detail::ai_level_name(snap.ai) + "  摸牌堆 " +
                            std::to_string(snap.draw_size) + "  弃牌堆 " +
                            std::to_string(snap.discard_size);
@@ -602,7 +630,7 @@ namespace tkw
             {
                 if (!session_.active || !session_.game)
                 {
-                    append_line("没有进行中的对局（先运行 new 开局）");
+                    append_line("没有进行中的对局（先运行 new 开局；help 查看用法）");
                     return;
                 }
                 tkw::save::SessionMeta meta;
@@ -654,6 +682,13 @@ namespace tkw
                         r.unwrap_err()));
                     return;
                 }
+
+                // 未实现卡警告只提示不阻断，与 CLI load 同口径。
+                for (const auto &line :
+                     tkw::cli::detail::unsupported_cards_warning_lines(
+                         game->catalog))
+                    append_line(line);
+
                 const std::string verr =
                     tkw::cli::detail::validate_humans(*game, base_.humans);
                 if (!verr.empty())
@@ -685,17 +720,11 @@ namespace tkw
                 append_line("已加载: " + file);
             }
 
-            /** @brief 追加命令表（help/?）。 */
+            /** @brief 追加命令表（help/?）；与启动 --help 同源。 */
             void do_help()
             {
-                append_line("命令: new [--players N] [--seed S] [--mode "
-                            "brawl|identity] [--ai simple|aggressive] [--deck P] "
-                            "[--hand N] [--human <座位>] [--no-human]");
-                append_line("      deal <players> <seed>；step；run/r；status/st；"
-                            "save <file>；load <file>；quit/q；help/?");
-                append_line("      cards [--text]；rules [关键词]；audit"
-                            "（只读牌表查询，结果写入本面板）");
-                append_line("      simulate: 请退出后运行 tkw simulate（TUI 暂不支持）");
+                for (const auto &line : detail::help_lines())
+                    append_line(line);
             }
 
             /**

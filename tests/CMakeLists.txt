@@ -907,6 +907,18 @@ if(TKW_ENABLE_TUI)
   set_tests_properties(tui_non_tty_guard PROPERTIES
       WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+  # --help/-h 必须在非 TTY 守卫前短路：ctest 下本就是管道，rc=0 且打出命令表即为
+  # 绕过守卫的证据（无参走守卫则是 rc=1）。不启 pty。
+  add_test(NAME tui_help_flag
+           COMMAND sh -c
+                   "out=$($<TARGET_FILE:tkw-tui> --help 2>&1); rc=$?; \
+                    printf '%s' \"$out\" | grep -Fq 'TUI 命令' && \
+                    printf '%s' \"$out\" | grep -Fq 'cards' && [ $rc -eq 0 ] && \
+                    out2=$($<TARGET_FILE:tkw-tui> -h 2>&1); rc2=$?; \
+                    printf '%s' \"$out2\" | grep -Fq 'TUI 命令' && [ $rc2 -eq 0 ]")
+  set_tests_properties(tui_help_flag PROPERTIES
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
   # PTY 冒烟：依赖 util-linux script 提供 pty，缺失则整条不注册（照抄 raw 冒烟先例）。
   # ctest 下 script 继承的终端窗口是 0x0，须先在 pty 内 stty 固定尺寸。
   # 在临时目录建 resources 符号链接并 cd 进去跑：牌表可加载、退出自动存档落临时

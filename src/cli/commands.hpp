@@ -324,6 +324,43 @@ namespace tkw
             }
 
             /**
+             * @brief 未实现卡警告文本（不含换行）：清单为空时返回空串。
+             * @param catalog     已严格加载的牌表目录，用于展示名回落。
+             * @param unsupported 引擎未实现的卡 id 列表（game::unsupported_cards 结果）。
+             * @return 「警告: 牌堆含 N 张引擎未实现的卡:」+ 每卡 ` <name>(<id>)`；
+             *         unsupported 为空时返回空串。
+             * @note 纯文本单点：CLI 警告与 TUI 日志共用，避免两处口径漂移。
+             */
+            inline std::string unsupported_cards_warning_text(
+                const tkw::card::CardDefCatalog &catalog,
+                const std::vector<std::string> &unsupported)
+            {
+                if (unsupported.empty())
+                    return {};
+                std::string text = "警告: 牌堆含 " +
+                                   std::to_string(unsupported.size()) +
+                                   " 张引擎未实现的卡:";
+                for (const auto &id : unsupported)
+                    text += " " + audit_entry_name(catalog, id);
+                return text;
+            }
+
+            /**
+             * @brief 未实现卡警告纯行（0 或 1 行，不含换行）。
+             * @param catalog 已严格加载的牌表目录；判定经 game::unsupported_cards。
+             * @return 目录全部可结算时为空向量，否则单元素向量。
+             * @note 纯函数无输出副作用，供 CLI 逐行打印与 TUI 逐行写日志共用。
+             */
+            inline std::vector<std::string> unsupported_cards_warning_lines(
+                const tkw::card::CardDefCatalog &catalog)
+            {
+                const std::string text = unsupported_cards_warning_text(
+                    catalog, tkw::game::unsupported_cards(catalog));
+                return text.empty() ? std::vector<std::string>{}
+                                    : std::vector<std::string>{text};
+            }
+
+            /**
              * @brief 打印牌堆中引擎未实现的卡警告（建局与批量入口共用同一口径）。
              * @param catalog 已严格加载的牌表目录。
              * @param err     告警输出流。
@@ -335,14 +372,8 @@ namespace tkw
                 const tkw::card::CardDefCatalog &catalog,
                 std::ostream &err = std::cerr)
             {
-                const auto unsupported = tkw::game::unsupported_cards(catalog);
-                if (unsupported.empty())
-                    return;
-                err << "警告: 牌堆含 " << unsupported.size()
-                    << " 张引擎未实现的卡:";
-                for (const auto &id : unsupported)
-                    err << ' ' << audit_entry_name(catalog, id);
-                err << "\n";
+                for (const auto &line : unsupported_cards_warning_lines(catalog))
+                    err << line << "\n";
             }
 
             /**
@@ -460,6 +491,19 @@ namespace tkw
             };
 
             /**
+             * @brief 回合头文本（不含换行）：回合序号 + 当前玩家。
+             * @param session 当前会话进度；turns 为已执行回合数，故本回合 = turns + 1。
+             * @return 「—— 回合 N：P ——」。
+             * @note 纯文本单点：CLI 打印与 TUI 日志共用，保证两处回合头逐字一致。
+             */
+            inline std::string turn_header_text(
+                const tkw::game::GameSession &session)
+            {
+                return "—— 回合 " + std::to_string(session.turns + 1) + "：" +
+                       session.current + " ——";
+            }
+
+            /**
              * @brief 回合头：打印回合序号与当前玩家，使后续事件可归属。
              * @param session 当前会话进度；turns 为已执行回合数，故下一回合 = turns + 1。
              * @note 仅过程可见（真人默认或 --verbose）时由调用方打印；全 AI 默认
@@ -467,8 +511,7 @@ namespace tkw
              */
             inline void print_turn_header(const tkw::game::GameSession &session)
             {
-                std::cout << "—— 回合 " << (session.turns + 1) << "："
-                          << session.current << " ——\n";
+                std::cout << turn_header_text(session) << "\n";
             }
 
             /**

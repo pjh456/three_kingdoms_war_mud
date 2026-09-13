@@ -217,15 +217,16 @@ namespace tkw
                 if (!snap.active)
                     rows.push_back(ftxui::text("没有进行中的对局"));
                 else if (snap.over)
-                    rows.push_back(ftxui::text("会话: 已结束  胜者: " +
-                                               snap.winner_label));
+                    rows.push_back(ftxui::text(
+                        "会话: 已结束  胜者: " + snap.winner_label + "  存活: " +
+                        std::to_string(snap.alive)));
                 else
                     rows.push_back(ftxui::text(
                         "第 " + std::to_string(snap.turns) + " 回合  下一回合: " +
-                        snap.current + "  AI: " +
-                        tkw::tui::detail::ai_level_name(snap.ai) + "  摸牌堆 " +
-                        std::to_string(snap.draw_size) + "  弃牌堆 " +
-                        std::to_string(snap.discard_size)));
+                        snap.current + "  存活: " + std::to_string(snap.alive) +
+                        "  AI: " + tkw::tui::detail::ai_level_name(snap.ai) +
+                        "  摸牌堆 " + std::to_string(snap.draw_size) +
+                        "  弃牌堆 " + std::to_string(snap.discard_size)));
 
                 if (snap.active)
                 {

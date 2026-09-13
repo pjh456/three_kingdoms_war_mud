@@ -1006,6 +1006,17 @@ TEST_CASE("cli: brawl zero-survivor stats keep the raw empty winner")
     CHECK(tkw::cli::detail::game_stats_label(ctx).empty());
 }
 
+TEST_CASE("cli: unsupported cards warning text is empty when no cards")
+{
+    // 空目录回落 id 作展示名；空清单返回空串，非空返回单行纯文本。
+    CHECK(tkw::cli::detail::unsupported_cards_warning_text(
+              tkw::card::CardDefCatalog{}, {})
+              .empty());
+    CHECK(tkw::cli::detail::unsupported_cards_warning_text(
+              tkw::card::CardDefCatalog{}, {"foo", "bar"}) ==
+          "警告: 牌堆含 2 张引擎未实现的卡: foo(foo) bar(bar)");
+}
+
 TEST_CASE("cli: parse errors render in Chinese")
 {
     using pjh::cli::ErrorFactory;

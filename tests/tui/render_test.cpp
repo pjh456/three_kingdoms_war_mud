@@ -213,3 +213,29 @@ TEST_CASE("tui render: single panels keep board fields and viewer hand")
     const std::string hand = render_one(tkw::tui::detail::render_hand(snap));
     CHECK(hand.find("1. 杀") != std::string::npos);
 }
+
+TEST_CASE("tui render: status panel shows alive count")
+{
+    UiSnapshot snap = base_snapshot();
+    snap.active = true;
+    snap.alive = 2;
+    snap.turns = 3;
+    snap.current = "P1";
+
+    const auto render_one = [](ftxui::Element element)
+    {
+        ftxui::Screen screen(60, 10);
+        ftxui::Render(screen, element);
+        return screen.ToString();
+    };
+
+    const std::string status =
+        render_one(tkw::tui::detail::render_status(snap));
+    CHECK(status.find("存活: 2") != std::string::npos);
+
+    snap.over = true;
+    snap.winner_label = "P0";
+    const std::string over =
+        render_one(tkw::tui::detail::render_status(snap));
+    CHECK(over.find("存活: 2") != std::string::npos);
+}

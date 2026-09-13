@@ -43,6 +43,15 @@ namespace
                 return true;
         return false;
     }
+
+    bool log_contains(const std::vector<std::string> &lines,
+                      const std::string &needle)
+    {
+        for (const auto &line : lines)
+            if (line.find(needle) != std::string::npos)
+                return true;
+        return false;
+    }
 }
 
 TEST_CASE("tui: controller bootstrap starts an active session")
@@ -70,6 +79,25 @@ TEST_CASE("tui: step advances exactly one turn on the worker")
     CHECK(c.snapshot().turns == 1);
     CHECK(c.snapshot().current == "P1");
     CHECK_FALSE(c.running());
+    CHECK(log_has_prefix(c.log_lines(), "—— 回合 1：P0 ——"));
+}
+
+TEST_CASE("tui: run writes a turn header per turn")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+
+    c.execute_line("run");
+    c.wait_idle();
+
+    int headers = 0;
+    for (const auto &line : c.log_lines())
+        if (line.rfind("—— 回合 ", 0) == 0 &&
+            line.size() >= std::string("—— 回合 ").size() + 3 &&
+            line.find(" ——") != std::string::npos)
+            ++headers;
+    CHECK(headers > 1);
 }
 
 TEST_CASE("tui: run drives the session to its end")
@@ -85,6 +113,32 @@ TEST_CASE("tui: run drives the session to its end")
     CHECK_FALSE(c.snapshot().winner_label.empty());
     CHECK_FALSE(c.running());
     CHECK(log_has_prefix(c.log_lines(), "对局结束"));
+}
+
+TEST_CASE("tui: run appends battle stats block")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+
+    c.execute_line("run");
+    c.wait_idle();
+
+    CHECK(log_has_prefix(c.log_lines(), "对局统计:"));
+    CHECK(log_contains(c.log_lines(), "回合数:"));
+    CHECK(log_contains(c.log_lines(), "胜者:"));
+    CHECK(log_contains(c.log_lines(), "击杀"));
+    CHECK(log_contains(c.log_lines(), "伤害"));
+    CHECK(log_contains(c.log_lines(), "治疗"));
+}
+
+TEST_CASE("tui: standard deck has no unsupported warning")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+
+    CHECK_FALSE(log_contains(c.log_lines(), "警告: 牌堆含"));
 }
 
 TEST_CASE("tui: save then load round-trips session progress")
@@ -186,6 +240,20 @@ TEST_CASE("tui: help mentions in-place query commands")
     CHECK(mentions_rules);
     CHECK(mentions_audit);
     CHECK(mentions_simulate);
+}
+
+TEST_CASE("tui: help lists aliases defaults and log behavior")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+
+    c.execute_line("help");
+
+    CHECK(log_contains(c.log_lines(), "save/w"));
+    CHECK(log_contains(c.log_lines(), "load/l"));
+    CHECK(log_contains(c.log_lines(), "默认"));
+    CHECK(log_contains(c.log_lines(), "事件日志"));
 }
 
 TEST_CASE("tui: cards query writes deck listing to log")
@@ -387,6 +455,33 @@ TEST_CASE("tui: status appends a summary without advancing")
 
     CHECK(c.snapshot().turns == turns);
     CHECK(log_has_prefix(c.log_lines(), "状态:"));
+    CHECK(log_contains(c.log_lines(), "存活: 2"));
+}
+
+TEST_CASE("tui: no-session commands point to help")
+{
+    auto opt = test_options();
+    opt.deck = "/nonexistent-deck";  // 建局失败 → 会话 inactive
+    tkw::tui::Controller c;
+    c.set_base_options(opt);
+    c.bootstrap();
+    REQUIRE_FALSE(c.snapshot().active);
+
+    c.execute_line("step");
+    c.execute_line("save /tmp/x.json");
+
+    bool no_session = false;
+    bool mentions_help = false;
+    for (const auto &line : c.log_lines())
+    {
+        if (line.find("没有进行中的对局") == std::string::npos)
+            continue;
+        no_session = true;
+        if (line.find("help") != std::string::npos)
+            mentions_help = true;
+    }
+    CHECK(no_session);
+    CHECK(mentions_help);
 }
 
 TEST_CASE("tui: new --human validates and fills session seats")

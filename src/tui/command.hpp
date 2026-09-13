@@ -388,6 +388,36 @@ namespace tkw
                         name + " 不接受参数");
                 return tkw::Result<T, std::string>::Ok(std::move(value));
             }
+
+            /**
+             * @brief TUI 命令表/用法纯文本：命令+别名、只读查询、默认值、启动选项、键位。
+             * @return 逐行文本（不含换行）；`Controller::do_help` 与启动 `--help/-h`
+             *         共用同一来源，保证两入口逐行一致。
+             * @note 默认值取自 Options/RulesConfig 声明，不写魔法数；事件日志恒开
+             *       且无 --verbose 开关，在此明示避免与 CLI 混淆。
+             */
+            inline std::vector<std::string> help_lines()
+            {
+                const tkw::game::RulesConfig rules;
+                return {
+                    "TUI 命令与用法（help/? 或启动 --help/-h）：",
+                    "  new [--players N] [--seed S] [--hand N] [--mode brawl|identity] "
+                    "[--ai simple|aggressive] [--deck P] [--human <座位>] [--no-human]",
+                    "  deal <players> <seed>；step；run/r；status/st；save/w <file>；"
+                    "load/l <file>；quit/q；help/?",
+                    "  cards [--text]；rules [关键词]；audit（只读牌表查询，"
+                    "结果写入本面板）",
+                    "  simulate: 请退出后运行 tkw simulate（TUI 暂不支持）",
+                    "  默认: --players " +
+                        std::to_string(tkw::cli::Options{}.players) + "、--seed " +
+                        std::to_string(tkw::cli::Options{}.seed) + "、--hand " +
+                        std::to_string(rules.initial_hand) + "、--mode brawl、--ai simple",
+                    "  启动选项: --human/--no-human/--players/--seed/--hand/--ai/"
+                    "--mode/--deck/--autosave",
+                    "  键位: Esc/Ctrl-C 退出；PgUp/PgDn 翻日志；End 回最新",
+                    "  事件日志恒开；TUI 不提供 --verbose/--no-verbose",
+                };
+            }
         }  // namespace detail
 
         /**
@@ -396,10 +426,10 @@ namespace tkw
          * @param base 启动选项；new/deal 未显式给出的项沿用此基准。
          * @return Ok(Command)；Err 为面向用户的中文提示（未知命令/缺参/类型或
          *         越界/未知选项），不抛异常。
-         * @note 命令名与别名：run/r、status/st、quit/q、help/?。save/load 只取
-         *       一个文件位置参数；new 只接受行内长选项与 --human/--no-human，
-         *       不接受位置参数；cards 只接受可选 --text，rules 只接受至多一个
-         *       关键词，audit 不接受参数；simulate 仍指路回 CLI。
+         * @note 命令名与别名：run/r、status/st、save/w、load/l、quit/q、help/?。
+         *       save/load 只取一个文件位置参数；new 只接受行内长选项与
+         *       --human/--no-human，不接受位置参数；cards 只接受可选 --text，
+         *       rules 只接受至多一个关键词，audit 不接受参数；simulate 仍指路回 CLI。
          */
         inline CommandParseResult parse_command(
             std::string_view line, const tkw::cli::Options &base)
@@ -415,10 +445,10 @@ namespace tkw
                 return detail::parse_new(tokens, base);
             if (name == "deal")
                 return detail::parse_deal(tokens, base);
-            if (name == "save")
+            if (name == "save" || name == "w")
                 return detail::parse_file_command(CommandKind::Save, "save",
                                                   tokens);
-            if (name == "load")
+            if (name == "load" || name == "l")
                 return detail::parse_file_command(CommandKind::Load, "load",
                                                   tokens);
             if (name == "step")

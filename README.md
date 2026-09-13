@@ -70,8 +70,14 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
   空区显示「无」），底部命令栏：`new [--players N] [--seed S]
   [--mode brawl|identity] [--ai simple|aggressive] [--deck P] [--hand N]
   [--human <座位>] [--no-human]`、`deal <players> <seed>`、`step`、`run`/`r`、
-  `status`/`st`、`save <file>`、`load <file>`、`cards [--text]`、`rules [关键词]`、
-  `audit`、`quit`/`q`、`help`/`?`；`Esc`/`Ctrl-C` 退出。
+  `status`/`st`、`save`/`w <file>`、`load`/`l <file>`、`cards [--text]`、
+  `rules [关键词]`、`audit`、`quit`/`q`、`help`/`?`；`Esc`/`Ctrl-C` 退出。
+- 反馈对齐 CLI：`step`/`run` 每回合在日志写「—— 回合 N：P ——」回合头，终局追加
+  「对局统计:」块（回合数/胜者/体力/击杀/伤害/治疗），状态面板显示「存活: N」；
+  `new`/`load` 对未实现卡写警告进日志（只提示、不阻断）。`tkw-tui --help`/`-h`
+  打印命令与用法（纯文本，非 TTY 亦可，退出码 0）。
+- 事件日志恒开：日志面板持续显示打出/弃置/判定/摸牌/伤害等事件；TUI 不提供
+  `--verbose`/`--no-verbose` 开关。
 - 日志面板支持翻阅：`PgUp`/`PgDn` 上下翻页、`End` 回到最新（贴尾）、命令栏为空时
   `Home` 回到最早；日志溢出时右侧显示滚动条。终端过小时自动隐藏次要面板（先棋盘/
   手牌，再状态）并保留底部命令输入行，同时提示被隐藏的面板。
@@ -92,10 +98,11 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 - FTXUI 获取：优先 `find_package(ftxui CONFIG QUIET)`，未安装则 `FetchContent` 钉
   `v7.0.3`；离线可用 `-DFETCHCONTENT_SOURCE_DIR_FTXUI=<ftxui-src>` 指向预置源码，
   或用 `-DFETCHCONTENT_FULLY_DISCONNECTED=ON` 配合已 populate 的 `_deps`。
-- 同时开启测试（默认 ON）时会注册 TUI 端到端测试：非 TTY 守卫直接运行；PTY 冒烟需
-  util-linux `script`（缺失则该条不注册），除退出冒烟外还覆盖真人决策面板
-  （`tui_pty_human_smoke` 钉面板出现，`tui_pty_human_quit_pending` 钉待决中退出无 hang）
-  与小终端（`tui_pty_small_terminal` 钉 24×80 下命令输入可见）。
+- 同时开启测试（默认 ON）时会注册 TUI 端到端测试：非 TTY 守卫直接运行，`--help`/
+  `-h` 在管道下同样 rc=0；PTY 冒烟需 util-linux `script`（缺失则该条不注册），除
+  退出冒烟外还覆盖真人决策面板（`tui_pty_human_smoke` 钉面板出现，
+  `tui_pty_human_quit_pending` 钉待决中退出无 hang）与小终端
+  （`tui_pty_small_terminal` 钉 24×80 下命令输入可见）。
 - Windows/MSVC 未验证。
 
 ## 命令速查
