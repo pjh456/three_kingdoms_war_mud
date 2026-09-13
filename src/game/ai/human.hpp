@@ -169,17 +169,17 @@ namespace tkw
                 }
 
                 /**
-                 * @brief 打印决策者视角的局面摘要：己方体力/手牌数/装备/判定，
+                 * @brief 打印决策者视角的局面摘要：己方体力/完整手牌/装备/判定，
                  *        其余角色逐行给体力/手牌数/装备/距离。
-                 * @note 严格渲染 req.view 的可见性边界：双方手牌都只出数量，
-                 *       绝不展开牌面内容。
+                 * @note 严格渲染 req.view 的可见性边界：己方手牌展开牌名，其他
+                 *       角色手牌只出数量，绝不展开牌面内容。
                  * @note 纯展示，不改变候选与输入语法；每次重提示都会重绘。
                  */
                 void print_view(const DecisionRequest &req)
                 {
                     const auto &v = req.view;
                     out_ << "[" << v.self << "] 体力 " << v.self_hp << "/"
-                         << v.self_max_hp << "  手牌 " << v.hand.size()
+                         << v.self_max_hp << "  手牌 " << zone_names(req, v.hand)
                          << "  装备 " << zone_names(req, v.equip) << "  判定 "
                          << zone_names(req, v.judge) << "\n";
                     for (const auto &e : v.others)
@@ -187,6 +187,52 @@ namespace tkw
                              << "  手牌 " << e.hand_size << "  装备 "
                              << zone_names(req, e.equip) << "  距离 " << e.distance
                              << "\n";
+                }
+
+                /**
+                 * @brief 打印单张候选牌的效果文案（数据源 CardDef.text）。
+                 * @param def_id 卡牌定义 id；目录未收录回落 id 展示。
+                 * @note 文案缺失时打印「（无说明）」占位；只读查询，不改状态。
+                 */
+                void print_card_text(
+                    const DecisionRequest &req, const std::string &def_id)
+                {
+                    std::string text = "（无说明）";
+                    if (req.catalog)
+                    {
+                        const auto def = req.catalog->find(def_id);
+                        if (def.is_some() && !def.unwrap()->text.empty())
+                            text = def.unwrap()->text;
+                    }
+                    out_ << card::display_name(req.catalog, def_id) << "：" << text
+                         << "\n";
+                }
+
+                /**
+                 * @brief 处理窗口内 `card <序号>`：打印该候选牌的效果文案。
+                 * @tparam Candidates 候选容器类型。
+                 * @tparam DefIdOf    从候选元素取卡牌定义 id 的一元函数。
+                 * @param req        当前决策请求。
+                 * @param token      序号 token。
+                 * @param candidates 候选容器，序号与窗口打印的 1 基编号一致。
+                 * @param def_id_of  候选 → 定义 id 投影。
+                 * @note 序号非法时打印统一范围提示；合法时打印该牌效果文案。
+                 *       两种路径都不改变候选与窗口状态，调用点继续循环。
+                 */
+                template <typename Candidates, typename DefIdOf>
+                void show_card_or_hint(
+                    const DecisionRequest &req, const std::string &token,
+                    const Candidates &candidates, DefIdOf def_id_of)
+                {
+                    int index = 0;
+                    if (!parse_index(token, candidates.size(), index))
+                    {
+                        print_invalid(index_hint(candidates.size()));
+                        return;
+                    }
+                    print_card_text(
+                        req, def_id_of(
+                                 candidates[static_cast<std::size_t>(index - 1)]));
                 }
 
                 /** @brief 目标牌来源分区标签；非选牌决策返回空串。 */
@@ -333,6 +379,14 @@ namespace tkw
                             continue;
                         if (tokens.size() == 1 && tokens[0] == "pass")
                             return out;
+                        if (tokens.size() == 2 && tokens[0] == "card")
+                        {
+                            show_card_or_hint(
+                                req, tokens[1], req.legal,
+                                [](const LegalAction &a) -> const std::string &
+                                { return a.card.def_id; });
+                            continue;
+                        }
 
                         int index = 0;
                         if (tokens.size() == 2 && tokens[0] == "play")
@@ -378,6 +432,14 @@ namespace tkw
                             continue;
                         if (tokens.size() == 1 && tokens[0] == "pass")
                             return out;
+                        if (tokens.size() == 2 && tokens[0] == "card")
+                        {
+                            show_card_or_hint(
+                                req, tokens[1], req.options,
+                                [](const card::Card &c) -> const std::string &
+                                { return c.def_id; });
+                            continue;
+                        }
 
                         int index = 0;
                         if (tokens.size() == 2 && tokens[0] == "play")
@@ -427,6 +489,14 @@ namespace tkw
                             continue;
                         if (tokens.size() == 1 && tokens[0] == "pass")
                             return out;
+                        if (tokens.size() == 2 && tokens[0] == "card")
+                        {
+                            show_card_or_hint(
+                                req, tokens[1], hand,
+                                [](const card::Card &c) -> const std::string &
+                                { return c.def_id; });
+                            continue;
+                        }
 
                         if (tokens.size() == 4 && tokens[0] == "play" &&
                             tokens[2] == "+")
@@ -493,6 +563,14 @@ namespace tkw
                             print_invalid("请输入 pick <序号>。");
                             continue;
                         }
+                        if (tokens.size() == 2 && tokens[0] == "card")
+                        {
+                            show_card_or_hint(
+                                req, tokens[1], req.options,
+                                [](const card::Card &c) -> const std::string &
+                                { return c.def_id; });
+                            continue;
+                        }
 
                         int index = 0;
                         if (tokens.size() == 2 && tokens[0] == "pick")
@@ -544,6 +622,14 @@ namespace tkw
                             continue;
                         if (can_pass && tokens.size() == 1 && tokens[0] == "pass")
                             return out;
+                        if (tokens.size() == 2 && tokens[0] == "card")
+                        {
+                            show_card_or_hint(
+                                req, tokens[1], req.options,
+                                [](const card::Card &c) -> const std::string &
+                                { return c.def_id; });
+                            continue;
+                        }
                         if (tokens[0] != "discard")
                         {
                             print_invalid("请输入 discard <序号> ...。");

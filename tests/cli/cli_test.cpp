@@ -633,6 +633,44 @@ TEST_CASE("cli: audit entry name renders chinese name with id")
     CHECK(tkw::cli::detail::audit_entry_name(cat, "nope") == "nope(nope)");
 }
 
+TEST_CASE("cli: rules lists and filters card effect text")
+{
+    Repl repl;
+    const std::string deck = TKW_TEST_RESOURCE_DIR;
+
+    auto all = repl.run("rules --deck " + deck);
+    CHECK(all.ok);
+    CHECK(all.out.find("牌表: " + deck) != std::string::npos);
+    CHECK(all.out.find("卡牌说明（") != std::string::npos);
+    CHECK(all.out.find("杀(sha): ") != std::string::npos);
+
+    auto filtered = repl.run("rules 过河拆桥 --deck " + deck);
+    CHECK(filtered.ok);
+    CHECK(filtered.out.find("过河拆桥(guohe): 出牌阶段") != std::string::npos);
+    CHECK(filtered.out.find("弃置其区域内的一张牌") != std::string::npos);
+    CHECK(filtered.out.find("杀(sha):") == std::string::npos);
+
+    auto none = repl.run("rules 不存在的牌zzz --deck " + deck);
+    CHECK(none.ok);
+    CHECK(none.out.find("没有匹配的卡牌说明") != std::string::npos);
+}
+
+TEST_CASE("cli: cards --text appends the effect text")
+{
+    Repl repl;
+    const std::string deck = TKW_TEST_RESOURCE_DIR;
+
+    auto plain = repl.run("cards --deck " + deck);
+    REQUIRE(plain.ok);
+    CHECK(plain.out.find("杀(sha) 基本 30") != std::string::npos);
+    CHECK(plain.out.find("目标需打出一张「闪」") == std::string::npos);
+
+    auto with_text = repl.run("cards --text --deck " + deck);
+    REQUIRE(with_text.ok);
+    CHECK(with_text.out.find("杀(sha) 基本 30: 出牌阶段限一次") !=
+          std::string::npos);
+}
+
 TEST_CASE("cli: unsupported-card warning stays silent for a supported deck")
 {
     // 建局/批量入口共用的告警口径：标准牌表全部可结算时不误报。
@@ -803,7 +841,8 @@ TEST_CASE("cli: audit/cards/simulate reject --human")
 
     // 三命令都不运行真人参与的对局：给出 --human 即硬拒绝（纯中文错误）。
     for (const std::string &line :
-         {"audit --human P0", "cards --human P0", "simulate 1 --human P0"})
+         {"audit --human P0", "cards --human P0", "rules --human P0",
+          "simulate 1 --human P0"})
     {
         auto r = repl.run(line);
         CHECK_FALSE(r.ok);

@@ -357,14 +357,114 @@ TEST_CASE("ai: human decider renders the situation summary")
     CHECK(src.choose_play(g.ctx, turn).is_none());
 
     const std::string text = out.str();
-    // 己方：体力/手牌数/装备/判定逐项渲染
-    CHECK(text.find("[a] 体力 4/4  手牌 1  装备 八卦阵  判定 乐不思蜀") !=
+    // 己方：体力/完整手牌牌名/装备/判定逐项渲染
+    CHECK(text.find("[a] 体力 4/4  手牌 杀  装备 八卦阵  判定 乐不思蜀") !=
           std::string::npos);
     // 对手：体力/手牌数/装备/距离逐项渲染
     CHECK(text.find("b 体力 3/3  手牌 1  装备 青龙偃月刀  距离 1") !=
           std::string::npos);
     CHECK(text.find("s#1") != std::string::npos);      // 候选仍渲染
     CHECK(text.find("t#9") == std::string::npos);      // 对手手牌内容不泄露
+}
+
+TEST_CASE("ai: human decider lists the full own hand including unplayable cards")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+    g.give("a", "shan", "j#2");  // 闪仅在响应窗口可用，不应进合法出牌候选
+    g.give("b", "tao", "t#9");
+
+    std::istringstream in("pass\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    CHECK(src.choose_play(g.ctx, turn).is_none());
+
+    const std::string text = out.str();
+    // 完整手牌按手牌序展开；对手仍只给数量
+    CHECK(text.find("[a] 体力 4/4  手牌 杀/闪  装备 无  判定 无") !=
+          std::string::npos);
+    CHECK(text.find("b 体力 4/4  手牌 1") != std::string::npos);
+    CHECK(text.find("t#9") == std::string::npos);
+}
+
+TEST_CASE("ai: human decider prints candidate card text before playing")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "guohe", "g#1");
+    g.give("b", "sha", "s#2");  // 目标区域有牌，过河拆桥才进候选
+
+    // card 1 先打印过河拆桥卡文，再 play 1 正常出牌
+    std::istringstream in("card 1\nplay 1\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+    const tkw::game::TurnContext turn{"a", 0, 1};
+
+    const auto chosen = src.choose_play(g.ctx, turn);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().instance_id == "g#1");
+    CHECK(out.str().find("过河拆桥：出牌阶段") != std::string::npos);
+    CHECK(out.str().find("弃置其区域内的一张牌") != std::string::npos);
+    CHECK(out.str().find("输入无效") == std::string::npos);
+}
+
+TEST_CASE("ai: human decider prints candidate card text in response and discard")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "shan", "j#1");
+    g.give("a", "sha", "s#2");
+
+    {
+        // 响应窗口：card 1 打印闪的卡文后放弃
+        std::istringstream in("card 1\npass\n");
+        std::ostringstream out;
+        HumanDecider dec(in, out);
+        RequestDecisionSource src(dec);
+        CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Jink)
+                  .is_none());
+        CHECK(out.str().find("当你成为「杀」或「万箭齐发」的目标时") !=
+              std::string::npos);
+    }
+    {
+        // 弃牌窗口：card 1 打印候选卡文后再弃牌
+        std::istringstream in("card 1\ndiscard 1 2\n");
+        std::ostringstream out;
+        HumanDecider dec(in, out);
+        RequestDecisionSource src(dec);
+        const auto chosen = src.choose_discards(
+            g.ctx, "a", 2, tkw::game::DiscardReason::TurnLimit);
+        REQUIRE(chosen.size() == 2);
+        CHECK(chosen[0] == "j#1");
+        CHECK(chosen[1] == "s#2");
+        CHECK(out.str().find("闪：当你成为") != std::string::npos);
+    }
+}
+
+TEST_CASE("ai: human decider reprompts on an out-of-range card lookup")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+
+    std::istringstream in("card 9\nplay 1\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+    const tkw::game::TurnContext turn{"a", 0, 1};
+
+    const auto chosen = src.choose_play(g.ctx, turn);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().instance_id == "s#1");
+    CHECK(out.str().find("输入无效：序号需为 1-") != std::string::npos);
 }
 
 TEST_CASE("ai: human decider plays the zhangba two-card action")

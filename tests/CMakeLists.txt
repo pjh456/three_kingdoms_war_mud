@@ -169,6 +169,32 @@ add_test(NAME cli_cards_list
 set_tests_properties(cli_cards_list PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# cards --text：逐卡附 CardDef.text 效果文案（数据源同一，默认不输出）。
+add_test(NAME cli_cards_text
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> cards --text 2>&1); printf '%s' \"$out\" | grep -q '杀(sha) 基本 30: 出牌阶段限一次' && printf '%s' \"$out\" | grep -q '目标需打出一张「闪」'")
+set_tests_properties(cli_cards_text PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# rules：卡牌效果单一入口，列出全部卡文；关键词过滤只留命中卡。
+add_test(NAME cli_rules_lookup
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> rules 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '牌表: resources' && printf '%s' \"$out\" | grep -q '卡牌说明（' && printf '%s' \"$out\" | grep -q '杀(sha): ' && [ $rc -eq 0 ]")
+set_tests_properties(cli_rules_lookup PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_test(NAME cli_rules_keyword
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> rules 过河拆桥 2>&1); printf '%s' \"$out\" | grep -q '过河拆桥(guohe): 出牌阶段' && printf '%s' \"$out\" | grep -q '弃置其区域内的一张牌' && ! printf '%s' \"$out\" | grep -q '杀(sha):'")
+set_tests_properties(cli_rules_keyword PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_test(NAME cli_rules_no_match
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> rules 不存在zzz 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '没有匹配的卡牌说明' && [ $rc -eq 0 ]")
+set_tests_properties(cli_rules_no_match PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_test(NAME cli_cards_bad_deck
          COMMAND sh -c
                  "out=$($<TARGET_FILE:tkw> cards --deck /nonexistent-deck-dir 2>&1); rc=$?; printf '%s' \"$out\" | grep -Fq '加载牌堆失败（文件不存在）' && printf '%s' \"$out\" | grep -q '/nonexistent-deck-dir/deck.json' && [ $rc -eq 1 ]")
@@ -253,7 +279,7 @@ set_tests_properties(cli_help_mode_option PROPERTIES
 # （repl）不附；REPL 内 help <命令> 走同一渲染，示例同样可见。
 add_test(NAME cli_help_leaf_examples_zh
          COMMAND sh -c
-                 "for c in new deal load save run step simulate cards audit; do out=$($<TARGET_FILE:tkw> $c --help); printf '%s' \"$out\" | grep -q '示例:' || exit 1; done && $<TARGET_FILE:tkw> deal --help | grep -q 'tkw --ai aggressive deal 2 1' && ! $<TARGET_FILE:tkw> repl --help | grep -q '示例:' && rpl=$(printf 'help new\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave ''); printf '%s' \"$rpl\" | grep -q 'tkw new --players 2 --seed 1'")
+                 "for c in new deal load save run step simulate cards audit rules; do out=$($<TARGET_FILE:tkw> $c --help); printf '%s' \"$out\" | grep -q '示例:' || exit 1; done && $<TARGET_FILE:tkw> deal --help | grep -q 'tkw --ai aggressive deal 2 1' && $<TARGET_FILE:tkw> cards --help | grep -q 'tkw cards --text' && $<TARGET_FILE:tkw> rules --help | grep -q 'tkw rules 过河拆桥' && ! $<TARGET_FILE:tkw> repl --help | grep -q '示例:' && rpl=$(printf 'help new\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave ''); printf '%s' \"$rpl\" | grep -q 'tkw new --players 2 --seed 1'")
 set_tests_properties(cli_help_leaf_examples_zh PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
@@ -336,6 +362,20 @@ add_test(NAME cli_repl_human_default_verbose
                   quiet=$(printf 'new --players 2 --seed 1\\nstep\\nquit\\n' | $<TARGET_FILE:tkw> --human P0 --no-verbose repl --autosave '' 2>&1); ! printf '%s' \"$quiet\" | grep -q '\\[摸牌\\]' && \
                   ai=$(printf 'new --players 2 --seed 1\\nstep\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); ! printf '%s' \"$ai\" | grep -q '\\[摸牌\\]'")
 set_tests_properties(cli_repl_human_default_verbose PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 决策窗口可发现性：出牌窗口列出己方完整手牌（含不可出的闪/无懈），
+# `card <序号>` 打印候选卡文后再决定；对手手牌仍只给数量。
+# seed 固定 → 手牌序与候选序确定；窗口内 quit 会被吞，故末行 step 结束后再退出。
+add_test(NAME cli_repl_human_card_lookup
+         COMMAND sh -c
+                 "out=$(printf 'new --players 2 --seed 1\\nstep\\ncard 1\\npass\\ncard 1\\ndiscard 1 2\\nquit\\n' | $<TARGET_FILE:tkw> --human P0 --no-verbose repl --autosave '' 2>&1); rc=$?; \
+                  printf '%s' \"$out\" | grep -q '\\[P0\\] 体力 4/4  手牌 无懈可击/五谷丰登/无中生有/闪/顺手牵羊/杀' && \
+                  printf '%s' \"$out\" | grep -q '五谷丰登：出牌阶段' && \
+                  printf '%s' \"$out\" | grep -q '无懈可击：抵消一张锦囊牌' && \
+                  printf '%s' \"$out\" | grep -q 'P1 体力 4/4  手牌 4' && \
+                  ! printf '%s' \"$out\" | grep -q 'P1 体力 4/4  手牌 无懈' && [ $rc -eq 0 ]")
+set_tests_properties(cli_repl_human_card_lookup PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # 过程可见时 step/run 打印回合头，含回合序号与当前玩家；全 AI 默认静默无回合头。

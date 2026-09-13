@@ -125,7 +125,12 @@ namespace tkw
                 if (name == "cards")
                     return "示例:\n"
                            "    tkw cards                        列出默认牌表构成\n"
+                           "    tkw cards --text                 列出并附每张卡效果文案\n"
                            "    tkw --deck resources cards       显式指定牌表目录后再列出\n";
+                if (name == "rules")
+                    return "示例:\n"
+                           "    tkw rules                        列出全部卡牌效果说明\n"
+                           "    tkw rules 过河拆桥               按关键词过滤卡牌说明\n";
                 if (name == "audit")
                     return "示例:\n"
                            "    tkw audit                        审计默认牌堆\n"
@@ -198,6 +203,7 @@ namespace tkw
                     "    tkw --mode identity deal 4 1  身份局跑一局（4–8 人）\n"
                     "    tkw audit                审计牌堆\n"
                     "    tkw cards              列出牌表构成\n"
+                    "    tkw rules 过河拆桥      查询卡牌效果说明\n"
                     "    tkw simulate 100 2     批量模拟 100 局（2 人）\n"
                     "  REPL 会话（先 tkw repl，再逐条输入）:\n"
                     "    new --players 2 --seed 1 开新局\n"

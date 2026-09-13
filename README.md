@@ -43,7 +43,8 @@ tkw --human P0 repl   # P0 真人参与，REPL 交互模式
 |---|---|---|
 | `tkw`（无子命令） | — | 直接跑一局 AI 对局（默认 4 人、种子 42） |
 | `audit` | — | 审计牌堆，列出引擎未实现的卡 |
-| `cards` | — | 列出牌表（牌堆种类与张数） |
+| `cards` | — | 列出牌表（牌堆种类与张数；`--text` 附效果文案） |
+| `rules [关键词]` | — | 查询卡牌效果说明（`CardDef.text`，可按关键词过滤） |
 | `deal <玩家数> <种子>` | — | 跑一局：deal <玩家数> <种子> |
 | `simulate <局数> [玩家数]` | — | 批量模拟：simulate <局数> [玩家数] |
 | `new` | — | 开新对局（用 `--players`/`--seed`/`--hand`） |
@@ -71,10 +72,10 @@ tkw --human P0 repl   # P0 真人参与，REPL 交互模式
 | `--mode <brawl\|identity>` | 对局模式（默认 `brawl` 乱斗；`identity` 身份局需 4–8 人，`load` 以存档为准） |
 
 上表的选项各命令都声明并接受，但生效面不同：`--deck`/`--players`/`--hand`/`--seed`/`--ai`/`--mode`
-只对建局/载入类命令（裸 `tkw`/`deal`/`new`/`load`/`repl`/`simulate`）实际生效；`cards`/`audit`
-只读 `--deck`；`step`/`run`/`status`/`save` 只读取其中的 `--verbose`（`step`/`run`）
+只对建局/载入类命令（裸 `tkw`/`deal`/`new`/`load`/`repl`/`simulate`）实际生效；`cards`/`audit`/
+`rules` 只读 `--deck`；`step`/`run`/`status`/`save` 只读取其中的 `--verbose`（`step`/`run`）
 或全不读取（`status`/`save`）。`--human` 只在运行真人参与对局的命令生效，`audit`/`cards`/
-`simulate` 会明确拒绝；`--autosave`/`--history` 只在 `repl` 生效。**`--mode` 在 `load` 上
+`rules`/`simulate` 会明确拒绝；`--autosave`/`--history` 只在 `repl` 生效。**`--mode` 在 `load` 上
 不生效**：载入的模式与角色以存档为准，避免用命令行强行改写存档模式。
 
 会话命令（`new`/`step`/`run`/`status`/`save`/`load`）共享同一进程内的会话，通常在
@@ -103,9 +104,13 @@ tkw repl
   下一行仍回落会话默认，无需重启；`step`/`run` 在每个回合执行前打印
   `—— 回合 N：<玩家> ——` 回合头，使事件可归属到具体回合；
 - 真人参与：`tkw --human P0 repl`，轮到你时按提示输入 `play <序号>`（出牌）或
-  `pass`（不出），弃牌阶段输入 `discard <序号> ...`；REPL 内可用
-  `new --no-human` 清空启动选项带入的真人座位（同命令给 `--human` 时清空优先）。
-  `--human` 只对运行对局的命令有效，`audit`/`cards`/`simulate` 会拒绝并提示；
+  `pass`（不出），弃牌阶段输入 `discard <序号> ...`；决策窗口会列出你的**完整手牌**
+  （对手只给数量），可随时输入 `card <序号>` 查看该候选牌的完整效果文案后再决定；
+  REPL 内可用 `new --no-human` 清空启动选项带入的真人座位（同命令给 `--human` 时
+  清空优先）。`--human` 只对运行对局的命令有效，`audit`/`cards`/`rules`/`simulate`
+  会拒绝并提示；
+- 卡牌效果速查：`tkw rules [关键词]` 列出/过滤卡牌说明，`tkw cards --text` 列牌表
+  并附文案；
 - REPL 退出时若有进行中的会话，自动存档到当前目录的 `tkw-autosave.json`
   （`--autosave <path>` 可改路径，空串关闭）；`--human` 设置不存入存档，
   读档后需重新指定。
@@ -148,8 +153,9 @@ tkw repl
 | 胜利条件 | 唯一存活；达到 1000 回合上限判平局 |
 | 身份局胜利 | 主公阵营胜（主公存活）/ 反贼胜（主公阵亡且内奸非唯一存活者）/ 内奸胜（唯一存活内奸）；同归于尽为平局 |
 
-规则数值数据驱动，每张牌的效果文案见卡文件 `text` 字段；详细规则以 `tkw --help`
-与卡面文案为准。
+规则数值数据驱动；每张牌的效果文案可直接查询：`tkw rules` 列出全部、
+`tkw rules <关键词>` 过滤，`tkw cards --text` 在牌表后附文案。详细规则以
+`tkw --help` 与卡面文案为准。
 
 ## 存档说明
 

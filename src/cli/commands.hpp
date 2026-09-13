@@ -878,6 +878,8 @@ namespace tkw
             /**
              * @brief 列出牌表：只加载卡牌目录，打印牌堆名与种类/张数，再按
              *        deck 序逐卡打印「中文名(id) 大类 张数」。
+             * @param opt       对局选项；仅 --deck 决定被读取的牌表目录。
+             * @param show_text 为真时在每行末尾附 CardDef.text 效果文案。
              * @return Ok；Err 为牌堆加载失败（kind + detail，与建局错误面一致）。
              * @note 只读牌堆查询，不建局、不消耗随机源；公共选项中仅 --deck
              *       生效，其余被接受但不读取（与 audit 声明面一致），--human
@@ -885,7 +887,7 @@ namespace tkw
              *       牌堆名与种类/张数；deck.json 的 name 缺失或类型不符时头行
              *       退化为无牌堆名，不阻断列出。
              */
-            inline CliResult<void> cards_list(const Options &opt)
+            inline CliResult<void> cards_list(const Options &opt, bool show_text)
             {
                 const std::string herr = reject_humans(opt.humans, "cards");
                 if (!herr.empty())
@@ -914,9 +916,65 @@ namespace tkw
                           << "（" << cat.size() << " 种 / " << cat.total_copies()
                           << " 张）\n";
                 for (const auto &def : cat)
+                {
                     std::cout << "  " << def.name << "(" << def.id << ") "
-                              << card_type_zh(def.type) << ' ' << def.copies.size()
-                              << "\n";
+                              << card_type_zh(def.type) << ' ' << def.copies.size();
+                    if (show_text)
+                        std::cout << ": " << card_text_of(def);
+                    std::cout << "\n";
+                }
+                return CliResult<void>::Ok();
+            }
+
+            /**
+             * @brief 规则/卡牌说明查询：只加载卡牌目录，逐卡打印 CardDef.text，
+             *        关键词过滤命中卡名/id/效果文案任一子串。
+             * @param opt     对局选项；仅 --deck 决定被读取的牌表目录。
+             * @param keyword 过滤关键词；空串 = 列出全部。
+             * @return Ok；Err 为牌堆加载失败（kind + detail，与建局错误面一致）。
+             * @note 只读牌堆查询，不建局、不消耗随机源；输出头先亮明实际牌表
+             *       目录，--human 因该命令不运行对局而被拒绝。文案缺失时回落
+             *       「（无说明）」占位，不跳过该卡，保持列表面与 cards 同口径。
+             */
+            inline CliResult<void> rules_lookup(
+                const Options &opt, const std::string &keyword)
+            {
+                const std::string herr = reject_humans(opt.humans, "rules");
+                if (!herr.empty())
+                    return CliFailure{CliError(herr)};
+                tkw::config::ResourceStore store(opt.deck);
+                auto catalog = tkw::card::CardDefCatalog::load(store, "deck");
+                if (catalog.is_err())
+                {
+                    const auto &e = catalog.unwrap_err();
+                    return CliFailure{CliError(format_load_error(e))};
+                }
+                const auto &cat = catalog.unwrap();
+
+                std::string body;
+                std::size_t shown = 0;
+                for (const auto &def : cat)
+                {
+                    if (!keyword.empty() &&
+                        def.name.find(keyword) == std::string::npos &&
+                        def.id.find(keyword) == std::string::npos &&
+                        def.text.find(keyword) == std::string::npos)
+                        continue;
+                    body += "  " + def.name + "(" + def.id + "): " +
+                            card_text_of(def) + "\n";
+                    ++shown;
+                }
+
+                std::cout << "牌表: " << opt.deck.string() << "\n";
+                if (keyword.empty())
+                    std::cout << "卡牌说明（" << shown << " 种）:\n";
+                else
+                    std::cout << "卡牌说明（匹配「" << keyword << "」的 " << shown
+                              << " 种）:\n";
+                if (shown == 0)
+                    std::cout << "  没有匹配的卡牌说明。\n";
+                else
+                    std::cout << body;
                 return CliResult<void>::Ok();
             }
 
@@ -1078,11 +1136,33 @@ namespace tkw
                 { return detail::audit_deck(detail::options_from(ctx)); });
 
             // cards：列出牌表（只读牌堆查询，仅 --deck 生效；公共选项与 audit 同款）
-            auto &cards = app.add_leaf("cards", "列出牌表（牌堆种类与张数）");
+            auto &cards =
+                app.add_leaf("cards", "列出牌表（牌堆种类与张数；--text 附效果文案）");
             detail::declare_common_options(cards, rules);
+            cards.option<fixed_string("text")>(
+                     "--text", "在每张卡后附效果说明文案")
+                .boolean();
             cards.action(
                 [](ParseContext &ctx) -> CliResult<void>
-                { return detail::cards_list(detail::options_from(ctx)); });
+                {
+                    return detail::cards_list(
+                        detail::options_from(ctx),
+                        ctx.get_or<bool, fixed_string("text")>(false));
+                });
+
+            // rules：卡牌效果说明查询（只读牌堆查询，数据源 CardDef.text）
+            auto &rules_cmd =
+                app.add_leaf("rules", "查询卡牌效果说明：rules [关键词]");
+            detail::declare_common_options(rules_cmd, rules);
+            rules_cmd.arg<std::string, 0>(
+                "关键词", "按卡名/id/效果文案过滤；省略则列出全部");
+            rules_cmd.action(
+                [](ParseContext &ctx) -> CliResult<void>
+                {
+                    return detail::rules_lookup(
+                        detail::options_from(ctx),
+                        ctx.get_or<std::string, 0>(""));
+                });
 
             // deal：位置参数跑局（REPL/批量通用）
             auto &deal = app.add_leaf("deal", "跑一局：deal <玩家数> <种子>");

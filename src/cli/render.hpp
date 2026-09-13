@@ -51,6 +51,17 @@ namespace tkw
                 }
             }
 
+            /**
+             * @brief 卡牌效果文案：数据源为 CardDef.text。
+             * @param def 卡牌定义。
+             * @return text 非空原样返回；空文案回落「（无说明）」占位，避免用户
+             *         误以为命令漏输出。
+             */
+            inline std::string card_text_of(const tkw::card::CardDef &def)
+            {
+                return def.text.empty() ? "（无说明）" : def.text;
+            }
+
             /** 卡牌区域 → 中文展示（事件日志移牌行用；Limbo 为正在转移）。 */
             inline constexpr const char *zone_name_zh(const tkw::Zone z)
             {
