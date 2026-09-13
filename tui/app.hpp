@@ -8,6 +8,7 @@
 #ifndef INCLUDE_TKW_TUI_APP_HPP
 #define INCLUDE_TKW_TUI_APP_HPP
 
+#include <cstddef>
 #include <string>
 #include <utility>
 
@@ -23,6 +24,8 @@ namespace tkw
         /**
          * @class App
          * @brief TUI 壳：把 FTXUI 组件、屏幕回送接缝、命令输入与决策面板接到 Controller。
+         * @note 日志滚动状态只由 UI 主线程读写，不影响 Container 焦点链；渲染参数
+         *       （布局分级、滚动位置）都在 render() 内折成纯值交给渲染层。
          */
         class App
         {
@@ -62,11 +65,25 @@ namespace tkw
             /** @brief 有待决且面板未显示时取走面板；每个待决只取一次。 */
             void sync_decision();
 
+            /**
+             * @brief 日志视口相对位置。
+             * @return 跟随末尾或行数 ≤1 时恒 1；否则锚定行下标占总行数的比例。
+             */
+            float log_ratio() const;
+
+            /**
+             * @brief 按行滚动日志视口；越界钳位，滚到尾部恢复跟随。
+             * @param delta 正数向尾部、负数向顶部移动的行数。
+             */
+            void scroll_log(int delta);
+
             Controller controller_;      /**< 会话驱动、worker、日志与存档 */
             std::string command_input_;  /**< 命令输入缓冲（先声明，后于输入组件析构） */
             ftxui::Component input_;     /**< 命令输入框 */
             DecisionPanel decision_panel_; /**< 真人待决面板（覆盖输入行） */
             std::string notice_;         /**< 底部提示行文案 */
+            bool log_follow_ = true;     /**< 日志视口是否贴尾 */
+            std::size_t log_anchor_ = 0; /**< 非跟随时锚定的行下标（0=顶） */
         };
     }  // namespace tui
 }  // namespace tkw

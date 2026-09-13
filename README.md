@@ -72,6 +72,9 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
   [--human <座位>] [--no-human]`、`deal <players> <seed>`、`step`、`run`/`r`、
   `status`/`st`、`save <file>`、`load <file>`、`quit`/`q`、`help`/`?`；`Esc`/`Ctrl-C`
   退出。
+- 日志面板支持翻阅：`PgUp`/`PgDn` 上下翻页、`End` 回到最新（贴尾）、命令栏为空时
+  `Home` 回到最早；日志溢出时右侧显示滚动条。终端过小时自动隐藏次要面板（先棋盘/
+  手牌，再状态）并保留底部命令输入行，同时提示被隐藏的面板。
 - 真人参与：启动即真人局 `./build-tui/tui/tkw-tui --human P0 --players 2 --seed 1`
   （`--human` 可重复，`--no-human` 清空），也可在命令栏 `new --human P0 ...` 开局。
   轮到你时底部命令栏替换为决策面板，按键：`↑`/`↓` 选择候选，`Enter` 确认，`p`
@@ -90,7 +93,8 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
   或用 `-DFETCHCONTENT_FULLY_DISCONNECTED=ON` 配合已 populate 的 `_deps`。
 - 同时开启测试（默认 ON）时会注册 TUI 端到端测试：非 TTY 守卫直接运行；PTY 冒烟需
   util-linux `script`（缺失则该条不注册），除退出冒烟外还覆盖真人决策面板
-  （`tui_pty_human_smoke` 钉面板出现，`tui_pty_human_quit_pending` 钉待决中退出无 hang）。
+  （`tui_pty_human_smoke` 钉面板出现，`tui_pty_human_quit_pending` 钉待决中退出无 hang）
+  与小终端（`tui_pty_small_terminal` 钉 24×80 下命令输入可见）。
 - Windows/MSVC 未验证。
 
 ## 命令速查

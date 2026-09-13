@@ -892,7 +892,9 @@ if(TKW_ENABLE_TUI)
   # 源含 tui/decision_panel.cpp；FTXUI 目标在根级后于本目录定义，链接名在 generate
   # 期解析。仅在 ON 构建注册，OFF 时不引入 FTXUI 依赖。
   add_executable(tui_panel_tests test_main.cpp tui/decision_panel_test.cpp
-                                 ${CMAKE_SOURCE_DIR}/tui/decision_panel.cpp)
+                                 tui/render_test.cpp
+                                 ${CMAKE_SOURCE_DIR}/tui/decision_panel.cpp
+                                 ${CMAKE_SOURCE_DIR}/tui/render.cpp)
   target_include_directories(tui_panel_tests PRIVATE ${CMAKE_SOURCE_DIR}/tui)
   target_link_libraries(tui_panel_tests PRIVATE ftxui::ftxui tkw_tui doctest)
   doctest_discover_tests(tui_panel_tests)
@@ -955,6 +957,17 @@ if(TKW_ENABLE_TUI)
                       out=$(cd $d && { sleep 1; printf 'quit\\n'; sleep 0.8; } | script -qec 'stty rows 40 cols 120; $<TARGET_FILE:tkw-tui> --mode identity --human P1 --players 4 --seed 1' /dev/null 2>&1); rc=$?; rm -rf $d; \
                       printf '%s' \"$out\" | grep -aqF '[主公]' && printf '%s' \"$out\" | grep -aqF '[未知]' && [ $rc -eq 0 ]")
     set_tests_properties(tui_pty_identity_hidden_role PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        TIMEOUT 30)
+
+    # 小终端（24 行仍属 Full）不隐藏命令输入：只钉占位符可见与 rc；尺寸固定
+    # 避免继承 ctest 的 0x0 窗口。既有 40x120 用例继续作为「≥24 行不降级」护栏。
+    add_test(NAME tui_pty_small_terminal
+             COMMAND sh -c
+                     "d=$(mktemp -d); ln -s '${CMAKE_SOURCE_DIR}/resources' $d/resources; \
+                      out=$(cd $d && { sleep 0.5; printf 'quit\\n'; sleep 0.5; } | script -qec 'stty rows 24 cols 80; $<TARGET_FILE:tkw-tui>' /dev/null 2>&1); rc=$?; rm -rf $d; \
+                      printf '%s' \"$out\" | grep -aq '输入命令' && [ $rc -eq 0 ]")
+    set_tests_properties(tui_pty_small_terminal PROPERTIES
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         TIMEOUT 30)
   endif()

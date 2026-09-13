@@ -2,6 +2,7 @@
 add_executable(tkw-tui
     main.cpp
     app.cpp
+    render.cpp
     decision_panel.cpp
 )
 
