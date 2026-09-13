@@ -199,7 +199,14 @@ namespace tkw
                         sha_multi_target(ctx, player, cards_consumed);
                     const std::size_t multi_max = static_cast<std::size_t>(
                         rules_of(ctx).sha_multi_target_max);
-                    target_ok = targets.size() <= (multi_sha ? multi_max : 1);
+
+                    // 无重复：原集合长度须等于去重后长度，否则 {b,b}/{b,b,b}
+                    // 这类重复目标会在结算端按原集合逐目标结算而重复造成伤害
+                    std::vector<std::string> uniq = targets;
+                    std::sort(uniq.begin(), uniq.end());
+                    uniq.erase(std::unique(uniq.begin(), uniq.end()), uniq.end());
+                    target_ok = targets.size() == uniq.size() &&
+                                targets.size() <= (multi_sha ? multi_max : 1);
                     break;
                 }
                 case card::Scope::All:

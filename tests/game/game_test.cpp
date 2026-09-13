@@ -3496,6 +3496,105 @@ TEST_CASE("game: fangtian rejects more targets than the extra allowance")
     CHECK(g.cards.hand_size("a") == 1);  // 校验失败，杀未消耗
 }
 
+TEST_CASE("game: fangtian rejects duplicated multi-target sha")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    auto *d = g.add_player("d", 3, 4);
+    g.equip("a", "fangtian", "e#0");
+    g.give("a", "sha", "s#1");  // 唯一手牌，杀是最后一张
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "b"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+    CHECK(b->get_hp() == 4);  // 重复目标未被结算两次
+    CHECK(c->get_hp() == 4);
+    CHECK(d->get_hp() == 4);
+    CHECK(g.cards.hand_size("a") == 1);  // 校验失败，杀未消耗
+    CHECK(g.cards.discard_size() == 0);
+}
+
+TEST_CASE("game: fangtian rejects duplicated targets in all shapes")
+{
+    // 两个 b：数量未超上限但重复
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.add_player("d", 3, 4);
+    g.equip("a", "fangtian", "e#0");
+    g.give("a", "sha", "s#1");
+    const auto played = g.cards.hand("a")[0];
+
+    TestDecider decider;
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "b", "b"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+    CHECK(g.cards.hand_size("a") == 1);
+    CHECK(g.cards.discard_size() == 0);
+
+    // 三个位置凑数：既有重复又未覆盖足够目标
+    TestGame h("deck");
+    h.add_player("a", 0, 4);
+    h.add_player("b", 1, 4);
+    h.add_player("c", 2, 4);
+    h.add_player("d", 3, 4);
+    h.equip("a", "fangtian", "e#0");
+    h.give("a", "sha", "s#1");
+    const auto played2 = h.cards.hand("a")[0];
+
+    auto r2 = resolve_play(h.ctx, decider, "a", played2, {"b", "b", "c"});
+    REQUIRE(r2.is_err());
+    CHECK(r2.unwrap_err() == EffectError::InvalidTarget);
+    CHECK(h.cards.hand_size("a") == 1);
+    CHECK(h.cards.discard_size() == 0);
+
+    // 对照：三个互异目标仍被接受
+    TestGame i("deck");
+    i.add_player("a", 0, 4);
+    auto *ib = i.add_player("b", 1, 4);
+    auto *ic = i.add_player("c", 2, 4);
+    auto *id = i.add_player("d", 3, 4);
+    i.equip("a", "fangtian", "e#0");
+    i.give("a", "sha", "s#1");
+    const auto played3 = i.cards.hand("a")[0];
+
+    auto r3 = resolve_play(i.ctx, decider, "a", played3, {"b", "c", "d"});
+    REQUIRE(r3.is_ok());
+    CHECK(ib->get_hp() == 3);
+    CHECK(ic->get_hp() == 3);
+    CHECK(id->get_hp() == 3);
+    CHECK(i.cards.hand_size("a") == 0);
+}
+
+TEST_CASE("game: zhangba fangtian rejects duplicated multi-target")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    auto *d = g.add_player("d", 3, 4);
+    g.equip("a", "zhangba", "e#0");
+    g.equip("a", "fangtian", "e#1");
+    g.give("a", "wuzhong", "x#1");
+    g.give("a", "tao", "x#2");  // pair 即最后两张手牌
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"x#1", {"b", "b"}, "x#2"}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == TurnError::InvalidTarget);
+    CHECK(b->get_hp() == 4);
+    CHECK(c->get_hp() == 4);
+    CHECK(d->get_hp() == 4);
+    CHECK(g.cards.hand_size("a") == 2);  // 校验失败，两张牌都未消耗
+    CHECK(g.cards.discard_size() == 0);
+}
+
 TEST_CASE("game: fangtian does not relax non-damage one-other target count")
 {
     TestGame g("deck");
