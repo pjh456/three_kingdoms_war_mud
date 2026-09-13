@@ -577,6 +577,34 @@ TEST_CASE("game: wugu forced pick rejects a decline")
     CHECK(g.cards.discard_size() == 0);
 }
 
+TEST_CASE("game: wugu refill rolls back the played card on an illegal reveal pick")
+{
+    // 摸牌堆空、弃牌堆非空时，亮牌首张即触发弃牌堆洗回，打出的五谷会被一并
+    // 洗入摸牌堆；非法亮牌选择整体失败后，打出的五谷仍须回到打出者手牌，
+    // 牌数守恒（不得滞留摸牌堆）。
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "wugu", "w#0");
+    g.cards.discard(Card{"d#0", "shan", Suit::Heart, 2});
+    CHECK(g.cards.draw_size() == 0);
+    CHECK(g.cards.discard_size() == 1);
+
+    TestDecider decider;
+    decider.bogus_revealed = true;
+    decider.valid_revealed_first = 1;  // a 先合法选，b 返回不在亮牌中的牌
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"a", "b"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidChoice);
+    CHECK(g.cards.hand_size("a") == 1);  // 打出的五谷被取回
+    CHECK(g.cards.hand_size("b") == 0);
+    CHECK(g.cards.discard_size() == 0);
+    CHECK(g.cards.draw_size() == 1);  // 仅剩洗回的弃牌，五谷不在其中
+    CHECK(g.cards.hand_size("a") + g.cards.hand_size("b") +
+              g.cards.draw_size() + g.cards.discard_size() == 2);
+}
+
 TEST_CASE("game: guohe discards target card")
 {
     TestGame g("deck");

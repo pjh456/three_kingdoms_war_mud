@@ -156,6 +156,12 @@ namespace tkw
                 return discard_pile.remove(instance_id);
             }
 
+            /** @brief 从摸牌堆取回一张牌（结算回滚用）；不存在时 None。 */
+            Option<Card> remove_from_draw(const std::string &instance_id)
+            {
+                return draw_pile.remove(instance_id);
+            }
+
             /** @brief 置摸牌堆顶（种牌堆/结算后回置等）。 */
             void add_to_draw(Card card) { draw_pile.push(std::move(card)); }
 

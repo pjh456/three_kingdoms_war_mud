@@ -355,7 +355,9 @@ namespace tkw
          * @brief 结算「player 打出 played 牌，指定 targets」。
          * @note played 按值传入：结算过程会把该牌移出手牌，引用会失效。
          *       校验失败（未知卡/越范围/未实现/空目标）不消耗该牌；
-         *       校验通过后先把打出的牌弃置，再应用效果。
+         *       校验通过后先把打出的牌弃置，再应用效果；结算失败时从弃牌堆
+         *       取回，若途中摸牌堆空、弃牌堆洗回已将该牌并入摸牌堆，则改从
+         *       摸牌堆取回（洗回已消耗随机流，不回退）。
          */
         inline GameResult<void> resolve_play(
             GameContext &ctx, DecisionSource &ai, const std::string &player,
@@ -401,9 +403,12 @@ namespace tkw
             const auto rr = detail::apply_effect(invocation);
             if (rr.is_err())
             {
-                // 结算失败回滚：仅取回打出的牌；结算中途已消耗的响应牌
-                // （如决斗中打出的杀）不回退
+                // 结算失败回滚：取回打出的牌（结算途中摸牌堆空洗回时，该牌可能
+                // 已随弃牌堆并入摸牌堆）；结算中途已消耗的响应牌（如决斗中打出
+                // 的杀）不回退
                 auto back = ctx.cards->remove_from_discard(played.instance_id);
+                if (back.is_none())
+                    back = ctx.cards->remove_from_draw(played.instance_id);
                 if (back.is_some())
                     ctx.cards->add_to_hand(player, std::move(back).unwrap());
             }
