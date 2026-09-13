@@ -1331,6 +1331,43 @@ TEST_CASE("ai: identity counter declines an enemy self-benefit trick")
     CHECK(ai.play_counter(g.ctx, "a", "c", {"c"}, "wuzhong").is_none());
 }
 
+TEST_CASE("ai: identity counter declines an enemy beneficial group trick")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.give("a", "wuxie", "w#0");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Lord},
+               {"b", tkw::game::Role::Loyalist},
+               {"c", tkw::game::Role::Rebel}};
+
+    tkw::game::SimpleAI ai;
+    // 敌方桃园/五谷冲友方 b：抵消只会让己方少回血/少摸牌，故不出
+    CHECK(ai.play_counter(g.ctx, "a", "c", {"b"}, "taoyuan").is_none());
+    CHECK(ai.play_counter(g.ctx, "a", "c", {"b"}, "wugu").is_none());
+}
+
+TEST_CASE("ai: identity counter still nullifies an enemy aoe trick")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.give("a", "wuxie", "w#0");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Lord},
+               {"b", tkw::game::Role::Loyalist},
+               {"c", tkw::game::Role::Rebel}};
+
+    tkw::game::SimpleAI ai;
+    // 敌方万箭冲友方 b：伤害效果不受有益极性门影响，首位保护者仍出无懈
+    const auto chosen = ai.play_counter(g.ctx, "a", "c", {"b"}, "wanjian");
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap() == "w#0");
+}
+
 TEST_CASE("ai: identity rescue saves only own camp")
 {
     TestGame g("deck");

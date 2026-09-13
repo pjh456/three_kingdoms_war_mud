@@ -127,6 +127,26 @@ namespace tkw
                         return out;
 
                     const std::string &t = req.counter_targets.front();
+
+                    // 敌方有益锦囊（桃园/五谷/无中生有等）对目标回血或摸牌，
+                    // 抵消它等于伤害己方（或浪费无懈），故一律不出。仅当目录
+                    // 能解析出定义时判极性；空/未知 def 保持旧行为，避免打断
+                    // 不携定义的直调用例。
+                    const card::CardDef *trick = find_def(req, req.counter_trick);
+                    if (trick && trick->effect.is_some())
+                    {
+                        using E = card::CardEffectKind;
+                        switch (trick->effect.unwrap().kind)
+                        {
+                        case E::Heal:
+                        case E::Draw:
+                        case E::RevealPick:
+                            return out;
+                        default:
+                            break;
+                        }
+                    }
+
                     const bool hostile =
                         req.counter_user.empty() ||
                         is_enemy(view.self_role,
@@ -135,8 +155,8 @@ namespace tkw
                         req.counter_user.empty() ? t : req.counter_user;
 
                     // 冲自己或友方：使用者敌对且本决策者是窗内首位保护者时
-                    // 出一张，保证同一无懈窗至多一张，避免目标本人与更早的
-                    // 保护者同窗各出一张导致偶数相抵
+                    // 出一张；同一轮至多一名保护者出手，首位保护者持多张无懈
+                    // 时仍会被逐轮重问（已知残差）
                     if (hostile && protects(view, t) &&
                         is_first_protector(view, t, start))
                         out.instance_id = Option<std::string>::Some(
@@ -533,8 +553,9 @@ namespace tkw
                 }
 
                 /**
-                 * @brief 决策者是否是 target 在窗口序中的首位保护者：只有首位
-                 *        出手，保证同一无懈窗至多一张，不会多友同窗偶数相抵。
+                 * @brief 决策者是否是 target 在窗口序中的首位保护者：同一轮
+                 *        至多一名保护者出手；首位保护者持多张无懈时仍会被逐轮
+                 *        重问（已知残差）。
                  */
                 static bool is_first_protector(
                     const AiView &view, const std::string &target,
