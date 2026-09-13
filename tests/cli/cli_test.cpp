@@ -354,6 +354,33 @@ TEST_CASE("cli: draw event label reflects kill reward semantics")
     CHECK(out.find("[摸牌] P1 杀") != std::string::npos);
 }
 
+TEST_CASE("cli: event log hides drawn card names of non-human seats")
+{
+    Repl repl;
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+
+    auto handles = tkw::cli::detail::subscribe_event_log(
+        *repl.session.game, true, std::vector<std::string>{"P0"});
+    const auto publish = [&](const std::string &entity)
+    {
+        auto ev = std::make_shared<tkw::CardDrawnEvent>();
+        ev->entity = entity;
+        ev->instance_id = "x";
+        ev->def_id = "sha";
+        repl.session.game->bus.publish(ev);
+    };
+
+    std::streambuf *old = std::cout.rdbuf(repl.captured_cout.rdbuf());
+    publish("P1");
+    publish("P0");
+    std::cout.rdbuf(old);
+
+    const std::string out = repl.captured_cout.str();
+    CHECK(out.find("[摸牌] P1 未知牌") != std::string::npos);
+    CHECK(out.find("[摸牌] P1 杀") == std::string::npos);
+    CHECK(out.find("[摸牌] P0 杀") != std::string::npos);
+}
+
 TEST_CASE("cli: verbose log renders card moved events")
 {
     Repl repl;

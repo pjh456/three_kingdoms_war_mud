@@ -393,6 +393,18 @@ add_test(NAME cli_deal_human_default_verbose
 set_tests_properties(cli_deal_human_default_verbose PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# 真人局日志隐藏对手摸牌牌名：AI 座位摸牌渲染「未知牌」，真人座位仍出牌名。
+# deal 跑全回合，初始发牌即覆盖 P1 的进手牌；EOF 可能中途失败，故只钉文本不钉 rc。
+add_test(NAME cli_human_event_log_hides_opponent_draws
+         COMMAND sh -c
+                 "out=$(printf '' | $<TARGET_FILE:tkw> --human P0 --verbose deal 2 1 2>&1); \
+                  printf '%s' \"$out\" | grep -q '\\[摸牌\\] P1 未知牌' && \
+                  printf '%s' \"$out\" | awk '/^\\[摸牌\\] P1 / && $3 != \"未知牌\" { bad=1 } END { exit !!bad }' && \
+                  printf '%s' \"$out\" | awk '/^\\[摸牌\\] P0 / && $3 == \"未知牌\" { bad=1 } END { exit !!bad }' && \
+                  printf '%s' \"$out\" | grep -q '\\[摸牌\\] P0 '")
+set_tests_properties(cli_human_event_log_hides_opponent_draws PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 裸 tkw 走根 action，覆盖第二条 run_game 调用点：真人座位默认开日志与回合头。
 add_test(NAME cli_bare_human_default_verbose
          COMMAND sh -c

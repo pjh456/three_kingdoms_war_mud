@@ -44,6 +44,9 @@ namespace tkw
                 }
             }
 
+            /** 隐藏牌展示占位：不可见实体摸到的牌不向人类可见日志暴露牌名。 */
+            inline constexpr const char *kHiddenCardName = "未知牌";
+
             /** @brief [打出] 行：使用者在某结算点打出一张牌（不含换行）。 */
             inline std::string card_played_line(
                 const tkw::card::CardDefCatalog &catalog,
@@ -75,17 +78,22 @@ namespace tkw
 
             /**
              * @brief [摸牌] 行：击杀奖惩摸牌与常规摸牌同走摸牌事件。
-             * @note KillReward → [击杀奖励]，其余 → [摸牌]。
+             * @param reveal 为假时牌名回落 kHiddenCardName，不向人类可见日志
+             *               暴露不可见实体的手牌；无真人视角的调用方保持默认全可见。
+             * @note KillReward → [击杀奖励]，其余 → [摸牌]；行结构（标签 + 实体 +
+             *       空格 + 名称）不变，便于既有解析。
              */
             inline std::string card_drawn_line(
                 const tkw::card::CardDefCatalog &catalog,
-                const tkw::CardDrawnEvent &event)
+                const tkw::CardDrawnEvent &event, bool reveal = true)
             {
                 const char *label =
                     event.kind == tkw::DrawKind::KillReward ? "[击杀奖励] "
                                                             : "[摸牌] ";
-                return std::string(label) + event.entity + " " +
-                       tkw::card::display_name(catalog, event.def_id);
+                const std::string name =
+                    reveal ? tkw::card::display_name(catalog, event.def_id)
+                           : kHiddenCardName;
+                return std::string(label) + event.entity + " " + name;
             }
 
             /**
@@ -134,16 +142,27 @@ namespace tkw
                 return "[阵亡] " + event.entity_id;
             }
 
+            /** 摸牌可见性谓词：默认全可见（无真人视角的 TUI / 全 AI 口径）。 */
+            struct RevealAll
+            {
+                bool operator()(const std::string &) const noexcept { return true; }
+            };
+
             /**
              * @brief 订阅本局 7 类日志事件，逐事件把整行文案交给 sink。
              * @tparam Sink 可拷贝可调用对象，签名兼容 `void(const std::string&)`。
+             * @tparam Reveal 摸牌可见性谓词，签名兼容 `bool(const std::string&)`，
+             *                入参为摸牌实体 id；返回假时该行牌名回落占位。
+             * @param reveal 决定某实体摸牌的牌名是否进入日志；默认全可见。
              * @return 订阅句柄；析构即退订。
-             * @note 句柄只应活在需要日志的作用域内，不得存入会话：会话被覆盖时会
-             *       先析构旧 Game（含总线），遗留句柄将对已释放总线退订。
+             * @note 谓词按值捕获进摸牌 handler，随 handler 存活；其余 6 类事件为
+             *       公开信息，不消费谓词。句柄只应活在需要日志的作用域内，不得存入
+             *       会话：会话被覆盖时会先析构旧 Game（含总线），遗留句柄将对已
+             *       释放总线退订。
              */
-            template <typename Sink>
+            template <typename Sink, typename Reveal = RevealAll>
             inline std::vector<tkw::EventBus::Handle> subscribe_event_log_to(
-                tkw::game::Game &game, Sink sink)
+                tkw::game::Game &game, Sink sink, Reveal reveal = {})
             {
                 std::vector<tkw::EventBus::Handle> handles;
                 handles.push_back(game.bus.subscribe(tkw::Handler<tkw::CardPlayedEvent>(
@@ -157,9 +176,12 @@ namespace tkw
                         { sink(card_discarded_line(catalog, c.event)); })));
                 handles.push_back(game.bus.subscribe(
                     tkw::Handler<tkw::CardDrawnEvent>(
-                        [&catalog = game.catalog, sink](
+                        [&catalog = game.catalog, sink, reveal](
                             tkw::HandlerContext<tkw::CardDrawnEvent> &c)
-                        { sink(card_drawn_line(catalog, c.event)); })));
+                        {
+                            sink(card_drawn_line(
+                                catalog, c.event, reveal(c.event.entity)));
+                        })));
                 handles.push_back(game.bus.subscribe(
                     tkw::Handler<tkw::CardMovedEvent>(
                         [&catalog = game.catalog, sink](

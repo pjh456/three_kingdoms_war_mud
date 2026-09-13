@@ -70,6 +70,8 @@ TEST_CASE("tui: log formatters render labels verbatim")
           "[击杀奖励] P1 杀");
     drawn.kind = tkw::DrawKind::Normal;
     CHECK(tkw::cli::detail::card_drawn_line(catalog, drawn) == "[摸牌] P1 杀");
+    CHECK(tkw::cli::detail::card_drawn_line(catalog, drawn, false) ==
+          "[摸牌] P1 未知牌");
 
     tkw::CardMovedEvent moved;
     moved.from_entity = "";

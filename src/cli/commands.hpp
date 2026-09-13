@@ -233,7 +233,7 @@ namespace tkw
                     .min(0);
                 cmd.option<fixed_string("verbose")>(
                        "--verbose", 'v',
-                       "打印事件日志（摸牌/击杀奖励/打出/弃置/判定/移牌/伤害/体力/阵亡；真人局默认开启，--no-verbose 关闭）")
+                       "打印事件日志（摸牌/击杀奖励/打出/弃置/判定/移牌/伤害/体力/阵亡；真人局默认开启，--no-verbose 关闭；对手摸牌显示「未知牌」）")
                     .boolean()
                     .negatable();
                 cmd.option<fixed_string("autosave")>(
@@ -648,7 +648,7 @@ namespace tkw
                 const std::string verr = validate_humans(*game, opt.humans);
                 if (!verr.empty())
                     return CliFailure{CliError(verr)};
-                auto log = subscribe_event_log(*game, opt.verbose);
+                auto log = subscribe_event_log(*game, opt.verbose, opt.humans);
                 auto ctx = game->context();
                 tkw::game::GameSession state;
                 if (tkw::game::start_session(ctx, state, "P0", opt.hand).is_err())
@@ -670,7 +670,7 @@ namespace tkw
             {
                 if (!s.active || !s.game)
                     return CliFailure{CliError(no_active_game_error())};
-                auto log = subscribe_event_log(*s.game, verbose);
+                auto log = subscribe_event_log(*s.game, verbose, s.humans);
                 auto stats_handles = subscribe_stats(*s.game, s.stats);
                 auto ai = make_decision_source(s.humans, s.ai);
                 auto ctx = s.game->context();
@@ -709,7 +709,7 @@ namespace tkw
             {
                 if (!s.active || !s.game)
                     return CliFailure{CliError(no_active_game_error())};
-                auto log = subscribe_event_log(*s.game, verbose);
+                auto log = subscribe_event_log(*s.game, verbose, s.humans);
                 auto stats_handles = subscribe_stats(*s.game, s.stats);
                 auto ai = make_decision_source(s.humans, s.ai);
                 auto ctx = s.game->context();
@@ -828,7 +828,7 @@ namespace tkw
                 const bool verbose = session_verbose(opt);
 
                 auto ctx = game->context();
-                auto log = subscribe_event_log(*game, verbose);
+                auto log = subscribe_event_log(*game, verbose, opt.humans);
                 BattleStats stats;
                 auto stats_handles = subscribe_stats(*game, stats);
 

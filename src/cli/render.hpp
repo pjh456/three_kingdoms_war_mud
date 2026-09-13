@@ -64,18 +64,25 @@ namespace tkw
 
             /**
              * @brief 订阅本局事件日志：verbose 为真时打印摸牌（含击杀奖励）/打牌/弃牌/移牌/伤害/体力/阵亡。
+             * @param humans 本会话真人座位；非空时仅这些座位的摸牌渲染牌名，其余
+             *               渲染占位 kHiddenCardName，避免向操作者泄漏对手手牌；
+             *               空 = 无真人视角，全部渲染牌名。
              * @return 订阅句柄；verbose 为假时为空，句柄析构即退订。
              * @note 句柄只应活在需要日志的命令作用域内，不得存入 Session：会话被覆盖
              *       时会先析构旧 Game（含总线），遗留句柄将对已释放总线退订。
              */
             inline std::vector<tkw::EventBus::Handle> subscribe_event_log(
-                tkw::game::Game &game, bool verbose)
+                tkw::game::Game &game, bool verbose,
+                const std::vector<std::string> &humans = {})
             {
                 if (!verbose)
                     return {};
                 return subscribe_event_log_to(
                     game,
-                    [](const std::string &line) { std::cout << line << "\n"; });
+                    [](const std::string &line) { std::cout << line << "\n"; },
+                    [visible = std::set<std::string>(humans.begin(), humans.end())](
+                        const std::string &entity) -> bool
+                    { return visible.empty() || visible.count(entity) != 0; });
             }
 
             /**
