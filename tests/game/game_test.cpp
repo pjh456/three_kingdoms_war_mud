@@ -1617,6 +1617,34 @@ TEST_CASE("game: identity rebel kill rewards three draws")
     CHECK(g.cards.hand_size("a") == 4);  // 1 + 3
 }
 
+TEST_CASE("game: identity kill reward draws are tagged for the log")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    make_identity(g, {{"a", Role::Lord}, {"b", Role::Rebel}});
+    g.cards.build_deck(g.catalog);
+    g.give("a", "sha", "s#0");
+    g.entities.find("b").unwrap()->take_damage("a", 3, false);  // b: 1
+
+    std::vector<tkw::DrawKind> kinds;
+    auto h = g.bus.subscribe(tkw::Handler<tkw::CardDrawnEvent>(
+        [&](tkw::HandlerContext<tkw::CardDrawnEvent> &c)
+        { kinds.push_back(c.event.kind); }));
+
+    TestDecider decider;
+    deal_damage(g.ctx, decider, "a", "b", 1);  // 击杀反贼 → 摸 3
+
+    REQUIRE(kinds.size() == 3);
+    for (auto k : kinds)
+        CHECK(k == tkw::DrawKind::KillReward);
+
+    kinds.clear();
+    apply_draw(g.ctx, "a", 1);  // 对照：常规摸牌
+    REQUIRE(kinds.size() == 1);
+    CHECK(kinds[0] == tkw::DrawKind::Normal);
+}
+
 TEST_CASE("game: identity non-lord killing a loyalist gives no reward")
 {
     TestGame g("deck");
@@ -1683,6 +1711,28 @@ TEST_CASE("game: brawl kill still rewards three draws")
     deal_damage(g.ctx, decider, "a", "b", 1);
     CHECK(g.entities.find("b").is_none());
     CHECK(g.cards.hand_size("a") == 4);  // 1 + 3
+}
+
+TEST_CASE("game: brawl kill reward draws are tagged for the log")
+{
+    TestGame g("deck");  // 不设模式 → Brawl
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "sha", "s#0");
+    g.entities.find("b").unwrap()->take_damage("a", 3, false);  // b: 1
+
+    std::vector<tkw::DrawKind> kinds;
+    auto h = g.bus.subscribe(tkw::Handler<tkw::CardDrawnEvent>(
+        [&](tkw::HandlerContext<tkw::CardDrawnEvent> &c)
+        { kinds.push_back(c.event.kind); }));
+
+    TestDecider decider;
+    deal_damage(g.ctx, decider, "a", "b", 1);  // 击杀 → 摸 3
+
+    REQUIRE(kinds.size() == 3);
+    for (auto k : kinds)
+        CHECK(k == tkw::DrawKind::KillReward);
 }
 
 TEST_CASE("game: identity sourceless kill gives no reward")

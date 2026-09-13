@@ -156,6 +156,7 @@ namespace tkw
          * @param target 死亡角色。
          * @note 身份局：击杀反贼给来源摸 kill_reward 张；主公击杀忠臣弃光其手牌
          *       与装备（不含判定区）；主公/内奸/未知角色无奖励。
+         *       奖励摸牌在事件日志中带「击杀奖励」标签。
          */
         inline void apply_kill_effect(
             GameContext &ctx, const std::string &source, const std::string &target)
@@ -165,14 +166,16 @@ namespace tkw
 
             if (mode_of(ctx) != GameMode::Identity)
             {
-                apply_draw(ctx, source, rules_of(ctx).kill_reward);
+                apply_draw(
+                    ctx, source, rules_of(ctx).kill_reward, DrawKind::KillReward);
                 return;
             }
 
             switch (role_of(ctx, target))
             {
             case Role::Rebel:
-                apply_draw(ctx, source, rules_of(ctx).kill_reward);
+                apply_draw(
+                    ctx, source, rules_of(ctx).kill_reward, DrawKind::KillReward);
                 break;
             case Role::Loyalist:
                 if (role_of(ctx, source) == Role::Lord)

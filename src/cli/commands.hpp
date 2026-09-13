@@ -212,7 +212,7 @@ namespace tkw
                     .min(0);
                 cmd.option<fixed_string("verbose")>(
                        "--verbose", 'v',
-                       "打印事件日志（摸牌/打出/弃置/判定/移牌/伤害/体力/阵亡；真人局默认开启，--no-verbose 关闭）")
+                       "打印事件日志（摸牌/击杀奖励/打出/弃置/判定/移牌/伤害/体力/阵亡；真人局默认开启，--no-verbose 关闭）")
                     .boolean()
                     .negatable();
                 cmd.option<fixed_string("autosave")>(

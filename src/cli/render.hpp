@@ -83,7 +83,7 @@ namespace tkw
             }
 
             /**
-             * @brief 订阅本局事件日志：verbose 为真时打印摸牌/打牌/弃牌/移牌/伤害/体力/阵亡。
+             * @brief 订阅本局事件日志：verbose 为真时打印摸牌（含击杀奖励）/打牌/弃牌/移牌/伤害/体力/阵亡。
              * @return 订阅句柄；verbose 为假时为空，句柄析构即退订。
              * @note 句柄只应活在需要日志的命令作用域内，不得存入 Session：会话被覆盖
              *       时会先析构旧 Game（含总线），遗留句柄将对已释放总线退订。
@@ -119,7 +119,12 @@ namespace tkw
                 handles.push_back(game.bus.subscribe(tkw::Handler<tkw::CardDrawnEvent>(
                     [&catalog = game.catalog](
                         tkw::HandlerContext<tkw::CardDrawnEvent> &c) {
-                        std::cout << "[摸牌] " << c.event.entity << " "
+                        // 击杀奖惩摸牌与常规摸牌同走摸牌事件，标签按来源语义区分。
+                        const char *label =
+                            c.event.kind == tkw::DrawKind::KillReward
+                                ? "[击杀奖励] "
+                                : "[摸牌] ";
+                        std::cout << label << c.event.entity << " "
                                   << tkw::card::display_name(catalog, c.event.def_id)
                                   << "\n";
                     })));

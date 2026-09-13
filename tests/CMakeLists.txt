@@ -427,6 +427,16 @@ add_test(NAME cli_verbose_judge_response_labels
 set_tests_properties(cli_verbose_judge_response_labels PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# 击杀奖励摸牌带 [击杀奖励] 标签：seed 3 2p 由玩家击杀（统计用例已钉），
+# --verbose 下奖励摸牌必出现该标签，普通摸牌仍为 [摸牌]。
+add_test(NAME cli_verbose_kill_reward_label
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> --verbose deal 2 3 2>&1); \
+                  printf '%s' \"$out\" | grep -q '\\[击杀奖励\\]' && \
+                  printf '%s' \"$out\" | grep -q '\\[摸牌\\]'")
+set_tests_properties(cli_verbose_kill_reward_label PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 裸 tkw 与 REPL 各打印一行引导文案。
 add_test(NAME cli_bare_root_banner
          COMMAND sh -c "$<TARGET_FILE:tkw> 2>&1 | grep -q '无子命令'")

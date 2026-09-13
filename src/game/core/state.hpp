@@ -138,8 +138,13 @@ namespace tkw
             return ctx.cards->draw();
         }
 
-        /** @brief 摸 count 张进手牌；牌堆与弃牌堆皆空即停，返回实际摸到的张数。 */
-        inline int apply_draw(GameContext &ctx, const std::string &player, int count)
+        /**
+         * @brief 摸 count 张进手牌；牌堆与弃牌堆皆空即停，返回实际摸到的张数。
+         * @param kind 摸牌来源语义，透传到摸牌事件供日志标签区分。
+         */
+        inline int apply_draw(
+            GameContext &ctx, const std::string &player, int count,
+            DrawKind kind = DrawKind::Normal)
         {
             int drew = 0;
             for (int i = 0; i < count; ++i)
@@ -149,7 +154,7 @@ namespace tkw
                     break;
                 card::Card card = std::move(c).unwrap();
                 ctx.cards->add_to_hand(player, card);
-                emit_card_drawn(ctx, player, card);
+                emit_card_drawn(ctx, player, card, kind);
                 ++drew;
             }
             return drew;

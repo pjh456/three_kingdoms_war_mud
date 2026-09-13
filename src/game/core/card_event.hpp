@@ -31,6 +31,13 @@ namespace tkw
         Response,  /**< 响应打出的牌进弃牌堆（闪/无懈/救桃/无目标响应杀） */
     };
 
+    /** @brief 摸牌事件的来源语义：区分常规摸牌与击杀奖惩发放的摸牌。 */
+    enum class DrawKind : std::uint8_t
+    {
+        Normal,     /**< 常规摸牌（摸牌阶段/效果结算/初始发牌等） */
+        KillReward, /**< 击杀奖惩发放的摸牌 */
+    };
+
     DEFINE_EVENT_START(Card, Event)
     DEFINE_EVENT_END(Card)
 
@@ -40,6 +47,7 @@ public:
     std::string entity;
     std::string instance_id;
     std::string def_id;
+    DrawKind kind = DrawKind::Normal; /**< 摸牌来源语义（展示标签用） */
     DEFINE_EVENT_END(CardDrawn)
 
     /** @brief 打出：某实体主动打出一张牌（基本/锦囊/装备）。 */
@@ -73,7 +81,8 @@ public:
     namespace game
     {
         inline void emit_card_drawn(
-            GameContext &ctx, const std::string &entity, const card::Card &c)
+            GameContext &ctx, const std::string &entity, const card::Card &c,
+            DrawKind kind = DrawKind::Normal)
         {
             if (!ctx.bus)
                 return;
@@ -81,6 +90,7 @@ public:
             ev->entity = entity;
             ev->instance_id = c.instance_id;
             ev->def_id = c.def_id;
+            ev->kind = kind;
             ctx.bus->publish(ev);
         }
 
