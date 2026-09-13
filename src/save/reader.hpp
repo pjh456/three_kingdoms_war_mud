@@ -8,6 +8,7 @@
 #define INCLUDE_TKW_SAVE_READER_HPP
 
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <optional>
 #include <set>
@@ -44,6 +45,16 @@ namespace tkw
                 return SaveResult<void>::Err(SaveError{kind, std::move(detail)});
             }
 
+            /** @brief int64 → int：超出 int 值域返回 false（收窄前检查，不静默截断）。 */
+            inline bool narrow_to_int(std::int64_t v, int &out) noexcept
+            {
+                if (v < std::numeric_limits<int>::min() ||
+                    v > std::numeric_limits<int>::max())
+                    return false;
+                out = static_cast<int>(v);
+                return true;
+            }
+
             inline bool read_int(const json::Object &o, std::string_view key, int &out)
             {
                 if (!o.contains(key))
@@ -51,8 +62,7 @@ namespace tkw
                 auto v = o[key].try_as_int();
                 if (!v)
                     return false;
-                out = static_cast<int>(*v);
-                return true;
+                return narrow_to_int(*v, out);
             }
 
             inline bool read_bool(
@@ -142,7 +152,10 @@ namespace tkw
                     auto v = (*o)[k].try_as_int();
                     if (!v)
                         return false;
-                    out[std::string(k)] = static_cast<int>(*v);
+                    int n = 0;
+                    if (!narrow_to_int(*v, n))
+                        return false;
+                    out[std::string(k)] = n;
                 }
                 return true;
             }
@@ -296,7 +309,7 @@ namespace tkw
                 auto seq = cards.contains("instance_seq")
                                ? cards["instance_seq"].try_as_int()
                                : std::optional<std::int64_t>{};
-                if (!seq)
+                if (!seq || *seq < 0)
                     return detail::fail(
                         SaveErrorKind::StructureError, "cards.instance_seq");
                 snap.instance_seq = static_cast<std::uint64_t>(*seq);

@@ -162,6 +162,71 @@ TEST_CASE("save: version mismatch is rejected")
     CHECK(r.unwrap_err().kind == save::SaveErrorKind::VersionMismatch);
 }
 
+TEST_CASE("save: out-of-range integers are rejected instead of narrowed")
+{
+    auto a = make_game(1);
+    GameSession s;
+    const std::string base = save::write(*a, s, "deck");
+
+    auto mutate = [](std::string text, std::string_view from, std::string_view to)
+    {
+        const auto pos = text.find(from);
+        REQUIRE(pos != std::string::npos);
+        text.replace(pos, from.size(), to);
+        return text;
+    };
+
+    // version 4294967297 收窄后本为 1，须与错误版本同路径失败
+    {
+        auto b = make_game(1);
+        GameSession sb;
+        auto r = save::read(
+            mutate(base, "\"version\":1", "\"version\":4294967297"), *b, sb);
+        REQUIRE(r.is_err());
+        CHECK(r.unwrap_err().kind == save::SaveErrorKind::VersionMismatch);
+        CHECK(r.unwrap_err().detail == "version");
+    }
+
+    // rules 字段超界：收窄处失败，与类型不符同节级路径
+    {
+        auto b = make_game(1);
+        GameSession sb;
+        auto r = save::read(
+            mutate(base, "\"wuxie_rounds\":32", "\"wuxie_rounds\":4294967297"),
+            *b, sb);
+        REQUIRE(r.is_err());
+        CHECK(r.unwrap_err().kind == save::SaveErrorKind::StructureError);
+        CHECK(r.unwrap_err().detail == "rules");
+    }
+
+    // stats 计数（read_int_map）超界：与类型不符同路径
+    {
+        save::SessionMeta meta;
+        meta.stats.damage_dealt["P0"] = 3;
+        const std::string text = save::write(*a, s, "deck", meta);
+        auto b = make_game(1);
+        GameSession sb;
+        auto r = save::read(
+            mutate(text, "\"damage_dealt\":{\"P0\":3}",
+                   "\"damage_dealt\":{\"P0\":4294967297}"),
+            *b, sb);
+        REQUIRE(r.is_err());
+        CHECK(r.unwrap_err().kind == save::SaveErrorKind::StructureError);
+        CHECK(r.unwrap_err().detail == "session.stats");
+    }
+
+    // 负数 instance_seq：不得回绕成巨 uint64
+    {
+        auto b = make_game(1);
+        GameSession sb;
+        auto r = save::read(
+            mutate(base, "\"instance_seq\":0", "\"instance_seq\":-1"), *b, sb);
+        REQUIRE(r.is_err());
+        CHECK(r.unwrap_err().kind == save::SaveErrorKind::StructureError);
+        CHECK(r.unwrap_err().detail == "cards.instance_seq");
+    }
+}
+
 TEST_CASE("save: session meta round-trips ai and stats")
 {
     auto a = make_game(42);
