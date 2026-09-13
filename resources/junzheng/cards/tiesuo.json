@@ -11,9 +11,10 @@
         { "suit": "club", "number": 12 },
         { "suit": "club", "number": 13 }
     ],
-    "text": "出牌阶段，对一至两名角色使用。分别横置或重置这些角色。",
+    "text": "出牌阶段，对一至两名角色使用。分别横置或重置这些角色。重铸：弃置此牌并摸一张牌。",
     "effect": {
         "kind": "chain",
         "scope": "one_or_two"
-    }
+    },
+    "recast": true
 }

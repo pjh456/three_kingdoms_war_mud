@@ -292,6 +292,11 @@ namespace tkw
             if (!in_hand)
                 return GameResult<void>::Err(EffectError::CardNotOwned);
 
+            // 重铸：弃置此牌并摸一张，空目标即重铸动作；正常出牌（带目标）仍
+            // 走下方 scope 校验。旁路在分类之前，故杀上限/酒限次不约束重铸
+            if (def.recast && targets.empty())
+                return GameResult<void>::Ok();
+
             switch (classify_action(def))
             {
             case PlayClass::Equipment:

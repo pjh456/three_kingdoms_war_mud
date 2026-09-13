@@ -381,6 +381,20 @@ namespace tkw
                 if (vr.is_err())
                     return TurnResult<void>::Err(to_turn_error(vr.unwrap_err()));
 
+                // 重铸：弃置此牌并摸一张，不使用牌面效果、不发打出事件、不计杀次数；
+                // 空目标动作也可能是决策侧未透传标记的重铸选择，故按定义补认
+                if (action.unwrap().recast ||
+                    (def.recast && action.unwrap().targets.empty()))
+                {
+                    if (!def.recast || !action.unwrap().targets.empty())
+                        return TurnResult<void>::Err(TurnError::PlayRejected);
+                    if (remove_and_discard(ctx, player, card.unwrap().instance_id)
+                            .is_none())
+                        return TurnResult<void>::Err(TurnError::CardNotInHand);
+                    apply_draw(ctx, player, 1);
+                    continue;
+                }
+
                 switch (classify_action(def))
                 {
                 case PlayClass::Equipment:

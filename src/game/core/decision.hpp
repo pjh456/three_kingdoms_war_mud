@@ -26,6 +26,7 @@ namespace tkw
             std::string instance_id;          /**< 要打出的手牌 */
             std::vector<std::string> targets; /**< 目标实体 id（响应侧为空） */
             std::string second_instance_id;  /**< 第二张手牌（丈八蛇矛两张当杀；空 = 普通打出） */
+            bool recast = false; /**< 重铸动作：弃置此牌并摸一张（空目标；不使用牌面效果） */
         };
 
         /** @brief 弃牌的原因（同一接口在不同规则语境下的区分）。 */

@@ -5348,8 +5348,8 @@ TEST_CASE("game: tiesuo chains one or two targets")
 
     CHECK(validate_play_action(g.ctx, "a", def, card, {"b"}, turn).is_ok());
     CHECK(validate_play_action(g.ctx, "a", def, card, {"b", "c"}, turn).is_ok());
-    // 空目标 / 三个目标 / 重复目标均被拒
-    CHECK(validate_play_action(g.ctx, "a", def, card, {}, turn).is_err());
+    // 空目标 = 重铸（合法）；三个目标 / 重复目标仍被拒
+    CHECK(validate_play_action(g.ctx, "a", def, card, {}, turn).is_ok());
     CHECK(validate_play_action(g.ctx, "a", def, card, {"a", "b", "c"}, turn).is_err());
     CHECK(validate_play_action(g.ctx, "a", def, card, {"b", "b"}, turn).is_err());
 
@@ -5357,6 +5357,85 @@ TEST_CASE("game: tiesuo chains one or two targets")
     REQUIRE(resolve_play(g.ctx, decider, "a", card, {"b", "c"}).is_ok());
     CHECK(b->get_chained());
     CHECK(c->get_chained());
+}
+
+TEST_CASE("game: non-recast card rejects empty targets")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "huosha", "h#0");
+
+    const auto &def = *g.catalog.find("huosha").unwrap();
+    const Card card = g.cards.hand("a")[0];
+    const TurnContext turn{"a", 0, 1, false};
+    // 空目标旁路只对 recast 卡生效：普通杀仍以 NoTarget 拒绝
+    CHECK(validate_play_action(g.ctx, "a", def, card, {}, turn).is_err());
+}
+
+TEST_CASE("game: tiesuo recast discards and draws one")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "tiesuo", "t#0");
+    // 预置摸牌堆一张非铁索牌，避免洗回弃牌堆时把刚弃的铁索摸回
+    g.cards.add_to_draw(Card{"d#0", "sha", Suit::Spade, 7});
+
+    EventLog log(g.bus);
+    TestDecider decider;
+    decider.plays.push_back(PlayAction{"t#0", {}, "", true});
+    REQUIRE(run_play_phase(g.ctx, decider, "a").is_ok());
+
+    // 弃铁索、摸一张杀：手牌只剩摸到的牌，弃牌堆含铁索，摸牌堆空
+    REQUIRE(g.cards.hand("a").size() == 1);
+    CHECK(g.cards.hand("a")[0].def_id == "sha");
+    CHECK(g.cards.discard_size() == 1);
+    CHECK(g.cards.draw_size() == 0);
+
+    // 事件口径：只发弃置与摸牌，不发打出；重铸不开无懈窗
+    const auto &lines = log.lines();
+    CHECK(std::find(lines.begin(), lines.end(), "discard a tiesuo") !=
+          lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), "draw a sha") != lines.end());
+    for (const auto &line : lines)
+        CHECK(line.rfind("play ", 0) != 0);
+    CHECK(decider.counter_windows.empty());
+}
+
+TEST_CASE("game: tiesuo recast action is enumerated after normal actions")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "tiesuo", "t#0");
+    const TurnContext turn{"a", 0, 1, false};
+
+    const auto legal = legal_actions(g.ctx, "a", turn);
+    std::size_t recast_index = legal.size();
+    bool has_normal = false;
+    for (std::size_t i = 0; i < legal.size(); ++i)
+    {
+        if (legal[i].recast)
+        {
+            CHECK(legal[i].targets.empty());
+            recast_index = i;
+        }
+        else if (!legal[i].targets.empty())
+            has_normal = true;
+    }
+    REQUIRE(recast_index < legal.size());
+    CHECK(has_normal);
+    // 重铸候选排在全部正常动作之后（列表序 = 手牌序）
+    for (std::size_t i = 0; i < recast_index; ++i)
+        CHECK_FALSE(legal[i].recast);
+
+    const auto &def = *g.catalog.find("tiesuo").unwrap();
+    const Card card = g.cards.hand("a")[0];
+    CHECK(validate_play_action(g.ctx, "a", def, card, {}, turn).is_ok());
+    // 重铸不经 resolve_play：直接结算空目标仍以 NoTarget 拒绝
+    TestDecider decider;
+    CHECK(resolve_play(g.ctx, decider, "a", card, {}).is_err());
 }
 
 TEST_CASE("game: tiesuo per-target wuxie")

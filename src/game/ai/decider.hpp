@@ -104,6 +104,7 @@ namespace tkw
                 std::vector<std::string> targets;  /**< Play：目标 */
                 std::vector<std::string> discards; /**< Discard：要弃的牌 */
                 std::string second_instance_id;   /**< Play/Response：第二张手牌（丈八蛇矛两张当杀；空 = 普通） */
+                bool recast = false; /**< Play：重铸动作（弃置此牌并摸一张，targets 为空） */
             };
 
             /** @brief 状态机接口：实现单个 decide 即可接入引擎。 */
@@ -261,7 +262,7 @@ namespace tkw
                         return Option<PlayAction>::None();
                     return Option<PlayAction>::Some(PlayAction{
                         choice.instance_id.unwrap(), choice.targets,
-                        choice.second_instance_id});
+                        choice.second_instance_id, choice.recast});
                 }
 
                 std::vector<std::string> choose_discards(

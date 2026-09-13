@@ -520,6 +520,11 @@ namespace tkw
                     return cfg::ConfigResult<CardDef>::Err(self_rescue.unwrap_err());
                 def.self_rescue = self_rescue.unwrap();
 
+                auto recast = cfg::opt_bool(root, "recast", false, path);
+                if (recast.is_err())
+                    return cfg::ConfigResult<CardDef>::Err(recast.unwrap_err());
+                def.recast = recast.unwrap();
+
                 return cfg::ConfigResult<CardDef>::Ok(std::move(def));
             }
         }

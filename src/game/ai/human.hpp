@@ -574,6 +574,8 @@ namespace tkw
                                     out_ << act.targets[j];
                                 }
                             }
+                            if (act.recast)
+                                out_ << "（重铸：弃置并摸一张）";
                             std::string holder;
                             if (is_self_target_borrowed_sword(req, act, holder))
                                 out_ << "（警告：" << holder
@@ -619,6 +621,7 @@ namespace tkw
                                     act.card.instance_id);
                                 out.targets = act.targets;
                                 out.second_instance_id = act.second_instance_id;
+                                out.recast = act.recast;
                                 return out;
                             }
                             print_invalid(index_hint(req.legal.size()));

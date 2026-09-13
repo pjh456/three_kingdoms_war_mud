@@ -634,6 +634,9 @@ TEST_CASE("card: junzheng skeleton deck loads elemental slashes")
     CHECK(tiesuo.unwrap()->copies[3] == CardCopy{Suit::Club, 11});
     CHECK(tiesuo.unwrap()->copies[4] == CardCopy{Suit::Club, 12});
     CHECK(tiesuo.unwrap()->copies[5] == CardCopy{Suit::Club, 13});
+    // 重铸标记：铁索可弃置换牌；未标记卡默认为假
+    CHECK(tiesuo.unwrap()->recast);
+    CHECK_FALSE(cat.find("sha").unwrap()->recast);
     CHECK(effect_kind_from_name("chain").is_some());
     CHECK(effect_kind_from_name("chain").unwrap() == CardEffectKind::Chain);
 

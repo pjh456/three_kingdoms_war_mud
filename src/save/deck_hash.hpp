@@ -52,6 +52,8 @@ namespace tkw
                 // 仅显式属性参与哈希：标准牌表全为 false，指纹逐位不变
                 if (def.self_rescue)
                     detail::hash_int(h, 1);
+                if (def.recast)
+                    detail::hash_int(h, 1);
                 for (const auto &c : def.copies)
                 {
                     detail::hash_int(h, static_cast<int>(c.suit));

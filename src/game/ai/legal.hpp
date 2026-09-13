@@ -34,6 +34,7 @@ namespace tkw
             card::Card card;
             std::vector<std::string> targets; /**< 引擎认可的完整目标集合 */
             std::string second_instance_id; /**< 第二张手牌（丈八蛇矛两张当杀；空 = 普通动作） */
+            bool recast = false; /**< 重铸动作：弃置此牌并摸一张（targets 为空） */
         };
 
         /** @brief 实体任一区域是否有牌（拆/顺的目标需有牌可拿）。 */
@@ -81,6 +82,9 @@ namespace tkw
             const ReadOnlyContext &ctx, const std::string &player, const TurnContext &turn)
         {
             std::vector<LegalAction> out;
+            // 重铸候选单独收集，统一追加在全部正常动作之后：分组时正常动作
+            // 先入组，AI 的目标选择不会落到空目标的重铸动作上（不主动重铸）
+            std::vector<LegalAction> recasts;
 
             for (const auto &c : ctx.cards->hand(player))
             {
@@ -88,6 +92,9 @@ namespace tkw
                 if (def_opt.is_none())
                     continue;
                 const card::CardDef &def = *def_opt.unwrap();
+
+                if (def.recast)
+                    recasts.push_back(LegalAction{c, {}, "", true});
 
                 switch (classify_action(def))
                 {
@@ -253,6 +260,8 @@ namespace tkw
                         }
                     }
             }
+
+            out.insert(out.end(), recasts.begin(), recasts.end());
             return out;
         }
     }

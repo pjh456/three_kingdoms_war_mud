@@ -6,6 +6,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "game/ai/aggressive.hpp"
 #include "game/ai/evaluator.hpp"
 #include "game/ai/human.hpp"
 #include "game/ai/legal.hpp"
@@ -50,6 +51,7 @@ namespace
                     act.card.instance_id);
                 out.targets = act.targets;
                 out.second_instance_id = act.second_instance_id;
+                out.recast = act.recast;
                 second_instance_id = act.second_instance_id;
             }
             if (req.kind == DecisionKind::PickCard ||
@@ -171,6 +173,51 @@ TEST_CASE("ai: jiu is legal until used and only offered as self rescue")
     CHECK(self.unwrap() == "j#0");
     // 非本人 saver 持酒：酒不进入候选，无法救他人
     CHECK(ai.play_peach(g.ctx, "a", "b").is_none());
+}
+
+TEST_CASE("ai: recast candidates are not chosen proactively")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "tiesuo", "t#0");
+
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    tkw::game::SimpleAI simple;
+    const auto s = simple.choose_play(g.ctx, turn);
+    REQUIRE(s.is_some());
+    CHECK_FALSE(s.unwrap().recast);
+    CHECK_FALSE(s.unwrap().targets.empty());
+
+    tkw::game::AggressiveAI aggressive;
+    const auto ag = aggressive.choose_play(g.ctx, turn);
+    REQUIRE(ag.is_some());
+    CHECK_FALSE(ag.unwrap().recast);
+    CHECK_FALSE(ag.unwrap().targets.empty());
+}
+
+TEST_CASE("ai: recast choice passes through the request source")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "tiesuo", "t#0");
+
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    const auto legal = tkw::game::legal_actions(g.ctx, "a", turn);
+    std::size_t recast_index = legal.size();
+    for (std::size_t i = 0; i < legal.size(); ++i)
+        if (legal[i].recast)
+            recast_index = i;
+    REQUIRE(recast_index < legal.size());
+
+    RecordingDecider decider;
+    decider.pick_index = recast_index;
+    tkw::game::ai::RequestDecisionSource source(decider);
+    const auto chosen = source.choose_play(g.ctx, turn);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().recast);
+    CHECK(chosen.unwrap().targets.empty());
 }
 
 TEST_CASE("ai: simple borrowed sword targets the lowest-hp victim")

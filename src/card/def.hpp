@@ -229,6 +229,7 @@ namespace tkw
             bool rescue = false;  /**< 可作濒死救场牌（桃） */
             bool counter = false; /**< 可作无懈响应牌（无懈可击） */
             bool self_rescue = false; /**< 仅可作自己濒死时的救场牌（酒） */
+            bool recast = false; /**< 可重铸：弃置此牌并摸一张（铁索连环等） */
 
             bool operator==(const CardDef &) const = default;
         };
