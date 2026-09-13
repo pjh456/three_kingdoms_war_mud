@@ -52,18 +52,16 @@ namespace tkw
                     return ConfigResult<json::Document>::Err(
                         to_config_error(text.unwrap_err(), file));
 
-                try
+                auto parsed = json::parse_copy_result(text.unwrap());
+                if (parsed.is_err())
                 {
-                    return ConfigResult<json::Document>::Ok(
-                        json::parse_copy(text.unwrap()));
-                }
-                catch (const json::ParseError &e)
-                {
+                    const auto &e = parsed.unwrap_err();
                     return ConfigResult<json::Document>::Err(
                         ConfigError{
                             ConfigErrorKind::ParseError,
                             file.string() + " @ " + std::to_string(e.offset())});
                 }
+                return ConfigResult<json::Document>::Ok(std::move(parsed).unwrap());
             }
 
         private:
