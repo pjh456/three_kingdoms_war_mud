@@ -257,6 +257,30 @@ TEST_CASE("cli: human session defaults event log on")
     CHECK_FALSE(ai.session.verbose);
 }
 
+TEST_CASE("cli: human new logs initial deal by default")
+{
+    // 真人默认：建局自身的初始发牌也走事件日志，己方显牌名、对手占位未知牌。
+    Repl repl;
+    auto created = repl.run("--human P0 new --players 2 --seed 1");
+    REQUIRE(created.ok);
+    CHECK(created.out.find("[摸牌] P0 ") != std::string::npos);
+    CHECK(created.out.find("[摸牌] P1 未知牌") != std::string::npos);
+    CHECK(repl.session.verbose);
+
+    // 显式 --no-verbose 优先，建局仍静默。
+    Repl quiet;
+    auto q = quiet.run("--no-verbose --human P0 new --players 2 --seed 1");
+    REQUIRE(q.ok);
+    CHECK(q.out.find("[摸牌]") == std::string::npos);
+    CHECK_FALSE(quiet.session.verbose);
+
+    // 全 AI 建局保持静默，不因日志口径统一而漂移。
+    Repl ai;
+    auto a = ai.run("new --players 2 --seed 1");
+    REQUIRE(a.ok);
+    CHECK(a.out.find("[摸牌]") == std::string::npos);
+}
+
 TEST_CASE("cli: verbose step and run print turn headers")
 {
     Repl repl;

@@ -383,6 +383,19 @@ add_test(NAME cli_repl_human_default_verbose
 set_tests_properties(cli_repl_human_default_verbose PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# new 自身的初始发牌也走真人默认日志：脚本只 new 不 step，直接钉初始发牌行，
+# 避免与 step 摸牌混同；显式 --no-verbose 与全 AI 仍静默。
+add_test(NAME cli_repl_new_human_default_verbose
+         COMMAND sh -c
+                 "out=$(printf 'new --players 2 --seed 1\\nquit\\n' | $<TARGET_FILE:tkw> --human P0 repl --autosave '' 2>&1) && \
+                  printf '%s' \"$out\" | grep -q '\\[摸牌\\] P0 ' && \
+                  quiet=$(printf 'new --players 2 --seed 1\\nquit\\n' | $<TARGET_FILE:tkw> --human P0 --no-verbose repl --autosave '' 2>&1) && \
+                  ! printf '%s' \"$quiet\" | grep -q '\\[摸牌\\]' && \
+                  ai=$(printf 'new --players 2 --seed 1\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1) && \
+                  ! printf '%s' \"$ai\" | grep -q '\\[摸牌\\]'")
+set_tests_properties(cli_repl_new_human_default_verbose PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 一次性真人局默认事件日志：deal 与建局同口径，显式 --no-verbose 优先，
 # 全 AI 一键局保持静默。真人 EOF 可能回合失败，故不钉 rc、只钉文本。
 add_test(NAME cli_deal_human_default_verbose

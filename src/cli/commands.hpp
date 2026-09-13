@@ -661,7 +661,11 @@ namespace tkw
                 const std::string verr = validate_humans(*game, opt.humans);
                 if (!verr.empty())
                     return CliFailure{CliError(verr)};
-                auto log = subscribe_event_log(*game, opt.verbose, opt.humans);
+
+                // 建局与后续 step/run 同口径：真人座位存在且未显式选 verbose 时开初始发牌日志。
+                const bool verbose = session_verbose(opt);
+
+                auto log = subscribe_event_log(*game, verbose, opt.humans);
                 auto ctx = game->context();
                 tkw::game::GameSession state;
                 if (tkw::game::start_session(ctx, state, "P0", opt.hand).is_err())
@@ -670,7 +674,7 @@ namespace tkw
                 s.state = std::move(state);
                 s.humans = opt.humans;
                 s.ai = opt.ai;
-                s.verbose = session_verbose(opt);
+                s.verbose = verbose;
                 s.active = true;
                 s.deck = opt.deck;
                 s.stats = BattleStats{};
