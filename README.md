@@ -135,6 +135,10 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 `rules`/`simulate` 会明确拒绝；`--autosave`/`--history` 只在 `repl` 生效。**`--mode` 在 `load` 上
 不生效**：载入的模式与角色以存档为准，避免用命令行强行改写存档模式。
 
+REPL 内只读/批量命令（`cards`/`rules`/`audit`/`deal`/`simulate`）的默认牌表来源：有活动会话
+时读该会话牌表（与 `status` 展示一致），无活动会话时回落启动 `--deck`；行内 `--deck` 始终
+优先。`load` 仍以启动 `--deck` 匹配存档指纹，不跟随活动会话。
+
 会话命令（`new`/`step`/`run`/`status`/`save`/`load`）共享同一进程内的会话，通常在
 `tkw repl` 内逐条输入使用；在 REPL 外单独执行不会保留会话（单独 `tkw new` 只开一局
 并打印状态，随后进程即退出）。

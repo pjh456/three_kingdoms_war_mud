@@ -116,20 +116,28 @@ namespace tkw
             }
 
             /**
-             * @brief REPL 只读/批量命令的选项合并：继承启动选项，但不继承真人座位。
-             * @param ctx  本行命令的解析上下文。
-             * @param base REPL 启动选项（session.base）。
-             * @return 与 options_from(ctx, base) 同，但先清空 base.humans 再合并：行内
-             *         显式 --human 仍写入（供 reject_humans 拒绝），--no-human 仍清空。
-             * @note 只读/批量命令不运行真人局，若继承启动 --human，reject_humans 会把
-             *       `tkw --human P0 repl` 后的 cards/rules/audit 误拒；故只隔离 humans，
-             *       其余标量（deck/ai/mode/hand/players/seed/verbose…）自然继承。批量
-             *       路径 session.base 为空默认，本函数与 options_from(ctx) 逐字等价。
+             * @brief 查询/批量命令的选项合并：活动会话牌表优先，无会话回落启动选项；
+             *        不继承真人座位。
+             * @param ctx     本行命令的解析上下文。
+             * @param session 当前会话；base 为 REPL 启动选项，deck 为活动会话牌表。
+             * @return 合并后的 Options：行内显式值优先，否则回落会话/启动默认。
+             *         默认 deck 在存在活动会话（active 且 game 非空）时取
+             *         session.deck，否则取 session.base.deck，两者均由行内 --deck
+             *         覆盖；humans 先清空再按行内 --human/--no-human 合并。
+             * @note 活动会话优先使查询/批量命令与 status 展示的牌表来源一致；无活动
+             *       会话（批量路径或 REPL 未 new/load）时 deck 取 base.deck，与「继承
+             *       启动 --deck」逐字等价，不静默回落缺省 resources。只读/批量命令不
+             *       运行真人局，若继承启动 --human 会被 reject_humans 误拒，故 humans
+             *       只隔离、不清除行内值。
              */
-            inline Options options_from_without_humans(
-                ParseContext &ctx, const Options &base)
+            inline Options options_from_for_query(
+                ParseContext &ctx, const Session &session)
             {
-                Options seed = base;
+                Options seed = session.base;
+                // 活动会话存在时以会话牌表为默认上下文，使牌表来源可追溯到用户最近一次建局。
+                if (session.active && session.game)
+                    seed.deck = session.deck;
+
                 seed.humans.clear();
                 return options_from(ctx, seed);
             }
@@ -1172,7 +1180,7 @@ namespace tkw
                 [&session](ParseContext &ctx) -> CliResult<void>
                 {
                     return detail::audit_deck(
-                        detail::options_from_without_humans(ctx, session.base));
+                        detail::options_from_for_query(ctx, session));
                 });
 
             // cards：列出牌表（只读牌堆查询，仅 --deck 生效；公共选项与 audit 同款）
@@ -1186,7 +1194,7 @@ namespace tkw
                 [&session](ParseContext &ctx) -> CliResult<void>
                 {
                     return detail::cards_list(
-                        detail::options_from_without_humans(ctx, session.base),
+                        detail::options_from_for_query(ctx, session),
                         ctx.get_or<bool, fixed_string("text")>(false));
                 });
 
@@ -1200,7 +1208,7 @@ namespace tkw
                 [&session](ParseContext &ctx) -> CliResult<void>
                 {
                     return detail::rules_lookup(
-                        detail::options_from_without_humans(ctx, session.base),
+                        detail::options_from_for_query(ctx, session),
                         ctx.get_or<std::string, 0>(""));
                 });
 
@@ -1212,8 +1220,7 @@ namespace tkw
             deal.action(
                 [rules, &session](ParseContext &ctx) -> CliResult<void>
                 {
-                    Options opt =
-                        detail::options_from_without_humans(ctx, session.base);
+                    Options opt = detail::options_from_for_query(ctx, session);
                     opt.players = ctx.get<int, 0>();
                     opt.seed = static_cast<std::uint32_t>(ctx.get<int, 1>());
                     if (opt.players < rules.min_players ||
@@ -1237,8 +1244,7 @@ namespace tkw
                     const int n = ctx.get<int, 0>();
                     if (n < 1)
                         return CliFailure{CliError("局数须为正整数")};
-                    Options opt =
-                        detail::options_from_without_humans(ctx, session.base);
+                    Options opt = detail::options_from_for_query(ctx, session);
                     opt.players = ctx.get_or<int, 1>(opt.players);
                     if (opt.players < rules.min_players ||
                         opt.players > rules.max_players)

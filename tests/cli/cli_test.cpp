@@ -102,6 +102,41 @@ namespace
             ++n;
         return n;
     }
+
+    /**
+     * @brief 写一份单卡 mini 牌表（每卡 30 张），供不依赖 cwd 的牌表来源断言。
+     * @param dir       牌表目录；不存在则创建，已存在先清空。
+     * @param deck_name deck.json 的 name 字段。
+     * @param card_name 卡的显示名（用于区分不同牌表）。
+     * @return 目录与两个 JSON 文件全部写出成功为真。
+     */
+    bool write_mini_deck(const std::filesystem::path &dir,
+                         const std::string &deck_name,
+                         const std::string &card_name)
+    {
+        std::error_code ec;
+        std::filesystem::remove_all(dir, ec);
+        if (!std::filesystem::create_directories(dir / "cards"))
+            return false;
+        std::string copies;
+        for (int i = 0; i < 30; ++i)
+        {
+            if (i != 0)
+                copies += ',';
+            copies += R"({"suit":"spade","number":)" +
+                      std::to_string(i % 13 + 1) + "}";
+        }
+        if (tkw::io::write_text(
+                dir / "deck.json",
+                R"({"name":")" + deck_name + R"(","cards":["h0"]})")
+                .is_err())
+            return false;
+        return tkw::io::write_text(
+                   dir / "cards" / "h0.json",
+                   R"({"id":"h0","name":")" + card_name +
+                       R"(","type":"basic","copies":[)" + copies + "]}")
+            .is_ok();
+    }
 }
 
 TEST_CASE("cli: new/step/status/run advance the session")
@@ -1140,6 +1175,77 @@ TEST_CASE("cli: repl read-only commands inherit startup deck")
 
     std::filesystem::remove_all(dir, ec);
     std::filesystem::remove_all(missing, ec);
+}
+
+TEST_CASE("cli: read-only/batch queries prefer active session deck")
+{
+    Repl repl;
+
+    const std::filesystem::path deck_a = temp_dir("tkw_cli_active_deck_a");
+    const std::filesystem::path deck_b = temp_dir("tkw_cli_active_deck_b");
+    const std::filesystem::path save = temp_save("tkw-cli-active-deck.json");
+    std::error_code ec;
+    std::filesystem::remove(save, ec);
+    REQUIRE(write_mini_deck(deck_a, "active-a", "A测"));
+    REQUIRE(write_mini_deck(deck_b, "active-b", "B测"));
+
+    // 活动会话优先：启动 deck 为 A，行内 new --deck B 后只读命令默认读 B（与 status 一致）。
+    repl.session.base.deck = deck_a;
+    REQUIRE(repl.run("new --players 2 --seed 1 --hand 0 --deck " + deck_b.string())
+                .ok);
+    CHECK(repl.session.deck == deck_b);
+
+    auto cards = repl.run("cards");
+    CHECK(cards.ok);
+    CHECK(cards.out.find("牌表: " + deck_b.string()) != std::string::npos);
+    CHECK(cards.out.find("B测") != std::string::npos);
+    CHECK(cards.out.find("A测") == std::string::npos);
+
+    auto rules = repl.run("rules");
+    CHECK(rules.ok);
+    CHECK(rules.out.find("牌表: " + deck_b.string()) != std::string::npos);
+
+    auto audit = repl.run("audit");
+    CHECK(audit.ok);
+    CHECK(audit.out.find("牌表: " + deck_b.string()) != std::string::npos);
+
+    // 行内 --deck 仍最高优先，可取回启动牌表 A。
+    auto overridden = repl.run("cards --deck " + deck_a.string());
+    CHECK(overridden.ok);
+    CHECK(overridden.out.find("牌表: " + deck_a.string()) != std::string::npos);
+    CHECK(overridden.out.find("A测") != std::string::npos);
+
+    // 批量命令同样跟随活动会话牌表，不再回落启动 deck。
+    CHECK(repl.run("deal 2 1 --hand 0").ok);
+    CHECK(repl.run("simulate 1 2 --hand 0").ok);
+
+    // 启动 --human 不被查询命令继承；行内显式 --human 仍被拒绝。
+    repl.session.base.humans = {"P0"};
+    CHECK(repl.run("cards").ok);
+    CHECK(repl.run("rules").ok);
+    CHECK(repl.run("audit").ok);
+    auto explicit_human = repl.run("cards --human P0");
+    CHECK_FALSE(explicit_human.ok);
+    CHECK(explicit_human.error.find("不支持 --human") != std::string::npos);
+    repl.session.base.humans.clear();
+
+    // load 刻意非对称：仍以启动 base 匹配存档指纹，不跟随活动会话。在 A 上建局存档，
+    // 切到活动会话 B 后 load 无 --deck，应由 base=A 命中成功（若误跟 B 则报牌表不符）。
+    REQUIRE(repl.run("new --players 2 --seed 1 --hand 0").ok);
+    CHECK(repl.session.deck == deck_a);
+    REQUIRE(repl.run("save " + save.string()).ok);
+    REQUIRE(repl.run("new --players 2 --seed 1 --hand 0 --deck " + deck_b.string())
+                .ok);
+    CHECK(repl.session.deck == deck_b);
+    auto loaded = repl.run("load " + save.string());
+    CHECK(loaded.ok);
+    CHECK(repl.session.deck == deck_a);
+    auto after_load = repl.run("cards");
+    CHECK(after_load.out.find("牌表: " + deck_a.string()) != std::string::npos);
+
+    std::filesystem::remove(save, ec);
+    std::filesystem::remove_all(deck_a, ec);
+    std::filesystem::remove_all(deck_b, ec);
 }
 
 TEST_CASE("cli: step/run/status/save help lists common options")

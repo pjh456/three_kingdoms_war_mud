@@ -839,6 +839,50 @@ add_test(NAME cli_repl_batch_inherit_deck_fail
 set_tests_properties(cli_repl_batch_inherit_deck_fail PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# 活动会话优先：REPL 内 new --deck B 后，cards 与 status 的牌表来源一致（均为 B）。
+add_test(NAME cli_repl_active_session_deck_wins
+         COMMAND sh -c
+                 "a=$(mktemp -d); b=$(mktemp -d); mkdir -p $a/cards $b/cards; \
+                  printf '%s' '{\"name\":\"A\",\"cards\":[\"h0\"]}' > $a/deck.json; printf '%s' '{\"id\":\"h0\",\"name\":\"A测\",\"type\":\"basic\",\"copies\":[{\"suit\":\"spade\",\"number\":7}]}' > $a/cards/h0.json; \
+                  printf '%s' '{\"name\":\"B\",\"cards\":[\"h0\"]}' > $b/deck.json; printf '%s' '{\"id\":\"h0\",\"name\":\"B测\",\"type\":\"basic\",\"copies\":[{\"suit\":\"spade\",\"number\":7}]}' > $b/cards/h0.json; \
+                  out=$(printf 'new --players 2 --seed 1 --hand 0 --deck %s\\ncards\\nstatus\\nquit\\n' \"$b\" | $<TARGET_FILE:tkw> --deck $a repl --autosave '' 2>&1); rc=$?; rm -rf $a $b; \
+                  printf '%s' \"$out\" | grep -q 'B测' && [ \"$(printf '%s' \"$out\" | grep -Fc \"牌表: $b\")\" -ge 3 ] && ! printf '%s' \"$out\" | grep -Fq \"牌表: $a\" && [ $rc -eq 0 ]")
+set_tests_properties(cli_repl_active_session_deck_wins PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 行内 --deck 仍最高优先：活动会话为 B 时 cards --deck A 读启动牌表 A。
+add_test(NAME cli_repl_active_session_deck_inline_override
+         COMMAND sh -c
+                 "a=$(mktemp -d); b=$(mktemp -d); mkdir -p $a/cards $b/cards; \
+                  printf '%s' '{\"name\":\"A\",\"cards\":[\"h0\"]}' > $a/deck.json; printf '%s' '{\"id\":\"h0\",\"name\":\"A测\",\"type\":\"basic\",\"copies\":[{\"suit\":\"spade\",\"number\":7}]}' > $a/cards/h0.json; \
+                  printf '%s' '{\"name\":\"B\",\"cards\":[\"h0\"]}' > $b/deck.json; printf '%s' '{\"id\":\"h0\",\"name\":\"B测\",\"type\":\"basic\",\"copies\":[{\"suit\":\"spade\",\"number\":7}]}' > $b/cards/h0.json; \
+                  out=$(printf 'new --players 2 --seed 1 --hand 0 --deck %s\\ncards --deck %s\\nquit\\n' \"$b\" \"$a\" | $<TARGET_FILE:tkw> --deck $a repl --autosave '' 2>&1); rc=$?; rm -rf $a $b; \
+                  printf '%s' \"$out\" | grep -Fq \"牌表: $a\" && printf '%s' \"$out\" | grep -q 'A测' && [ $rc -eq 0 ]")
+set_tests_properties(cli_repl_active_session_deck_inline_override PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 无活动会话回落启动：不 new 时 cards 读启动 --deck A（批量/纯查询路径行为不变）。
+add_test(NAME cli_repl_no_session_falls_back_to_startup
+         COMMAND sh -c
+                 "a=$(mktemp -d); mkdir -p $a/cards; \
+                  printf '%s' '{\"name\":\"A\",\"cards\":[\"h0\"]}' > $a/deck.json; printf '%s' '{\"id\":\"h0\",\"name\":\"A测\",\"type\":\"basic\",\"copies\":[{\"suit\":\"spade\",\"number\":7}]}' > $a/cards/h0.json; \
+                  out=$(printf 'cards\\nrules\\naudit\\nquit\\n' | $<TARGET_FILE:tkw> --deck $a repl --autosave '' 2>&1); rc=$?; rm -rf $a; \
+                  printf '%s' \"$out\" | grep -Fq \"牌表: $a\" && printf '%s' \"$out\" | grep -q 'A测' && [ $rc -eq 0 ]")
+set_tests_properties(cli_repl_no_session_falls_back_to_startup PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# load 刻意非对称：仍以启动 base 匹配存档指纹。启动 A 存档后切活动会话 B，load 无
+# --deck 应由 base=A 命中成功（若误跟随活动会话 B 则报牌表不符）。
+add_test(NAME cli_repl_load_ignores_active_deck
+         COMMAND sh -c
+                 "a=$(mktemp -d); b=$(mktemp -d); mkdir -p $a/cards $b/cards; save=${CMAKE_CURRENT_BINARY_DIR}/tkw-repl-load-active.json; \
+                  printf '%s' '{\"name\":\"A\",\"cards\":[\"h0\"]}' > $a/deck.json; printf '%s' '{\"id\":\"h0\",\"name\":\"A测\",\"type\":\"basic\",\"copies\":[{\"suit\":\"spade\",\"number\":7}]}' > $a/cards/h0.json; \
+                  printf '%s' '{\"name\":\"B\",\"cards\":[\"h0\"]}' > $b/deck.json; printf '%s' '{\"id\":\"h0\",\"name\":\"B测\",\"type\":\"basic\",\"copies\":[{\"suit\":\"spade\",\"number\":7}]}' > $b/cards/h0.json; \
+                  out=$(printf 'new --players 2 --seed 1 --hand 0\\nsave %s\\nnew --players 2 --seed 1 --hand 0 --deck %s\\nload %s\\ncards\\nquit\\n' \"$save\" \"$b\" \"$save\" | $<TARGET_FILE:tkw> --deck $a repl --autosave '' 2>&1); rc=$?; rm -f $save; rm -rf $a $b; \
+                  ! printf '%s' \"$out\" | grep -q '牌表不符' && printf '%s' \"$out\" | grep -Fq \"牌表: $a\" && [ $rc -eq 0 ]")
+set_tests_properties(cli_repl_load_ignores_active_deck PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 可选 TUI 端到端：仅 TKW_ENABLE_TUI=ON 时注册。add_test 里的 $<TARGET_FILE:tkw-tui>
 # 在 generate 期求值，tui/ 虽后于 tests/ 注册也能解析；门控必须用根级 option 变量，
 # configure 到此 if(TARGET tkw-tui) 尚为假。默认 OFF 时本块整体不存在，ctest 与
