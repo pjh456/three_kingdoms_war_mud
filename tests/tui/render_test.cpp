@@ -282,3 +282,21 @@ TEST_CASE("tui render: status panel shows alive count")
         render_one(tkw::tui::detail::render_status(snap));
     CHECK(over.find("存活: 2") != std::string::npos);
 }
+
+TEST_CASE("tui render: board shows the hero name only when present")
+{
+    const auto render_one = [](ftxui::Element element)
+    {
+        ftxui::Screen screen(80, 10);
+        ftxui::Render(screen, element);
+        return screen.ToString();
+    };
+
+    UiSnapshot snap = base_snapshot();
+    CHECK(render_one(tkw::tui::detail::render_board(snap)).find("武将") ==
+          std::string::npos);
+
+    snap.players[0].hero = "张飞";
+    CHECK(render_one(tkw::tui::detail::render_board(snap)).find("武将 张飞") !=
+          std::string::npos);
+}

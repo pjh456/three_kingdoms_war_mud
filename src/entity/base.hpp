@@ -23,9 +23,9 @@ namespace tkw
 
         /**
          * @class Entity
-         * @brief 玩家实体：id + 座位 + 性别 + 血条（Hp：体力/上限）+ 连环状态。
-         *        构造时自动绑定体力监听：cur 变化经注入的 EventBus 发布
-         *        EntityHpChangedEvent。
+         * @brief 玩家实体：id + 座位 + 性别 + 武将 id + 血条（Hp：体力/上限）
+         *        + 连环状态。构造时自动绑定体力监听：cur 变化经注入的 EventBus
+         *        发布 EntityHpChangedEvent。
          * @note 事件总线须比实体存活更久（实体析构不发布事件，
          *       但存活期间的状态变化都会发布到该总线）。
          * @note 本类是**哑状态持有者**：体力可扣到非正（濒死值状态），
@@ -40,6 +40,7 @@ namespace tkw
             Hp hp;
             EventBus *bus;
             Gender gender = Gender::Male;
+            std::string hero;
             bool chained = false;
 
         public:
@@ -49,12 +50,14 @@ namespace tkw
                 Hp in_hp,
                 EventBus &injected_bus,
                 Gender in_gender = Gender::Male,
-                bool in_chained = false) :
+                bool in_chained = false,
+                std::string in_hero = {}) :
                 id(std::move(eid)),
                 seat(in_seat),
                 hp(std::move(in_hp)),
                 bus(&injected_bus),
                 gender(in_gender),
+                hero(std::move(in_hero)),
                 chained(in_chained)
             {
                 bind_status_events();
@@ -65,6 +68,13 @@ namespace tkw
 
             /** @brief 性别（未显式指定时为 Male）。 */
             Gender get_gender() const noexcept { return gender; }
+
+            /**
+             * @brief 武将 id（空 = 无名/通用座位）。
+             * @note 静态身份，创建后不可变（同 gender）；行为由 game/query 层
+             *       按目录解析，实体本身不承载规则。
+             */
+            const std::string &get_hero() const noexcept { return hero; }
 
             /** @brief 是否处于连环状态（属性伤害传导的载体）。 */
             bool get_chained() const noexcept { return chained; }

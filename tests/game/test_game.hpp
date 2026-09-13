@@ -23,6 +23,7 @@
 #include "game/core/effect.hpp"
 #include "game/flow/table.hpp"
 #include "game/query/equip.hpp"
+#include "hero/catalog.hpp"
 #include "util/rng.hpp"
 
 namespace tkw
@@ -55,11 +56,21 @@ namespace tkw
 
             Entity *add_player(
                 const std::string &id, int seat, int hp,
-                Gender gender = Gender::Male)
+                Gender gender = Gender::Male, const std::string &hero = {})
             {
-                auto r = entities.create(id, seat, Hp::make(hp), gender);
+                auto r = entities.create(id, seat, Hp::make(hp), gender, false,
+                                         hero);
                 REQUIRE(r.is_ok());
                 return r.unwrap();
+            }
+
+            /** 载入测试资源目录的武将目录（默认标准版）。 */
+            void load_heroes(const char *resource_root = TKW_TEST_RESOURCE_DIR)
+            {
+                tkw::config::ResourceStore store(resource_root);
+                auto r = hero::HeroCatalog::load_optional(store, "heroes");
+                REQUIRE(r.is_ok());
+                hero_catalog = std::move(r).unwrap();
             }
 
             void give(const std::string &id, const std::string &def_id, const char *inst)

@@ -30,6 +30,13 @@ target_include_directories(tkw_card INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(tkw_card INTERFACE tkw_config pjh_json)
 
+# 武将支撑域：值类型/目录加载，复用 entity::Gender；game 层向下引用，武将域不引用 game。
+add_library(tkw_hero INTERFACE)
+
+target_include_directories(tkw_hero INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(tkw_hero INTERFACE tkw_config tkw_entity pjh_json)
+
 # game 分层：core（值类型/原语）→ query（只读查询）→ resolve（效果引擎）
 # → flow（流程/运行时）；ai 只读依赖前三层。目标仅作分层文档与聚合，头文件
 # 经统一 src 根 include 目录引用。
@@ -38,7 +45,8 @@ add_library(tkw_game_core INTERFACE)
 
 target_include_directories(tkw_game_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(tkw_game_core INTERFACE tkw_entity tkw_card tkw_event pjh_result)
+target_link_libraries(tkw_game_core INTERFACE tkw_entity tkw_card tkw_hero
+                                               tkw_event pjh_result)
 
 add_library(tkw_game_query INTERFACE)
 

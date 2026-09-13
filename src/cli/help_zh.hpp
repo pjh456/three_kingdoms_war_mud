@@ -113,6 +113,7 @@ namespace tkw
                     return "示例:\n"
                            "    tkw new --players 2 --seed 1   开一局并打印状态\n"
                            "    new --players 2 --seed 1       REPL 内开新局\n"
+                           "    tkw new --hero P0=zhangfei --players 2 --seed 1  指定 P0 为张飞\n"
                            "    tkw new --mode identity --players 5 --seed 1  身份局（4–8 人）\n";
                 if (name == "deal")
                     return "示例:\n"
@@ -132,6 +133,11 @@ namespace tkw
                            "    tkw decks                        列出默认目录下的可用牌表\n"
                            "    tkw decks resources              指定扫描根目录\n"
                            "    tkw --deck resources/junzheng cards  选定军争篇后列出其构成\n";
+                if (name == "heroes")
+                    return "示例:\n"
+                           "    tkw heroes                       列出默认目录下的可用武将\n"
+                           "    tkw heroes resources             指定武将数据根目录\n"
+                           "    new --hero P0=zhangfei --players 2 --seed 1  REPL 内选将开局\n";
                 if (name == "rules")
                     return "示例:\n"
                            "    tkw rules                        列出全部卡牌效果说明\n"
@@ -213,6 +219,8 @@ namespace tkw
                     "    tkw audit                审计牌堆\n"
                     "    tkw cards                列出牌表构成\n"
                     "    tkw decks                列出可用牌表（标准版/军争篇）\n"
+                    "    tkw heroes               列出可用武将（张飞/关羽）\n"
+                    "    tkw --hero P0=zhangfei deal 2 1  指定 P0 为张飞后跑一局\n"
                     "    tkw --deck resources/junzheng deal 2 1  用军争篇牌表跑一局\n"
                     "    tkw rules 过河拆桥      查询卡牌效果说明\n"
                     "    tkw simulate 100 2     批量模拟 100 局（2 人）\n"

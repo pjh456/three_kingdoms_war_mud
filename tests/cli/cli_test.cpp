@@ -1985,3 +1985,71 @@ TEST_CASE("cli: unsupported cards warning lines stay empty without a deck")
     tkw::cli::detail::warn_unsupported_cards(tkw::card::CardDefCatalog{}, err);
     CHECK(err.str().empty());
 }
+
+TEST_CASE("cli: heroes lines list catalog and mark unimplemented skills")
+{
+    auto lines =
+        tkw::cli::detail::heroes_lines(TKW_TEST_RESOURCE_DIR);
+    REQUIRE(lines.is_ok());
+    const std::string out = join_lines(lines.unwrap());
+    CHECK(out.find("可用武将") != std::string::npos);
+    CHECK(out.find("张飞(zhangfei)") != std::string::npos);
+    CHECK(out.find("4体力") != std::string::npos);
+    CHECK(out.find("技能: 咆哮") != std::string::npos);
+    // 关羽武圣尚未实现：审计面显式标注，避免玩家误以为已生效
+    CHECK(out.find("关羽(guanyu)") != std::string::npos);
+    CHECK(out.find("武圣（未实现）") != std::string::npos);
+
+    // 无 heroes.json 的目录回落空数据而不报错
+    const std::filesystem::path empty_dir =
+        temp_dir("tkw_cli_heroes_empty");
+    std::error_code ec;
+    std::filesystem::remove_all(empty_dir, ec);
+    REQUIRE(std::filesystem::create_directories(empty_dir));
+    auto none = tkw::cli::detail::heroes_lines(empty_dir);
+    REQUIRE(none.is_ok());
+    CHECK(join_lines(none.unwrap()).find("无武将数据") != std::string::npos);
+    std::filesystem::remove_all(empty_dir, ec);
+}
+
+TEST_CASE("cli: --hero selects a hero and rejects bad assignments")
+{
+    Repl repl;
+    repl.session.base.deck = TKW_TEST_RESOURCE_DIR;
+
+    // 指定座位武将后 status 显示武将名
+    auto created = repl.run(
+        "new --hero P0=zhangfei --players 2 --seed 1");
+    REQUIRE(created.ok);
+    CHECK(created.out.find("武将 张飞") != std::string::npos);
+    CHECK(created.out.find("武将 无") != std::string::npos);
+    REQUIRE(repl.session.game != nullptr);
+    CHECK(repl.session.game->entities.find("P0").unwrap()->get_hero() ==
+          "zhangfei");
+
+    // 未知武将：中文错误并指出座位
+    auto unknown = repl.run("new --hero P0=nobody --players 2 --seed 1");
+    CHECK_FALSE(unknown.ok);
+    CHECK(unknown.error.find("武将不存在") != std::string::npos);
+    CHECK(unknown.error.find("P0") != std::string::npos);
+
+    // 座位/格式/重复/越界：解析期即拒绝
+    for (const char *bad : {"new --hero P0 --players 2 --seed 1",
+                            "new --hero X=zhangfei --players 2 --seed 1",
+                            "new --hero P0=zhangfei --hero P0=guanyu "
+                            "--players 2 --seed 1",
+                            "new --hero P9=zhangfei --players 2 --seed 1"})
+    {
+        auto r = repl.run(bad);
+        CHECK_FALSE(r.ok);
+    }
+}
+
+TEST_CASE("cli: no hero keeps default status without a hero column")
+{
+    Repl repl;
+    repl.session.base.deck = TKW_TEST_RESOURCE_DIR;
+    auto created = repl.run("new --players 2 --seed 1");
+    REQUIRE(created.ok);
+    CHECK(created.out.find("武将") == std::string::npos);
+}

@@ -12,6 +12,7 @@
 #include <cstdint>
 
 #include "card/def.hpp"
+#include "hero/def.hpp"
 
 namespace tkw
 {
@@ -90,6 +91,32 @@ namespace tkw
         inline constexpr bool is_unimplemented_ability(card::Ability a)
         {
             return !ability_traits(a).implemented;
+        }
+
+        /** @brief 单个武将技能的静态属性。 */
+        struct HeroSkillTraits
+        {
+            bool implemented = false; /**< 引擎是否已实现该技能结算 */
+        };
+
+        /** @brief 武将技能 → 属性。未知值一律取默认（未实现）。 */
+        inline constexpr HeroSkillTraits hero_skill_traits(hero::HeroSkill s)
+        {
+            using H = hero::HeroSkill;
+            switch (s)
+            {
+            case H::PaoXiao:
+                return {true};
+            case H::WuSheng:
+                return {false};
+            }
+            return {};
+        }
+
+        /** @brief 武将技能引擎尚未实现（武将审计用）。 */
+        inline constexpr bool is_unimplemented_skill(hero::HeroSkill s)
+        {
+            return !hero_skill_traits(s).implemented;
         }
 
         /** @brief 可主动打出且引擎能结算（resolve_play 接受）。 */

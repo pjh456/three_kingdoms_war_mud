@@ -11,6 +11,7 @@
 using tkw::EntityManager;
 using tkw::EventBus;
 using tkw::entity::EntityError;
+using tkw::entity::Gender;
 using tkw::entity::Hp;
 
 namespace
@@ -138,4 +139,26 @@ TEST_CASE("manager: snapshot/restore round-trips order, seat and hp")
     CHECK(mgr.find("b").unwrap()->get_hp() == 3);
     CHECK(mgr.find("b").unwrap()->get_hp_bar().get_max() == 5);
     CHECK(mgr.find("c").unwrap()->get_seat() == 2);
+}
+
+TEST_CASE("manager: hero id round-trips through create and snapshot")
+{
+    EventBus bus;
+    EntityManager mgr(bus);
+    REQUIRE(mgr.create("a", 0, Hp::make(4), Gender::Male, false, "zhangfei")
+                .is_ok());
+    REQUIRE(mgr.create("b", 1, Hp::make(4)).is_ok());
+
+    CHECK(mgr.find("a").unwrap()->get_hero() == "zhangfei");
+    CHECK(mgr.find("b").unwrap()->get_hero().empty());
+
+    const auto snap = mgr.snapshot();
+    REQUIRE(snap.size() == 2);
+    CHECK(snap[0].hero == "zhangfei");
+    CHECK(snap[1].hero.empty());
+
+    mgr.clear();
+    mgr.restore(snap);
+    CHECK(mgr.find("a").unwrap()->get_hero() == "zhangfei");
+    CHECK(mgr.find("b").unwrap()->get_hero().empty());
 }

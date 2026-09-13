@@ -55,6 +55,15 @@ target_compile_definitions(
 
 doctest_discover_tests(card_tests)
 
+add_executable(hero_tests test_main.cpp hero/catalog_test.cpp)
+
+target_link_libraries(hero_tests PRIVATE tkw_hero tkw_game doctest)
+
+target_compile_definitions(
+    hero_tests PRIVATE TKW_TEST_RESOURCE_DIR="${CMAKE_SOURCE_DIR}/resources")
+
+doctest_discover_tests(hero_tests)
+
 add_executable(game_tests test_main.cpp game/game_test.cpp game/replay_test.cpp
                        game/ai_test.cpp game/aggressive_test.cpp
                        game/roles_test.cpp)
@@ -194,6 +203,53 @@ add_test(NAME cli_decks_help
          COMMAND sh -c
                  "out=$($<TARGET_FILE:tkw> decks --help); printf '%s' \"$out\" | grep -q '用法:' && printf '%s' \"$out\" | grep -q 'tkw decks' && printf '%s' \"$out\" | grep -q -- '--deck' && printf '%s' \"$out\" | grep -q '示例:'")
 set_tests_properties(cli_decks_help PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# heroes：列出可用武将。钉张飞行与技能，未实现技能显式标注；缺 heroes.json 回落空数据不报错。
+add_test(NAME cli_heroes_list
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> heroes 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '可用武将' && printf '%s' \"$out\" | grep -q '张飞(zhangfei)' && printf '%s' \"$out\" | grep -q '技能: 咆哮' && printf '%s' \"$out\" | grep -q '武圣（未实现）' && [ $rc -eq 0 ]")
+set_tests_properties(cli_heroes_list PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_test(NAME cli_heroes_missing
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> heroes --deck resources/junzheng 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '无武将数据' && [ $rc -eq 0 ]")
+set_tests_properties(cli_heroes_missing PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_test(NAME cli_heroes_help
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> heroes --help); printf '%s' \"$out\" | grep -q '用法:' && printf '%s' \"$out\" | grep -q 'tkw heroes' && printf '%s' \"$out\" | grep -q '示例:'")
+set_tests_properties(cli_heroes_help PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# --hero：指定座位武将后 status 逐座展示武将；无武将的默认局面不新增武将列。
+add_test(NAME cli_hero_status
+         COMMAND sh -c
+                 "out=$(printf 'new --hero P0=zhangfei --players 2 --seed 1\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '武将 张飞' && printf '%s' \"$out\" | grep -q '武将 无' && [ $rc -eq 0 ]")
+set_tests_properties(cli_hero_status PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_test(NAME cli_hero_default_no_column
+         COMMAND sh -c
+                 "out=$(printf 'new --players 2 --seed 1\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); ! printf '%s' \"$out\" | grep -q '武将'")
+set_tests_properties(cli_hero_default_no_column PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# --hero 未知 id：中文错误说明座位并指向 tkw heroes，rc=1。
+add_test(NAME cli_hero_unknown
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> --hero P0=nobody new --players 2 --seed 1 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '武将不存在' && printf '%s' \"$out\" | grep -q 'nobody' && printf '%s' \"$out\" | grep -q 'P0' && [ $rc -eq 1 ]")
+set_tests_properties(cli_hero_unknown PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# --hero 格式/座位越界：解析期中文错误，rc=1。
+add_test(NAME cli_hero_bad_assignment
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> --hero P0 new --players 2 --seed 1 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '座位=武将' && [ $rc -eq 1 ] && \
+                  out2=$($<TARGET_FILE:tkw> --hero P9=zhangfei new --players 2 --seed 1 2>&1); rc2=$?; printf '%s' \"$out2\" | grep -q '超出玩家数' && [ $rc2 -eq 1 ]")
+set_tests_properties(cli_hero_bad_assignment PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # 扩展牌表骨架经既有 --deck 目录选择可发现：头行显示牌堆名，逐卡行显示基础杀、

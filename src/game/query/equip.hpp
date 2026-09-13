@@ -13,6 +13,7 @@
 
 #include "card/def.hpp"
 #include "game/core/context.hpp"
+#include "game/query/hero.hpp"
 
 namespace tkw
 {
@@ -50,13 +51,14 @@ namespace tkw
         }
 
         /**
-         * @brief 本回合杀次数上限（诸葛连弩 = 不限）。
+         * @brief 本回合杀次数上限（诸葛连弩或咆哮 = 不限）。
          * @note 回合流程与出牌动作校验的单一采样点；调用方每轮重采样，
-         *       回合中途装备连弩当轮即生效。
+         *       回合中途装备连弩当轮即生效，锁定技「咆哮」与连弩同构。
          */
         inline int sha_limit(const ReadOnlyContext &ctx, const std::string &player)
         {
-            if (has_ability(ctx, player, card::Ability::NoShaLimit))
+            if (has_ability(ctx, player, card::Ability::NoShaLimit) ||
+                has_hero_skill(ctx, player, hero::HeroSkill::PaoXiao))
                 return std::numeric_limits<int>::max();
             return rules_of(ctx).sha_limit;
         }

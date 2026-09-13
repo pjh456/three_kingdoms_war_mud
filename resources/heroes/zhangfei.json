@@ -1,0 +1,8 @@
+{
+  "id": "zhangfei",
+  "name": "张飞",
+  "gender": "male",
+  "hp": 4,
+  "skills": ["paoxiao"],
+  "text": "咆哮：锁定技，你使用【杀】无次数限制。"
+}

@@ -14,6 +14,7 @@
 #include "game/flow/loop.hpp"
 #include "game/flow/table.hpp"
 #include "game/resolve/combat.hpp"
+#include "hero/catalog.hpp"
 #include "io/file.hpp"
 #include "save/error.hpp"
 #include "save/reader.hpp"
@@ -53,6 +54,29 @@ namespace
         for (int i = 0; i < 4; ++i)
             REQUIRE(g->add_player("P" + std::to_string(i), i,
                                   entity::Hp::make(4), genders[i]).is_ok());
+        return g;
+    }
+
+    /** 带武将目录的夹具：P0 绑定张飞，其余为无名座位。 */
+    std::unique_ptr<Game> make_game_with_heroes(std::uint32_t seed)
+    {
+        config::ResourceStore store(TKW_TEST_RESOURCE_DIR);
+        auto cat = card::CardDefCatalog::load(store, "deck");
+        REQUIRE(cat.is_ok());
+        auto heroes = hero::HeroCatalog::load(store, "heroes");
+        REQUIRE(heroes.is_ok());
+        auto g = std::make_unique<Game>(
+            std::move(cat).unwrap(), std::make_unique<SeededRng>(seed));
+        g->hero_catalog = std::move(heroes).unwrap();
+        for (int i = 0; i < 4; ++i)
+        {
+            const std::string hero = i == 0 ? std::string("zhangfei")
+                                            : std::string();
+            REQUIRE(g->add_player("P" + std::to_string(i), i,
+                                  entity::Hp::make(4), entity::Gender::Male,
+                                  hero)
+                        .is_ok());
+        }
         return g;
     }
 
@@ -177,7 +201,7 @@ TEST_CASE("save: version mismatch is rejected")
     std::string bad = text;
     const auto pos = bad.find("\"version\":1");
     REQUIRE(pos != std::string::npos);
-    bad.replace(pos, 11, "\"version\":3");
+    bad.replace(pos, 11, "\"version\":4");
 
     auto b = make_game(1);
     GameSession sb;
@@ -230,6 +254,68 @@ TEST_CASE("save: chainless save keeps version 1 and omits chained")
     for (int i = 0; i < 4; ++i)
         CHECK_FALSE(
             b->entities.find("P" + std::to_string(i)).unwrap()->get_chained());
+}
+
+TEST_CASE("save: hero selection round-trips and bumps version")
+{
+    auto a = make_game_with_heroes(1);
+    GameSession sa;
+    const std::string text = save::write(*a, sa, "deck");
+
+    CHECK(text.find("\"version\":3") != std::string::npos);
+    CHECK(text.find("\"hero\":\"zhangfei\"") != std::string::npos);
+    // 无名座位不写 hero 字段，保持可选字段语义
+    CHECK(text.find("\"hero\":\"\"") == std::string::npos);
+
+    auto b = make_game_with_heroes(999);
+    GameSession sb;
+    REQUIRE(save::read(text, *b, sb).is_ok());
+    CHECK(b->entities.find("P0").unwrap()->get_hero() == "zhangfei");
+    for (int i = 1; i < 4; ++i)
+        CHECK(b->entities.find("P" + std::to_string(i)).unwrap()->get_hero().empty());
+    CHECK(save::write(*b, sb, "deck") == text);  // 规范化往返稳定
+}
+
+TEST_CASE("save: hero id must exist in the game catalog")
+{
+    auto a = make_game_with_heroes(1);
+    GameSession sa;
+    std::string text = save::write(*a, sa, "deck");
+    const auto pos = text.find("\"hero\":\"zhangfei\"");
+    REQUIRE(pos != std::string::npos);
+    text.replace(pos, 17, "\"hero\":\"nobody\"");
+
+    // 目标带同目录：未命中的 hero id 必须拒绝，不静默当无名座位
+    auto b = make_game_with_heroes(1);
+    GameSession sb;
+    auto r = save::read(text, *b, sb);
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err().kind == save::SaveErrorKind::StructureError);
+    CHECK(r.unwrap_err().detail == "entities.hero");
+
+    // 目标目录为空（无武将数据）：hero 档同样不能落子
+    auto c = make_game(1);
+    GameSession sc;
+    auto r2 = save::read(save::write(*a, sa, "deck"), *c, sc);
+    REQUIRE(r2.is_err());
+    CHECK(r2.unwrap_err().detail == "entities.hero");
+}
+
+TEST_CASE("save: legacy save without hero loads as generic seats")
+{
+    // 无 hero 字段的旧档（v1）可读进带武将目录的对局，座位回落空
+    auto legacy_game = make_game(1);
+    GameSession ls;
+    const std::string legacy = save::write(*legacy_game, ls, "deck");
+    REQUIRE(legacy.find("\"version\":1") != std::string::npos);
+    REQUIRE(legacy.find("\"hero\"") == std::string::npos);
+
+    auto b = make_game_with_heroes(999);
+    GameSession sb;
+    REQUIRE(save::read(legacy, *b, sb).is_ok());
+    CHECK(b->entities.find("P0").unwrap()->get_hero().empty());
+    CHECK(save::write(*b, sb, "deck").find("\"version\":1") !=
+          std::string::npos);
 }
 
 TEST_CASE("save: out-of-range integers are rejected instead of narrowed")

@@ -22,6 +22,7 @@
 #include "game/flow/loop.hpp"
 #include "game/flow/table.hpp"
 #include "game/query/distance.hpp"
+#include "hero/catalog.hpp"
 #include "tui/visibility.hpp"
 
 namespace tkw
@@ -42,6 +43,7 @@ namespace tkw
             bool in_attack_range = false;      /**< viewer 能否用杀够到 */
             tkw::game::Role role = tkw::game::Role::None; /**< 身份局；乱斗 None */
             bool chained = false;              /**< 横置（连环）状态；公开信息 */
+            std::string hero;                  /**< 武将展示名；空 = 无（公开信息） */
 
             bool operator==(const PlayerRow &) const = default;
         };
@@ -132,6 +134,8 @@ namespace tkw
                                ? role
                                : tkw::game::Role::None;
                 row.chained = entity->get_chained();
+                row.hero = tkw::hero::display_hero_name(
+                    ro.heroes, entity->get_hero());
                 snap.players.push_back(std::move(row));
             }
 

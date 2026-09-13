@@ -1,0 +1,8 @@
+{
+  "id": "guanyu",
+  "name": "关羽",
+  "gender": "male",
+  "hp": 4,
+  "skills": ["wusheng"],
+  "text": "武圣：你可以将一张红色牌当【杀】使用或打出。"
+}

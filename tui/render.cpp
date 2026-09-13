@@ -110,8 +110,8 @@ namespace tkw
              * @note 装备区/判定区为明置信息，经快照值展开牌名，空区回落「无」，与 CLI
              *       status 同措辞；手牌仍只出数量。身份局的隐藏座位已在快照层收敛为
              *       Role::None，此处无条件输出其标签（None → 「未知」占位），与 CLI
-             *       status 口径一致，不泄漏真实角色。横置为公开信息，任何座位均显示，
-             *       不做 viewer 收敛。
+             *       status 口径一致，不泄漏真实角色。横置与武将均为公开信息，任何座位
+             *       均显示，不做 viewer 收敛；无武将的座位不追加字段。
              */
             ftxui::Element render_board(const UiSnapshot &snap)
             {
@@ -134,6 +134,8 @@ namespace tkw
                         line += "  [" +
                                 std::string(tkw::cli::detail::role_label_zh(p.role)) +
                                 "]";
+                    if (!p.hero.empty())
+                        line += "  武将 " + p.hero;
                     if (p.chained)
                         line += std::string("  ") + tkw::cli::detail::kChainedTag;
                     rows.push_back(ftxui::text(line));

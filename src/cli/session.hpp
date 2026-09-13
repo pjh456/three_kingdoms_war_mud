@@ -45,6 +45,7 @@ namespace tkw
             std::filesystem::path autosave = "tkw-autosave.json";
             std::filesystem::path history; /**< REPL 命令历史文件；空 = 仅内存（opt-in） */
             std::vector<std::string> humans; /**< 真人座位 id（可重复选项累积） */
+            std::vector<std::string> heroes; /**< 武将选择原文（--hero 座位=武将，可重复） */
             AiLevel ai = AiLevel::Simple;    /**< AI 难度档（默认 simple，零行为变化） */
             tkw::game::GameMode mode =
                 tkw::game::GameMode::Brawl; /**< 对局模式（默认乱斗，零行为变化） */

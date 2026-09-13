@@ -127,6 +127,7 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 | `audit` | — | 审计牌堆，列出引擎未实现的卡 |
 | `cards` | — | 列出牌表（牌堆种类与张数；`--text` 附效果文案） |
 | `decks [目录]` | — | 列出可用牌表（扫描根目录及直接子目录，缺省 `resources`） |
+| `heroes [目录]` | — | 列出可用武将（随 `--deck` 选择；缺 `heroes.json` 显示无数据） |
 | `rules [关键词]` | — | 查询卡牌效果说明（`CardDef.text`，可按关键词过滤） |
 | `deal <玩家数> <种子>` | — | 跑一局：deal <玩家数> <种子> |
 | `simulate <局数> [玩家数]` | — | 批量模拟：simulate <局数> [玩家数] |
@@ -151,6 +152,7 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 | `--history <path>` | REPL 命令历史文件（默认不持久化，仅本次会话；父目录须已存在） |
 | `--human <seat>` | 真人座位（可重复：`--human P0 --human P2`；存档不保存，读档后需重新指定） |
 | `--no-human` | 清空真人座位（REPL 内覆盖启动/会话带入的 `--human`；与 `--human` 同给时清空优先） |
+| `--hero <seat=id>` | 武将选择（可重复：`--hero P0=zhangfei --hero P2=guanyu`；武将数据随 `--deck` 目录的 `heroes.json`） |
 | `--ai <simple\|aggressive>` | AI 难度（默认 `simple` 贪心；`aggressive` 伤害/多目标先行） |
 | `--mode <brawl\|identity>` | 对局模式（默认 `brawl` 乱斗；`identity` 身份局需 4–8 人，`load` 以存档为准） |
 
@@ -158,7 +160,7 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 只对建局/载入类命令（裸 `tkw`/`deal`/`new`/`load`/`repl`/`simulate`）实际生效；`cards`/`audit`/
 `rules` 只读 `--deck`；`step`/`run`/`status`/`save` 只读取其中的 `--verbose`（`step`/`run`）
 或全不读取（`status`/`save`）。`--human` 只在运行真人参与对局的命令生效，`audit`/`cards`/
-`rules`/`simulate` 会明确拒绝；`--autosave`/`--history` 只在 `repl` 生效。**`--mode` 在 `load` 上
+`rules`/`heroes`/`simulate` 会明确拒绝；`--autosave`/`--history` 只在 `repl` 生效。**`--mode` 在 `load` 上
 不生效**：载入的模式与角色以存档为准，避免用命令行强行改写存档模式。
 
 REPL 内只读/批量命令（`cards`/`rules`/`audit`/`deal`/`simulate`）的默认牌表来源：有活动会话
@@ -235,6 +237,28 @@ tkw --deck resources/junzheng repl      # 或进 REPL 逐回合玩（再 new/ste
 
 TUI 命令栏同样支持 `decks [--deck 路径]` 就地列出，结果写入日志面板。
 
+## 武将
+
+武将数据与牌表同根（`<deck>/heroes.json` + `<deck>/heroes/<id>.json`），独立于
+牌表、不参与牌表指纹，故换/改武将不会让旧存档报牌表不符。`tkw heroes` 一览：
+
+```sh
+tkw heroes
+# 可用武将（tkw heroes [目录] 扫描；随 --deck 选择）:
+#   张飞(zhangfei) 4体力 男 技能: 咆哮
+#   关羽(guanyu) 4体力 男 技能: 武圣（未实现）
+```
+
+用 `--hero <座位>=<武将>` 指定（可重复）；`status` 逐座展示武将，存档保留选择：
+
+```sh
+tkw --hero P0=zhangfei deal 2 1     # P0 张飞：咆哮锁定技，使用【杀】无次数限制
+tkw --hero P0=zhangfei repl         # 或进 REPL：new --hero P0=zhangfei --players 2 --seed 1
+```
+
+尚无 `heroes.json` 的自定义牌表照常可玩（武将回落无名座位）。被选中武将若含
+引擎未实现技能（如武圣），建局入口会打印中文警告，不会静默按无技能结算。
+
 ## 自定义牌表
 
 牌表是纯数据目录，默认 `resources/`：
@@ -242,7 +266,9 @@ TUI 命令栏同样支持 `decks [--deck 路径]` 就地列出，结果写入日
 ```
 <牌表目录>/
 ├── deck.json           # name / expansion / cards（卡牌 id 列表）
-└── cards/<id>.json     # 每张卡一个定义文件，id 须与文件名一致
+├── cards/<id>.json     # 每张卡一个定义文件，id 须与文件名一致
+├── heroes.json         # 可选：武将目录（name / expansion + heroes id 列表）
+└── heroes/<id>.json    # 可选：单武将定义（id / name / gender / hp / skills / text）
 ```
 
 - `deck.json` 的 `cards` 引用顺序 = 牌堆构建顺序；

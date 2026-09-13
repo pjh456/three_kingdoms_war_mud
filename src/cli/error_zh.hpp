@@ -415,11 +415,15 @@ namespace tkw
                 return text;
             }
 
-            /** 建局错误 → 用户可见文案（目录加载、玩家创建与身份局人数三类错误面）。 */
+            /** 建局错误 → 用户可见文案（目录加载、玩家创建、身份局人数与未知武将四类错误面）。 */
             inline std::string format_build_error(const game::BuildError &e)
             {
                 if (e.kind == game::BuildError::Kind::CreatePlayer)
                     return "创建玩家失败: P" + std::to_string(e.player_index);
+                if (e.kind == game::BuildError::Kind::UnknownHero)
+                    return "武将不存在: " + e.hero + "（座位 P" +
+                           std::to_string(e.player_index) +
+                           "；用 tkw heroes 查看可用武将）";
                 if (e.kind == game::BuildError::Kind::IdentityPlayerCount)
                 {
                     // 身份局配比只覆盖 4–8 人（roles_for_count）；人数越界时按越界

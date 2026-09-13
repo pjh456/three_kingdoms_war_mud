@@ -8,6 +8,7 @@
 #ifndef INCLUDE_TKW_CLI_COMMANDS_HPP
 #define INCLUDE_TKW_CLI_COMMANDS_HPP
 
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -108,6 +109,10 @@ namespace tkw
                     opt.humans.clear();
                 else if (ctx.has<fixed_string("human")>())
                     opt.humans = ctx.get_all<std::string, fixed_string("human")>();
+
+                // 武将选择同 --human：可重复累积，未提供时保持继承值（无 --no-hero 清空）
+                if (ctx.has<fixed_string("hero")>())
+                    opt.heroes = ctx.get_all<std::string, fixed_string("hero")>();
                 return opt;
             }
 
@@ -307,6 +312,29 @@ namespace tkw
             }
 
             /**
+             * @brief 在根命令上声明可重复的武将选择选项。
+             * @param cmd 目标命令；只应传根命令，理由同 declare_human_option。
+             * @note 取值形如 `P0=zhangfei`，可重复；不是 negatable，也不提供
+             *       --no-hero（武将选择以最近一次显式提供为准）。值补全只列座位
+             *       前缀，武将 id 需运行时命中目录，故不做候选静态枚举。
+             */
+            inline void declare_hero_option(pjh::cli::BaseCommand &cmd)
+            {
+                cmd.option<fixed_string("hero")>(
+                       "--hero",
+                       "武将选择（可重复：--hero P0=zhangfei；武将随牌表目录的 heroes.json）")
+                    .str()
+                    .repeatable()
+                    .completer([] {
+                        std::vector<std::string> seats;
+                        const int max_players = tkw::game::RulesConfig{}.max_players;
+                        for (int i = 0; i < max_players; ++i)
+                            seats.push_back("P" + std::to_string(i) + "=");
+                        return seats;
+                    });
+            }
+
+            /**
              * @brief 建局入参：只取装配所需字段（hand/AI/verbose 属会话参数）。
              * @param opt  命令行选项。
              * @param mode 参与装配的对局模式；load 占位建局固定 Brawl（模式与角色
@@ -322,6 +350,87 @@ namespace tkw
             inline tkw::game::BuildOptions build_options_from(const Options &opt)
             {
                 return build_options_from(opt, opt.mode);
+            }
+
+            /**
+             * @brief 解析可重复 `--hero` 原文为「座位 id → 武将 id」映射。
+             * @param raw     --hero 原始值列表（形如 "P0=zhangfei"）。
+             * @param players 本局玩家数，用于座位下标越界校验。
+             * @return Ok 为座位到武将的映射；Err 为中文提示（格式/座位/重复）。
+             * @note 座位格式固定 `P<非负十进制>`；重复座位报错而非后写覆盖，
+             *       避免静默丢弃用户选择。武将 id 是否存在于目录由 build_game
+             *       按当前牌表目录校验（解析期不读文件系统）。
+             */
+            inline tkw::Result<std::map<std::string, std::string>, std::string>
+            parse_hero_assignments(
+                const std::vector<std::string> &raw, int players)
+            {
+                std::map<std::string, std::string> out;
+                for (const auto &item : raw)
+                {
+                    const auto eq = item.find('=');
+                    if (eq == std::string::npos || eq == 0 ||
+                        eq + 1 >= item.size())
+                        return tkw::Result<std::map<std::string, std::string>,
+                                           std::string>::Err(
+                            "武将选项格式须为 座位=武将（如 P0=zhangfei）: " + item);
+
+                    const std::string seat = item.substr(0, eq);
+                    const std::string hero_id = item.substr(eq + 1);
+                    if (seat.size() < 2 || seat.front() != 'P')
+                        return tkw::Result<std::map<std::string, std::string>,
+                                           std::string>::Err(
+                            "武将座位须形如 P0: " + item);
+
+                    int index = 0;
+                    const char *begin = seat.data() + 1;
+                    const char *end = seat.data() + seat.size();
+                    const auto r = std::from_chars(begin, end, index);
+                    if (r.ec != std::errc{} || r.ptr != end)
+                        return tkw::Result<std::map<std::string, std::string>,
+                                           std::string>::Err(
+                            "武将座位须形如 P0: " + item);
+                    if (index < 0 || index >= players)
+                        return tkw::Result<std::map<std::string, std::string>,
+                                           std::string>::Err(
+                            "武将座位超出玩家数: " + seat + "（当前 " +
+                            std::to_string(players) + " 人）");
+
+                    if (!out.emplace(seat, hero_id).second)
+                        return tkw::Result<std::map<std::string, std::string>,
+                                           std::string>::Err(
+                            "武将座位重复: " + seat +
+                            "（每个座位只能指定一次）");
+                }
+                return tkw::Result<std::map<std::string, std::string>,
+                                   std::string>::Ok(std::move(out));
+            }
+
+            /**
+             * @brief 建局入参（含武将）：解析 --hero 后并入 BuildOptions。
+             * @param opt  命令行选项；heroes 原文与 players 参与解析。
+             * @param mode 参与装配的对局模式。
+             * @return Ok 为建局入参；Err 为 --hero 中文解析错误（由命令层渲染）。
+             */
+            inline tkw::Result<tkw::game::BuildOptions, std::string>
+            build_options_with_heroes(
+                const Options &opt, tkw::game::GameMode mode)
+            {
+                auto parsed = parse_hero_assignments(opt.heroes, opt.players);
+                if (parsed.is_err())
+                    return tkw::Result<tkw::game::BuildOptions,
+                                       std::string>::Err(parsed.unwrap_err());
+                auto bo = build_options_from(opt, mode);
+                bo.heroes = std::move(parsed).unwrap();
+                return tkw::Result<tkw::game::BuildOptions, std::string>::Ok(
+                    std::move(bo));
+            }
+
+            /** 建局入参（含武将）：对局模式取 opt.mode。 */
+            inline tkw::Result<tkw::game::BuildOptions, std::string>
+            build_options_with_heroes(const Options &opt)
+            {
+                return build_options_with_heroes(opt, opt.mode);
             }
 
             /**
@@ -374,6 +483,93 @@ namespace tkw
                 std::ostream &err = std::cerr)
             {
                 for (const auto &line : unsupported_cards_warning_lines(catalog))
+                    err << line << "\n";
+            }
+
+            /**
+             * @brief 单武将的未实现技能警告文本（不含换行）。
+             * @param def 武将定义。
+             * @return 「警告: 武将 <名> 含引擎未实现的技能: <技能名、…>」；
+             *         全部已实现时为空串。
+             */
+            inline std::string unsupported_hero_skill_warning_text(
+                const tkw::hero::HeroDef &def)
+            {
+                std::string names;
+                for (const auto skill : def.skills)
+                {
+                    if (!tkw::game::is_unimplemented_skill(skill))
+                        continue;
+                    if (!names.empty())
+                        names += "、";
+                    names += tkw::hero::display_skill_name(skill);
+                }
+                if (names.empty())
+                    return {};
+                return "警告: 武将 " + tkw::hero::display_hero_name(def) +
+                       " 含引擎未实现的技能: " + names;
+            }
+
+            /**
+             * @brief 已选武将中含引擎未实现技能的警告纯行（0 到多行，不含换行）。
+             * @param game 已建好的对局；按实体所绑武将查目录技能实现状态。
+             * @return 每名含未实现技能的武将为一行；全部已实现或无武将时为空。
+             * @note 只对实际选中的武将告警：未选中的武将数据（含未实现技能）
+             *       不产生默认输出，保证无 --hero 的建局输出逐字节不变。
+             */
+            inline std::vector<std::string> unsupported_hero_skills_warning_lines(
+                const tkw::game::Game &game)
+            {
+                std::vector<std::string> lines;
+                for (const auto *e : game.entities.const_view())
+                {
+                    const std::string &hero_id = e->get_hero();
+                    if (hero_id.empty())
+                        continue;
+                    const auto def = game.hero_catalog.find(hero_id);
+                    if (def.is_none())
+                        continue;
+                    const std::string line =
+                        unsupported_hero_skill_warning_text(*def.unwrap());
+                    if (!line.empty())
+                        lines.push_back(line);
+                }
+                return lines;
+            }
+
+            /**
+             * @brief 指定武将 id 集合的未实现技能警告纯行（批量入口用）。
+             * @param catalog 武将目录。
+             * @param heroes  座位 id → 武将 id 映射；按 id 去重后逐名判定。
+             * @return 每名含未实现技能的武将为一行；目录未命中时跳过。
+             */
+            inline std::vector<std::string> unsupported_hero_skills_warning_lines(
+                const tkw::hero::HeroCatalog &catalog,
+                const std::map<std::string, std::string> &heroes)
+            {
+                std::set<std::string> seen;
+                std::vector<std::string> lines;
+                for (const auto &[seat, hero_id] : heroes)
+                {
+                    (void)seat;
+                    if (hero_id.empty() || !seen.insert(hero_id).second)
+                        continue;
+                    const auto def = catalog.find(hero_id);
+                    if (def.is_none())
+                        continue;
+                    const std::string line =
+                        unsupported_hero_skill_warning_text(*def.unwrap());
+                    if (!line.empty())
+                        lines.push_back(line);
+                }
+                return lines;
+            }
+
+            /** @brief 打印已选武将中未实现技能的警告（建局入口共用同一口径）。 */
+            inline void warn_unsupported_hero_skills(
+                const tkw::game::Game &game, std::ostream &err = std::cerr)
+            {
+                for (const auto &line : unsupported_hero_skills_warning_lines(game))
                     err << line << "\n";
             }
 
@@ -619,7 +815,9 @@ namespace tkw
              *       主公与真人座位可见、其余占位「未知」，全 AI 局与终局公开
              *       全部角色。局面段中 `s.humans` 命中的座位手牌字段经与决策窗口
              *       同一边界展开为己方牌名，其余座位仍只给数量；装备区/判定区为
-             *       明置信息，任何座位均展开牌名，空区回落「无」。
+             *       明置信息，任何座位均展开牌名，空区回落「无」。武将身份公开：
+             *       仅当任一实体有武将时，逐座在角色后、横置前追加「武将 <名|无>」，
+             *       无 --hero 的默认局面段逐字节不变。
              */
             inline void print_status(const Session &s)
             {
@@ -671,6 +869,16 @@ namespace tkw
                 // 「未知」占位；全 AI 对局与终局一律公开，保持既有输出与身份局
                 // 终局亮身份的惯例。
                 const bool reveal_all_roles = s.humans.empty() || over;
+                // 仅当任一实体有武将时才增加武将列，无 --hero 的默认输出不变
+                bool any_hero = false;
+                for (const auto *e : ctx.entities->const_view())
+                {
+                    if (!e->get_hero().empty())
+                    {
+                        any_hero = true;
+                        break;
+                    }
+                }
                 for (const auto &e : *ctx.entities)
                 {
                     const std::string &id = e->get_id();
@@ -695,6 +903,12 @@ namespace tkw
                                   << role_label_zh(
                                          visible ? role : tkw::game::Role::None);
                     }
+                    if (any_hero)
+                        std::cout << " 武将 "
+                                  << (e->get_hero().empty()
+                                          ? std::string("无")
+                                          : tkw::hero::display_hero_name(
+                                                ctx.heroes, e->get_hero()));
                     if (e->get_chained())
                         std::cout << " " << kChainedTag;
                     std::cout << "\n";
@@ -718,11 +932,15 @@ namespace tkw
 
             inline CliResult<void> cmd_new(const Options &opt, Session &s)
             {
-                auto built = tkw::game::build_game(build_options_from(opt));
+                auto options = build_options_with_heroes(opt);
+                if (options.is_err())
+                    return CliFailure{CliError(options.unwrap_err())};
+                auto built = tkw::game::build_game(options.unwrap());
                 if (built.is_err())
                     return CliFailure{CliError(format_build_error(built.unwrap_err()))};
                 auto game = std::move(built).unwrap();
                 warn_unsupported_cards(game->catalog);
+                warn_unsupported_hero_skills(*game);
                 const std::string verr = validate_humans(*game, opt.humans);
                 if (!verr.empty())
                     return CliFailure{CliError(verr)};
@@ -870,6 +1088,7 @@ namespace tkw
                 if (r.is_err())
                     return CliFailure{CliError(render_save_error_zh(r.unwrap_err()))};
                 warn_unsupported_cards(game->catalog);
+                warn_unsupported_hero_skills(*game);
                 const std::string verr = validate_humans(*game, opt.humans);
                 if (!verr.empty())
                     return CliFailure{CliError(verr)};
@@ -896,11 +1115,15 @@ namespace tkw
 
             inline CliResult<void> run_game(const Options &opt)
             {
-                auto built = tkw::game::build_game(build_options_from(opt));
+                auto options = build_options_with_heroes(opt);
+                if (options.is_err())
+                    return CliFailure{CliError(options.unwrap_err())};
+                auto built = tkw::game::build_game(options.unwrap());
                 if (built.is_err())
                     return CliFailure{CliError(format_build_error(built.unwrap_err()))};
                 auto game = std::move(built).unwrap();
                 warn_unsupported_cards(game->catalog);
+                warn_unsupported_hero_skills(*game);
 
                 const std::string verr = validate_humans(*game, opt.humans);
                 if (!verr.empty())
@@ -997,6 +1220,27 @@ namespace tkw
             }
 
             /**
+             * @brief 可用武将一览：拒绝真人座位后，把 heroes_lines 逐行打印到标准输出。
+             * @param opt 对局选项；仅 deck 作为武将数据根目录（位置参数在命令层覆盖）。
+             * @return Ok；Err 为坏 JSON/未知技能等中文加载错误。
+             * @note 打印包装：human 策略留在本层；只读加载不建局、不消耗随机源，
+             *       缺 heroes.json 回落空目录而非报错。
+             */
+            inline CliResult<void> heroes_list(const Options &opt)
+            {
+                const std::string herr = reject_humans(opt.humans, "heroes");
+                if (!herr.empty())
+                    return CliFailure{CliError(herr)};
+
+                auto lines = heroes_lines(opt.deck);
+                if (lines.is_err())
+                    return CliFailure{CliError(lines.unwrap_err())};
+                for (const auto &line : lines.unwrap())
+                    std::cout << line << "\n";
+                return CliResult<void>::Ok();
+            }
+
+            /**
              * @brief 规则/卡牌说明查询：拒绝真人座位后，把 rules_lines 逐行打印到
              *        标准输出。
              * @param opt     对局选项；仅 --deck 决定被读取的牌表目录。
@@ -1035,9 +1279,9 @@ namespace tkw
              * @brief 批量模拟的纯行构造：N 局独立种子全 AI 跑完，返回跨局聚合
              *        摘要行（胜者分布 / 平局 / 平均回合），不打印、不写 stderr。
              * @param opt       对局选项；seed 为基种子（第 i 局用 seed + i），
-             *                  --deck/--players/--hand/--seed/--ai 生效。
+             *                  --deck/--players/--hand/--seed/--ai/--hero 生效。
              * @param n         局数；须 ≥1（由调用方校验），耗时随 n 线性。
-             * @param warnings  非空时写入未实现卡警告行（同目录扫描结果，0 或 1 行）。
+             * @param warnings  非空时写入未实现卡与已选武将未实现技能的警告行。
              * @param cancelled 可选取消谓词；非空且返回 true 时在局边界提前结束。
              * @return Ok 汇总行序（牌表头 + 模拟头 + 胜场/阵营行 + 平均回合）；
              *         Err 为牌堆加载失败 / 开局失败 / 对局失败（文案与 run_game 一致）。
@@ -1060,8 +1304,29 @@ namespace tkw
                 if (catalog.is_err())
                     return SimulateLines::Err(format_load_error(catalog.unwrap_err()));
                 const auto &cat = catalog.unwrap();
+
+                // 武将选择在批量模拟中对每局相同；--hero 解析错误一次性返回
+                auto base_options = build_options_with_heroes(opt);
+                if (base_options.is_err())
+                    return SimulateLines::Err(base_options.unwrap_err());
+                auto hero_catalog = tkw::hero::HeroCatalog::load_optional(
+                    store, "heroes");
+                if (hero_catalog.is_err())
+                    return SimulateLines::Err(
+                        format_load_error(hero_catalog.unwrap_err()));
+                const auto &hero_cat = hero_catalog.unwrap();
+                const tkw::game::BuildOptions base_bo =
+                    std::move(base_options).unwrap();
+
                 if (warnings)
+                {
                     *warnings = unsupported_cards_warning_lines(cat);
+                    const auto hero_warnings =
+                        unsupported_hero_skills_warning_lines(hero_cat,
+                                                              base_bo.heroes);
+                    warnings->insert(warnings->end(), hero_warnings.begin(),
+                                     hero_warnings.end());
+                }
 
                 SimAggregate agg;
                 int completed = 0;
@@ -1070,10 +1335,10 @@ namespace tkw
                     if (cancelled && cancelled())
                         break;
 
-                    // 每局独立随机源：种子 = 基种子 + 局序号。
-                    Options per = opt;
+                    // 每局独立随机源：种子 = 基种子 + 局序号；武将选择逐局沿用。
+                    tkw::game::BuildOptions per = base_bo;
                     per.seed = opt.seed + static_cast<std::uint32_t>(i);
-                    auto built = tkw::game::build_game(build_options_from(per));
+                    auto built = tkw::game::build_game(per);
                     if (built.is_err())
                         return SimulateLines::Err(
                             format_build_error(built.unwrap_err()));
@@ -1207,6 +1472,7 @@ namespace tkw
             // --human 是 repeatable，仅根声明以避免父/叶混写时值分落两处。
             detail::declare_common_options(app, rules);
             detail::declare_human_option(app);
+            detail::declare_hero_option(app);
 
             // 根命令：无子命令时直接跑一局 AI 对局，先打印一行引导。
             app.action(
@@ -1257,6 +1523,22 @@ namespace tkw
                     if (!dir.empty())
                         opt.deck = dir;
                     return detail::decks_list(opt);
+                });
+
+            // heroes：列出可用武将（读取当前牌表目录的 heroes.json，只读查询）
+            auto &heroes =
+                app.add_leaf("heroes", "列出可用武将（预设一览；随 --deck 选择）");
+            detail::declare_common_options(heroes, rules);
+            heroes.arg<std::string, 0>(
+                "目录", "武将数据根目录（缺省取 --deck/会话，否则 resources）");
+            heroes.action(
+                [&session](ParseContext &ctx) -> CliResult<void>
+                {
+                    Options opt = detail::options_from_for_query(ctx, session);
+                    const std::string dir = ctx.get_or<std::string, 0>("");
+                    if (!dir.empty())
+                        opt.deck = dir;
+                    return detail::heroes_list(opt);
                 });
 
             // rules：卡牌效果说明查询（只读牌堆查询，数据源 CardDef.text）

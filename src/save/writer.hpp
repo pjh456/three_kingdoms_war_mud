@@ -190,15 +190,21 @@ namespace tkw
             const auto snap = g.cards.snapshot();
             const auto ents = g.entities.snapshot();
 
-            // 动态版本：仅当确有实体处于连环时写 v2，否则保持 v1 旧格式
+            // 动态版本：取实际用到的最高格式特性——有武将写 v3，仅有连环写 v2，
+            // 否则保持 v1 旧格式
             const bool any_chained =
                 std::any_of(ents.begin(), ents.end(),
                             [](const EntitySnapshot &e) { return e.chained; });
+            const bool any_hero =
+                std::any_of(ents.begin(), ents.end(),
+                            [](const EntitySnapshot &e) { return !e.hero.empty(); });
+            const int version = any_hero    ? kVersionHeroes
+                                : any_chained ? kVersionChained
+                                              : kVersion;
 
             std::ostringstream os;
             os << "{\"format\":" << jstr(kFormat)
-               << ",\"version\":"
-               << (any_chained ? kVersionChained : kVersion);
+               << ",\"version\":" << version;
             // 指纹按 int64 位型写出：JSON 数值只有 int64 精确域，高位指纹
             // （≥2^63）须落成负十进制，读取端再逐位还原为 uint64。
             os << ",\"deck\":{\"name\":" << jstr(deck_name)
@@ -269,9 +275,11 @@ namespace tkw
                 os << "{\"id\":" << jstr(ents[i].id) << ",\"seat\":" << ents[i].seat
                     << ",\"hp\":" << ents[i].hp << ",\"max_hp\":" << ents[i].max_hp
                     << ",\"gender\":" << jstr(gender_name(ents[i].gender));
-                // 可选字段：仅为真时写出，未横置不写，标准档逐字节不变
+                // 可选字段：仅为真/非空时写出，未横置且无武将时标准档逐字节不变
                 if (ents[i].chained)
                     os << ",\"chained\":true";
+                if (!ents[i].hero.empty())
+                    os << ",\"hero\":" << jstr(ents[i].hero);
                 os << "}";
             }
             os << "]}";

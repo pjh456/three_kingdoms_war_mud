@@ -27,6 +27,14 @@ namespace tkw
          */
         inline constexpr int kVersionChained = 2;
 
+        /**
+         * @brief 含武将选择时使用的存档版本。
+         * @note 武将选择为规则状态（影响技能行为），与连环同口径显式拒绝旧二进制
+         *       的静默丢弃；实际特性同时出现时取最高版本。读取端接受 kVersion、
+         *       kVersionChained 与本值。
+         */
+        inline constexpr int kVersionHeroes = 3;
+
         /** @brief 性别 → 存档文本。 */
         inline constexpr const char *gender_name(entity::Gender g)
         {

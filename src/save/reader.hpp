@@ -201,10 +201,11 @@ namespace tkw
          * @return Ok 或 Err(SaveError)；牌表指纹不符时拒绝。
          * @note 旧档缺失 ai/stats 字段时回落默认，不拒绝；缺 mode/roles 时回落
          *       乱斗 + 空角色表；身份局档要求角色表覆盖全部存活实体且恰含一名
-         *       主公，允许保留已阵亡玩家的角色条目；version 接受 1 与含连环状态
-         *       的 2；缺 chained 字段回落 false（旧档可读）；牌表指纹并接受「判定
-         *       属性尚未数据化」时期写出的历史标准档值；全部校验通过后才落子，
-         *       出参 meta 与目标状态同批赋值，早退不污染。
+         *       主公，允许保留已阵亡玩家的角色条目；version 接受 1、含连环状态的
+         *       2 与含武将选择的 3；缺 chained 字段回落 false、缺 hero 字段回落空
+         *       （旧档可读），非空 hero 必须命中本局目录否则 StructureError；牌表
+         *       指纹并接受「判定属性尚未数据化」时期写出的历史标准档值；全部校验
+         *       通过后才落子，出参 meta 与目标状态同批赋值，早退不污染。
          */
         inline SaveResult<void> read(
             std::string_view text, game::Game &g, game::GameSession &session,
@@ -228,7 +229,8 @@ namespace tkw
                 return detail::fail(SaveErrorKind::VersionMismatch, "format");
             int version = 0;
             if (!detail::read_int(*obj, "version", version) ||
-                (version != kVersion && version != kVersionChained))
+                (version != kVersion && version != kVersionChained &&
+                 version != kVersionHeroes))
                 return detail::fail(SaveErrorKind::VersionMismatch, "version");
 
             // deck hash：写出侧按 int64 位型承载，高位指纹在此逐位还原为 uint64
@@ -394,6 +396,19 @@ namespace tkw
                     !detail::read_bool(*eo, "chained", e.chained))
                     return detail::fail(
                         SaveErrorKind::StructureError, "entities.chained");
+                // 旧档无 hero 字段：回落空（通用座位）；非空 hero 必须命中本局
+                // 目录，否则技能错配，显式拒绝而非静默算错
+                if (eo->contains("hero"))
+                {
+                    std::string hid;
+                    if (!detail::read_str(*eo, "hero", hid) || hid.empty())
+                        return detail::fail(
+                            SaveErrorKind::StructureError, "entities.hero");
+                    if (g.hero_catalog.find(hid).is_none())
+                        return detail::fail(
+                            SaveErrorKind::StructureError, "entities.hero");
+                    e.hero = std::move(hid);
+                }
                 ents.push_back(std::move(e));
             }
 

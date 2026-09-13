@@ -166,3 +166,26 @@ TEST_CASE("tui: finished session reports over and a winner label")
     CHECK_FALSE(snap.winner.empty());
     CHECK_FALSE(snap.winner_label.empty());
 }
+
+TEST_CASE("tui: snapshot exposes hero display name per seat")
+{
+    tkw::game::BuildOptions opt;
+    opt.deck = TKW_TEST_RESOURCE_DIR;
+    opt.players = 2;
+    opt.seed = 1;
+    opt.heroes["P0"] = "zhangfei";
+    auto built = tkw::game::build_game(opt);
+    REQUIRE(built.is_ok());
+
+    tkw::cli::Session s;
+    s.active = true;
+    s.deck = TKW_TEST_RESOURCE_DIR;
+    s.game = std::move(built).unwrap();
+    auto ctx = s.game->context();
+    REQUIRE(tkw::game::start_session(ctx, s.state, "P0", 2).is_ok());
+
+    const auto snap = tkw::tui::make_snapshot(s, "P0");
+    REQUIRE(snap.players.size() == 2);
+    CHECK(snap.players[0].hero == "张飞");
+    CHECK(snap.players[1].hero.empty());
+}

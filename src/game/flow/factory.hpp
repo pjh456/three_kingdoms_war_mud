@@ -11,8 +11,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "card/catalog.hpp"
@@ -22,6 +24,7 @@
 #include "entity/hp.hpp"
 #include "game/core/roles.hpp"
 #include "game/flow/table.hpp"
+#include "hero/catalog.hpp"
 #include "util/rng.hpp"
 #include "util/types.hpp"
 
@@ -36,6 +39,7 @@ namespace tkw
             int players = 4;                          /**< 玩家数（座位 0..players-1） */
             std::uint32_t seed = 42;                  /**< 随机种子（构造 SeededRng，不消费流） */
             GameMode mode = GameMode::Brawl;          /**< 对局模式（identity 时分配角色） */
+            std::map<std::string, std::string> heroes; /**< 座位 id → 武将 id（缺省空 = 全通用） */
         };
 
         /** @brief 建局失败信息：失败阶段 + 阶段上下文。 */
@@ -44,14 +48,16 @@ namespace tkw
             /** 失败阶段。 */
             enum class Kind : std::uint8_t
             {
-                LoadDeck,            /**< 牌堆目录加载失败（config 携带 kind/detail） */
+                LoadDeck,            /**< 牌堆/武将目录加载失败（config 携带 kind/detail） */
                 CreatePlayer,        /**< 某座位玩家实体创建失败（player_index 指出座位） */
                 IdentityPlayerCount, /**< 身份局人数无配比（player_index 指出人数） */
+                UnknownHero,         /**< 某座位指定了目录中不存在的武将（player_index + hero） */
             };
 
             Kind kind = Kind::LoadDeck;  /**< 失败阶段 */
             config::ConfigError config;  /**< LoadDeck 阶段的目录错误 */
-            int player_index = 0;        /**< CreatePlayer 阶段的失败座位下标 */
+            int player_index = 0;        /**< CreatePlayer/UnknownHero 阶段的失败座位下标 */
+            std::string hero;            /**< UnknownHero 阶段请求的武将 id */
         };
 
         template <typename T>
@@ -64,14 +70,18 @@ namespace tkw
         }
 
         /**
-         * @brief 装配一局：加载牌堆目录 → 建 Game（注入 SeededRng）→ 逐座创建玩家
-         *        （身份局再分配角色）。
-         * @param opt deck/players/seed/mode；其余会话参数不参与装配。
-         * @return Ok 持有新一局；Err LoadDeck 为目录加载失败（config.kind/detail），
-         *         CreatePlayer 为该座位实体创建失败（player_index），
-         *         IdentityPlayerCount 为身份局人数无配比（player_index = 人数）。
-         * @note 只构造 SeededRng 不消费随机流；仅 identity 模式用该随机源洗牌分配
-         *       角色，brawl 分支不消费随机流也不写角色，行为逐字不变。
+         * @brief 装配一局：加载牌堆与武将目录 → 建 Game（注入 SeededRng）→ 逐座
+         *        创建玩家（身份局再分配角色）。
+         * @param opt deck/players/seed/mode/heroes；其余会话参数不参与装配。
+         * @return Ok 持有新一局；Err LoadDeck 为目录加载失败（config.kind/detail，
+         *         牌堆与武将目录共用本阶段），CreatePlayer 为该座位实体创建失败
+         *         （player_index），IdentityPlayerCount 为身份局人数无配比
+         *         （player_index = 人数），UnknownHero 为该座位武将不在目录中
+         *         （player_index + hero）。
+         * @note 只构造 SeededRng 不消费随机流；武将赋值不消费随机流。仅 identity
+         *       模式用该随机源洗牌分配角色，brawl 分支不消费随机流也不写角色。
+         * @note 无 heroes 指定时逐座 hero 为空、性别与体力走现状；武将自带的
+         *       性别与体力（hp > 0）覆盖座位占位，不影响其他玩家。
          */
         inline BuildResult<std::unique_ptr<Game>> build_game(const BuildOptions &opt)
         {
@@ -85,15 +95,42 @@ namespace tkw
                 return BuildResult<std::unique_ptr<Game>>::Err(
                     BuildError{BuildError::Kind::LoadDeck, catalog.unwrap_err(), 0});
 
+            // 武将目录可选：缺 heroes.json 回落空目录，坏数据（解析/枚举）仍硬失败
+            auto hero_catalog = hero::HeroCatalog::load_optional(store, "heroes");
+            if (hero_catalog.is_err())
+                return BuildResult<std::unique_ptr<Game>>::Err(
+                    BuildError{BuildError::Kind::LoadDeck, hero_catalog.unwrap_err(), 0});
+
             auto game = std::make_unique<Game>(
                 std::move(catalog).unwrap(),
                 std::make_unique<SeededRng>(opt.seed));
+            game->hero_catalog = std::move(hero_catalog).unwrap();
 
             for (int i = 0; i < opt.players; ++i)
             {
+                const std::string seat = "P" + std::to_string(i);
+                entity::Gender gender = gender_for_seat(i);
+                int max_hp = game->rules.base_hp;
+                std::string hero_id;
+
+                const auto pick = opt.heroes.find(seat);
+                if (pick != opt.heroes.end())
+                {
+                    const auto def = game->hero_catalog.find(pick->second);
+                    if (def.is_none())
+                        return BuildResult<std::unique_ptr<Game>>::Err(
+                            BuildError{BuildError::Kind::UnknownHero, {}, i,
+                                       pick->second});
+                    const hero::HeroDef &h = *def.unwrap();
+                    if (h.gender.is_some())
+                        gender = h.gender.unwrap();
+                    if (h.hp > 0)
+                        max_hp = h.hp;
+                    hero_id = pick->second;
+                }
+
                 auto r = game->add_player(
-                    "P" + std::to_string(i), i, entity::Hp::make(game->rules.base_hp),
-                    gender_for_seat(i));
+                    seat, i, entity::Hp::make(max_hp), gender, hero_id);
                 if (r.is_err())
                     return BuildResult<std::unique_ptr<Game>>::Err(
                         BuildError{BuildError::Kind::CreatePlayer, {}, i});

@@ -20,6 +20,7 @@
 #include "event/event_bus.hpp"
 #include "game/core/context.hpp"
 #include "game/core/roles.hpp"
+#include "hero/catalog.hpp"
 #include "util/rng.hpp"
 
 namespace tkw
@@ -46,12 +47,15 @@ namespace tkw
             /**
              * @brief 注册玩家实体（绑定本局总线）。
              * @param gender 性别（缺省 Male）。
+             * @param hero 武将 id（缺省空 = 无名/通用座位）。
              */
             entity::EntityResult<entity::Entity *> add_player(
                 std::string id, int seat, entity::Hp hp,
-                entity::Gender gender = entity::Gender::Male)
+                entity::Gender gender = entity::Gender::Male,
+                std::string hero = {})
             {
-                return entities.create(std::move(id), seat, std::move(hp), gender);
+                return entities.create(std::move(id), seat, std::move(hp), gender,
+                                       false, std::move(hero));
             }
 
             /**
@@ -69,6 +73,7 @@ namespace tkw
                 ctx.rules = &rules;
                 ctx.mode = &mode;
                 ctx.roles = &roles;
+                ctx.heroes = &hero_catalog;
                 return ctx;
             }
 
@@ -76,6 +81,7 @@ namespace tkw
             EntityManager entities{bus};           /**< 实体容器（绑定本局总线） */
             card::CardManager cards;               /**< 卡牌容器 */
             card::CardDefCatalog catalog;          /**< 本局卡牌目录 */
+            hero::HeroCatalog hero_catalog;        /**< 本局武将目录（默认空） */
             std::unique_ptr<Rng> rng;              /**< 本局随机源 */
             RulesConfig rules;                     /**< 本局规则数值（可调参） */
             GameMode mode = GameMode::Brawl;       /**< 本局对局模式 */

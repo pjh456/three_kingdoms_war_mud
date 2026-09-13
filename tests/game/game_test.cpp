@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <map>
 #include <memory>
 #include <string>
@@ -1451,6 +1452,28 @@ TEST_CASE("game: liangnu lifts sha limit")
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 2);            // 两刀全中
     CHECK(g.cards.hand_size("a") == 2); // 4 - 2 = 2（上限 4 不弃）
+}
+
+TEST_CASE("game: paoxiao lifts sha limit only for the hero seat")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Male, "zhangfei");
+    auto *b = g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "sha", "s#1");
+    g.give("a", "sha", "s#2");
+
+    // 锁定技只作用于绑定咆哮的座位，其他座位仍受 rules.sha_limit 约束
+    CHECK(sha_limit(g.ctx, "a") == std::numeric_limits<int>::max());
+    CHECK(sha_limit(g.ctx, "b") == g.rules.sha_limit);
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"s#1", {"b"}}, PlayAction{"s#2", {"b"}}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 2);            // 两刀全中
+    CHECK(g.cards.hand_size("a") == 2); // 2 + 摸2 - 打出2
 }
 
 TEST_CASE("game: mid-turn liangnu allows further sha this turn")

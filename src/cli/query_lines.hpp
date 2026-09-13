@@ -1,6 +1,6 @@
 /**
  * @file query_lines.hpp
- * @brief 只读牌表查询的纯行构造：audit/cards/decks/rules 的展示行（不含打印与 human 策略）。
+ * @brief 只读牌表查询的纯行构造：audit/cards/decks/heroes/rules 的展示行（不含打印与 human 策略）。
  * @note 纯函数、无输出副作用：仅按 opt.deck 加载目录并构造行，不打印、不建局、
  *       不消耗随机源、不校验 humans（真人拒绝留在 CLI 命令包装层）。每行不含换行
  *       符，由消费方补 "\n"；CLI 与 TUI 共用同一行序，保证两处结果逐行一致。
@@ -20,7 +20,9 @@
 #include "cli/render.hpp"
 #include "cli/session.hpp"
 #include "config/resource.hpp"
+#include "game/core/effect.hpp"
 #include "game/resolve/audit.hpp"
+#include "hero/catalog.hpp"
 #include "io/file.hpp"
 #include "util/types.hpp"
 
@@ -182,6 +184,61 @@ namespace tkw
                     lines.push_back("  " + dir.string() + "  " + deck_name + " " +
                                     std::to_string(cat.size()) + " 种/" +
                                     std::to_string(cat.total_copies()) + " 张");
+                }
+                return QueryLines::Ok(std::move(lines));
+            }
+
+            /**
+             * @brief 可用武将一览的纯展示行：读取 <root>/heroes.json 与 heroes/<id>.json。
+             * @param root 牌表目录（武将数据与牌表同根，通常为 --deck）。
+             * @return Ok 为行序：`可用武将（tkw heroes [目录] 扫描；随 --deck 选择）:`，
+             *         随后每名武将一行「  <名>(<id>) <N>体力 <性别> 技能: <名…>」，
+             *         未实现技能在其名后标「（未实现）」；无 heroes.json 回落
+             *         「无武将数据（<dir>）」；Err 为坏 JSON/未知技能/未知性别等中文错误。
+             * @note 只读加载不建局、不消耗随机源；缺文件不是错误，使无武将数据的
+             *       自定义牌表照常列出。
+             */
+            inline QueryLines heroes_lines(const std::filesystem::path &root)
+            {
+                tkw::config::ResourceStore store(root);
+                auto catalog = tkw::hero::HeroCatalog::load_optional(store, "heroes");
+                if (catalog.is_err())
+                    return QueryLines::Err(
+                        format_load_error(catalog.unwrap_err()));
+                const auto &cat = catalog.unwrap();
+
+                std::vector<std::string> lines;
+                lines.push_back(
+                    "可用武将（tkw heroes [目录] 扫描；随 --deck 选择）:");
+                if (cat.empty())
+                {
+                    lines.push_back("无武将数据（" + root.string() + "）");
+                    return QueryLines::Ok(std::move(lines));
+                }
+
+                for (const auto &def : cat)
+                {
+                    std::string line = "  " + tkw::hero::display_hero_name(def) +
+                                       "(" + def.id + ")";
+                    if (def.hp > 0)
+                        line += " " + std::to_string(def.hp) + "体力";
+                    if (def.gender.is_some())
+                        line += def.gender.unwrap() == tkw::entity::Gender::Male
+                                    ? " 男"
+                                    : " 女";
+                    if (!def.skills.empty())
+                    {
+                        line += " 技能: ";
+                        for (std::size_t i = 0; i < def.skills.size(); ++i)
+                        {
+                            if (i != 0)
+                                line += "、";
+                            line += tkw::hero::display_skill_name(def.skills[i]);
+                            if (tkw::game::is_unimplemented_skill(def.skills[i]))
+                                line += "（未实现）";
+                        }
+                    }
+                    lines.push_back(std::move(line));
                 }
                 return QueryLines::Ok(std::move(lines));
             }
