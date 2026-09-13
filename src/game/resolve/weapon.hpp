@@ -53,6 +53,7 @@ namespace tkw
             int amount = 1;
             card::DamageType damage_type =
                 card::DamageType::Normal; /**< 伤害属性（火杀/雷杀透传） */
+            int damage_bonus = 0; /**< 命中伤害修正：目标侧火焰脆弱等累加 */
             bool ignore_armor = false; /**< 攻击方无视防具（青釭剑） */
             bool responded = false;    /**< 目标已打出/视为闪 */
             bool blocked = false;      /**< 防具直接无效（仁王盾） */
@@ -187,6 +188,29 @@ namespace tkw
         {
             if (!sc.ignore_armor && !sc.virtual_sha && is_black_suit(sc.sha.suit))
                 sc.blocked = true;
+        }
+
+        /**
+         * @brief 藤甲：普通杀（含丈八虚拟杀）对你无效；火焰伤害 +1。
+         * @note 青釭剑无视防具：无效与火焰脆弱一并穿透；雷电与决斗不受影响。
+         *       锁定技，无决策窗口。
+         */
+        inline void hook_tengjia(ShaContext &sc)
+        {
+            // 青釭剑穿透：藤甲不生效，普通杀照常命中且火焰不加伤
+            if (sc.ignore_armor)
+                return;
+
+            // 普通杀无效（含丈八两张当杀的虚拟杀）
+            if (sc.damage_type == card::DamageType::Normal)
+            {
+                sc.blocked = true;
+                return;
+            }
+
+            // 火焰伤害 +1
+            if (sc.damage_type == card::DamageType::Fire)
+                sc.damage_bonus += 1;
         }
 
         /**
@@ -375,6 +399,7 @@ namespace tkw
             static const std::vector<ShaHook> table = {
                 {card::Ability::Cixiong, ShaPhase::OnTarget, true, hook_cixiong},
                 {card::Ability::BlackShaImmune, ShaPhase::Armor, false, hook_renwang},
+                {card::Ability::VineArmor, ShaPhase::Armor, false, hook_tengjia},
                 {card::Ability::JudgementJink, ShaPhase::Respond, false, hook_bagua},
                 {card::Ability::ExtraShaAfterJink, ShaPhase::PostJink, true,
                  hook_qinglong},
@@ -462,7 +487,9 @@ namespace tkw
                 run_sha_phase(sc, ShaPhase::PreDamage);
                 if (sc.prevented)
                     return;
-                deal_damage(ctx, ai, attacker, target, amount, sc.damage_type);
+                deal_damage(
+                    ctx, ai, attacker, target, amount + sc.damage_bonus,
+                    sc.damage_type);
                 run_sha_phase(sc, ShaPhase::OnHit);
             }
         }

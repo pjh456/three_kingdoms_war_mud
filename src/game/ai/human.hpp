@@ -428,6 +428,8 @@ namespace tkw
                         return "需出闪时可判定，红色结果视为闪";
                     case card::Ability::BlackShaImmune:
                         return "黑色杀对你无效";
+                    case card::Ability::VineArmor:
+                        return "普通杀与南蛮/万箭对你无效，火焰伤害 +1";
                     }
                     return "装备能力";
                 }

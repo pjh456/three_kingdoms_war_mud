@@ -74,6 +74,7 @@ namespace tkw
             case A::DamageAsDiscard:
             case A::JudgementJink:
             case A::BlackShaImmune:
+            case A::VineArmor:
                 return {true};
             }
             return {};

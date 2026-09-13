@@ -81,7 +81,8 @@ namespace tkw
                                   {"discard_horse_on_damage", Ability::DiscardHorseOnDamage},
                                   {"damage_as_discard", Ability::DamageAsDiscard},
                                   {"judgement_jink", Ability::JudgementJink},
-                                  {"black_sha_immune", Ability::BlackShaImmune}};
+                                  {"black_sha_immune", Ability::BlackShaImmune},
+                                  {"vine_armor", Ability::VineArmor}};
 
             /** 字符串 → 封闭枚举：未知值报 InvalidValue（detail = 字段路径）。 */
             template <typename E>

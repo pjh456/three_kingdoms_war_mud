@@ -1,0 +1,15 @@
+{
+    "id": "tengjia",
+    "name": "藤甲",
+    "type": "equipment",
+    "subtype": "armor",
+    "copies": [
+        { "suit": "spade", "number": 2 },
+        { "suit": "club", "number": 2 }
+    ],
+    "text": "防具。锁定技，南蛮入侵、万箭齐发和普通「杀」对你无效；你每次受到火焰伤害时，此伤害+1。",
+    "equip": {
+        "slot": "armor"
+    },
+    "abilities": ["vine_armor"]
+}

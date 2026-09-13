@@ -155,6 +155,11 @@ namespace tkw
                 const auto ordered = aoe_order_from_next(e);
                 for (const auto &t : ordered)
                 {
+                    // 藤甲：普通伤害的群体锦囊（南蛮/万箭）对该角色无效，
+                    // 不进入响应窗口（与仁王盾「无效则不响应」同口径）
+                    if (has_ability(e.ctx, t, card::Ability::VineArmor) &&
+                        e.eff.damage_type == card::DamageType::Normal)
+                        continue;
                     if (e.nullified({t}))
                         continue;
                     bool responded = false;

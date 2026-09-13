@@ -94,6 +94,7 @@ namespace tkw
             DamageAsDiscard,       /**< 寒冰剑：防止伤害改弃两张牌 */
             JudgementJink,         /**< 八卦阵：判定成功视为闪 */
             BlackShaImmune,        /**< 仁王盾：黑杀无效 */
+            VineArmor,             /**< 藤甲：普通杀与南蛮/万箭无效；受到火焰伤害时 +1 */
         };
 
         /** @brief 效果作用范围（决定结算时如何选目标）。 */

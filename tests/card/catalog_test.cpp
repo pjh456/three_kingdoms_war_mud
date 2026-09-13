@@ -501,8 +501,9 @@ TEST_CASE("card: junzheng skeleton deck loads elemental slashes")
     auto r = CardDefCatalog::load(store, "deck");
     REQUIRE(r.is_ok());
     const auto &cat = r.unwrap();
-    CHECK(cat.size() == 2);
-    CHECK(cat.total_copies() == 14);  // 火杀 5 + 雷杀 9
+    CHECK(cat.size() == 10);
+    // 杀 30 + 火杀 5 + 雷杀 9 + 藤甲 2 + 丈八 1 + 青釭 1 + 南蛮 3 + 万箭 1 + 无中 4 + 桃 8
+    CHECK(cat.total_copies() == 64);
 
     auto huosha = cat.find("huosha");
     REQUIRE(huosha.is_some());
@@ -518,10 +519,20 @@ TEST_CASE("card: junzheng skeleton deck loads elemental slashes")
     CHECK(leisha.unwrap()->effect.unwrap().kind == CardEffectKind::Damage);
     CHECK(leisha.unwrap()->effect.unwrap().damage_type == DamageType::Thunder);
 
-    // 容错扫描与严格加载同源：两卡均为已知机制名
+    // 藤甲：防具能力名经封闭表解析，可审计、可展示
+    auto tengjia = cat.find("tengjia");
+    REQUIRE(tengjia.is_some());
+    CHECK(tengjia.unwrap()->name == "藤甲");
+    CHECK(tengjia.unwrap()->type == CardType::Equipment);
+    REQUIRE(tengjia.unwrap()->equip.is_some());
+    CHECK(tengjia.unwrap()->equip.unwrap().slot == EquipSlot::Armor);
+    REQUIRE(tengjia.unwrap()->abilities.size() == 1);
+    CHECK(tengjia.unwrap()->abilities[0] == Ability::VineArmor);
+
+    // 容错扫描与严格加载同源：十卡均为已知机制名
     auto raws = scan_mechanisms(store, "deck");
     REQUIRE(raws.is_ok());
-    CHECK(raws.unwrap().size() == 2);
+    CHECK(raws.unwrap().size() == 10);
 }
 
 TEST_CASE("card: scan_mechanisms reads raw names and shares the name table")

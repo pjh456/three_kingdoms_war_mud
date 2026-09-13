@@ -2,7 +2,15 @@
     "name": "军争篇",
     "expansion": "junzheng",
     "cards": [
+        "sha",
         "huosha",
-        "leisha"
+        "leisha",
+        "tengjia",
+        "zhangba",
+        "qinggang",
+        "nanman",
+        "wanjian",
+        "wuzhong",
+        "tao"
     ]
 }

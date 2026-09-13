@@ -3640,6 +3640,180 @@ TEST_CASE("game: bagua does not fire on nanman")
     CHECK(g.cards.draw_size() == 1);  // 判定牌未被动用
 }
 
+// ── 杀结算：藤甲 ─────────────────────────────────────────────────────
+
+namespace
+{
+    /** 藤甲置入装备区；牌表含该卡时用其真实副本，否则用等价花色点数。 */
+    void equip_tengjia(TestGame &g, const std::string &id, const char *inst)
+    {
+        const auto def = g.catalog.find("tengjia");
+        if (def.is_some())
+        {
+            const auto &copy = def.unwrap()->copies[0];
+            g.cards.add_to_equip(id, Card{inst, "tengjia", copy.suit, copy.number});
+            return;
+        }
+        g.cards.add_to_equip(
+            id, Card{inst, "tengjia", tkw::card::Suit::Spade, 2});
+    }
+}
+
+TEST_CASE("game: tengjia blocks normal sha")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    equip_tengjia(g, "b", "e#0");
+    g.cards.add_to_hand("a", Card{"s#1", "sha", Suit::Heart, 10});  // 红杀
+    g.cards.add_to_hand("a", Card{"s#2", "sha", Suit::Spade, 7});   // 黑杀
+
+    TestDecider decider;  // 不响应闪
+    const auto red = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", red, {"b"}).is_ok());
+
+    const auto black = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", black, {"b"}).is_ok());
+
+    CHECK(b->get_hp() == 4);  // 普通杀（红黑各一）均无效
+}
+
+TEST_CASE("game: tengjia is a lock skill and never prompts")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    equip_tengjia(g, "b", "e#0");
+    g.give("a", "sha", "s#1");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+
+    // 锁定技无发动窗口：不产生任何 trigger_effect 询问
+    CHECK(decider.trigger_calls.empty());
+}
+
+TEST_CASE("game: tengjia blocks virtual normal sha")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "zhangba", "e#0");
+    equip_tengjia(g, "b", "e#1");
+    g.give("a", "wuzhong", "x#1");
+    g.give("a", "tao", "x#2");
+
+    TestDecider decider;
+    auto r = resolve_virtual_sha(g.ctx, decider, "a", "x#1", "x#2", {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 4);  // 丈八两张当杀仍是普通杀 → 无效
+}
+
+TEST_CASE("game: qinggang pierces tengjia")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "qinggang", "e#0");
+    equip_tengjia(g, "b", "e#1");
+    g.give("a", "sha", "s#1");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+    CHECK(b->get_hp() == 3);  // 青釭剑无视防具 → 普通杀命中
+}
+
+TEST_CASE("game: tengjia takes extra fire damage")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    equip_tengjia(g, "b", "e#0");
+    g.give("a", "huosha", "h#0");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+    CHECK(b->get_hp() == 2);  // 1 点火焰 + 藤甲脆弱 1 = 2
+}
+
+TEST_CASE("game: qinggang suppresses tengjia fire bonus")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "qinggang", "e#0");
+    equip_tengjia(g, "b", "e#1");
+    g.give("a", "huosha", "h#0");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+    CHECK(b->get_hp() == 3);  // 青釭剑穿透：火焰伤害不加成
+}
+
+TEST_CASE("game: tengjia does not block thunder sha")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    equip_tengjia(g, "b", "e#0");
+    g.give("a", "leisha", "l#0");
+
+    TestDecider decider;
+    const auto played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+    CHECK(b->get_hp() == 3);  // 雷电伤害不受藤甲影响：正常 1 点
+}
+
+TEST_CASE("game: tengjia immune to nanman")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    equip_tengjia(g, "b", "e#0");
+    g.give("a", "nanman", "n#0");
+
+    TestDecider decider;  // 不响应
+    const auto played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b", "c"}).is_ok());
+    CHECK(b->get_hp() == 4);  // 藤甲豁免：不进入响应也不受伤
+    CHECK(c->get_hp() == 3);  // 对照：受伤
+}
+
+TEST_CASE("game: tengjia immune to wanjian")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    equip_tengjia(g, "b", "e#0");
+    g.give("a", "wanjian", "wj#0");
+
+    TestDecider decider;  // 不响应
+    const auto played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b", "c"}).is_ok());
+    CHECK(b->get_hp() == 4);  // 藤甲豁免：不进入响应也不受伤
+    CHECK(c->get_hp() == 3);  // 对照：受伤
+}
+
+TEST_CASE("game: vine armor does not affect duel")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    equip_tengjia(g, "b", "e#0");
+    g.give("a", "juedou", "j#0");
+
+    TestDecider decider;  // 不出杀
+    const auto played = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", played, {"b"}).is_ok());
+    CHECK(b->get_hp() == 3);  // 决斗非杀/南蛮/万箭：藤甲不豁免
+}
+
 TEST_CASE("game: guanshi discards two cards to force the sha")
 {
     TestGame g("deck");
