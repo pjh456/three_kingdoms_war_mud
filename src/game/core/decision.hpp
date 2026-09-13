@@ -95,7 +95,10 @@ namespace tkw
 
             /**
              * @brief 从候选牌中选一张（五谷丰登亮牌 / 麒麟弓选弃目标坐骑）。
-             * @return 选中的牌；None = 放弃/非法（结算器回落到第一张）。
+             * @return 选中的牌，必须在 options 中；None = 放弃/非法。
+             * @note 成员校验由结算器按调用点执行：五谷丰登为强制选择，返回
+             *       None 或引用不在 options 中即 InvalidChoice 整体失败；麒麟弓
+             *       回落 options 首匹（发动即必弃一张）。
              */
             virtual Option<card::Card> pick_from_revealed(
                 const ReadOnlyContext &ctx, const std::string &player,

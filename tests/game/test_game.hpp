@@ -95,6 +95,10 @@ namespace tkw
             std::vector<std::vector<std::string>>
                 counter_windows;  /**< 各无懈窗口携带的目标集合（按询问顺序） */
             bool bogus_pick = false;  /**< 选牌返回一张不存在的牌（校验测试用） */
+            bool bogus_revealed = false; /**< 亮牌选择返回一张不在候选中的牌（校验测试用） */
+            bool decline_revealed = false; /**< 亮牌选择返回空（强制选择被拒测试用） */
+            std::size_t revealed_calls = 0; /**< 亮牌选择已询问次数（脚本计数） */
+            std::size_t valid_revealed_first = 0; /**< 前 N 次亮牌选择先返回合法牌，其后按 bogus_revealed 处理 */
             bool decline_discards = false; /**< 弃牌选择返回空（雌雄二选一的放弃分支） */
             std::size_t revealed_pick = 0; /**< pick_from_revealed 返回的候选下标（越界回落首张） */
             std::string response_id;  /**< 非空时响应窗口固定打出该牌 */
@@ -195,6 +199,12 @@ namespace tkw
                 const ReadOnlyContext &, const std::string &,
                 const std::vector<card::Card> &options) override
             {
+                ++revealed_calls;
+                if (bogus_revealed && revealed_calls > valid_revealed_first)
+                    return Option<card::Card>::Some(
+                        Card{"ghost#0", "sha", tkw::card::Suit::Spade, 7});
+                if (decline_revealed)
+                    return Option<card::Card>::None();
                 if (options.empty())
                     return Option<card::Card>::None();
                 const std::size_t idx =

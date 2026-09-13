@@ -221,7 +221,13 @@ namespace tkw
                 return GameResult<void>::Ok();
             }
 
-            /** @brief 五谷丰登：亮出等同存活人数的牌，按座位序各选一张，余牌弃置。 */
+            /**
+             * @brief 五谷丰登：亮出等同存活人数的牌，按座位序各选一张，余牌弃置。
+             * @note 亮牌取自摸牌堆（堆空则弃牌堆洗回）。选择先按座位序只读收集
+             *       并校验（须命中当前亮牌中的一张），再统一落子；任一选择为空
+             *       或不在亮牌中即 InvalidChoice 整体失败（五谷为强制选择），
+             *       已亮的牌原样放回摸牌堆，打出的牌由 resolve_play 回滚。
+             */
             inline GameResult<void> resolve_reveal_pick(const EffectInvocation &e)
             {
                 if (e.nullified(e.targets))
@@ -237,14 +243,17 @@ namespace tkw
                         break;
                     revealed.push_back(std::move(c).unwrap());
                 }
+                const std::vector<card::Card> revealed_order = revealed;
 
-                // 按座位序（从使用者开始）依次选一张
+                // 按座位序（从使用者开始）收集选择并校验：命中当前亮牌之一并
+                // 从候选池移除，供后位玩家选择；不下子、不发事件
+                std::vector<std::pair<std::string, card::Card>> picks;
                 for (const auto &p : e.ctx.entities->order_from(e.player))
                 {
                     if (revealed.empty())
                         break;
                     const auto picked = e.ai.pick_from_revealed(e.ctx, p, revealed);
-                    std::size_t idx = 0;
+                    std::size_t idx = revealed.size();
                     if (picked.is_some())
                         for (std::size_t k = 0; k < revealed.size(); ++k)
                             if (revealed[k].instance_id == picked.unwrap().instance_id)
@@ -252,11 +261,26 @@ namespace tkw
                                 idx = k;
                                 break;
                             }
-                    card::Card chosen = revealed[idx];
+                    if (idx == revealed.size())
+                    {
+                        // 非法选择：按原亮牌序放回摸牌堆（含先行已收集的选择），
+                        // 整体失败不分配也不弃置
+                        for (auto it = revealed_order.rbegin();
+                             it != revealed_order.rend(); ++it)
+                            e.ctx.cards->add_to_draw(*it);
+                        return GameResult<void>::Err(EffectError::InvalidChoice);
+                    }
+                    picks.emplace_back(p, revealed[idx]);
                     revealed.erase(revealed.begin() + std::ptrdiff_t(idx));
+                }
+
+                // 收集校验通过后统一落子：选中牌进手牌
+                for (const auto &[p, chosen] : picks)
+                {
                     e.ctx.cards->add_to_hand(p, chosen);
                     emit_card_moved(e.ctx, "", p, chosen, Zone::Limbo, Zone::Hand);
                 }
+
                 // 剩余置入弃牌堆
                 for (const auto &c : revealed)
                     discard_and_emit(e.ctx, "", c);

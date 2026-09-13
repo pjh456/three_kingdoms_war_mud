@@ -55,8 +55,7 @@ namespace tkw
 
                 /**
                  * @brief 选牌（PickCard/PickRevealed）：取牌价值最高者；同值保持
-                 *        候选序靠前者；空候选返回 None（PickRevealed 由引擎回落
-                 *        第一张）。
+                 *        候选序靠前者；空候选返回 None。
                  * @note 顺手牵羊/过河拆桥抢高价值牌（桃 > 杀 > 闪 > 装备）；
                  *        五谷丰登高价值优先。
                  */

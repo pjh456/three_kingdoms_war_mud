@@ -72,9 +72,9 @@ namespace tkw
                     case DecisionKind::Trigger:
                         return decide_trigger(request);
                     case DecisionKind::PickCard:
-                        return decide_pick(request, "选择目标区域的牌");
+                        return decide_pick(request, "选择目标区域的牌", true);
                     case DecisionKind::PickRevealed:
-                        return decide_pick(request, "从候选牌中选择");
+                        return decide_pick(request, "从候选牌中选择", false);
                     case DecisionKind::Discard:
                         return decide_discard(request);
                     }
@@ -453,9 +453,14 @@ namespace tkw
                     }
                 }
 
-                /** @brief 从牌池选一张（拆/顺/五谷）：pick <n> 或 pass。 */
+                /**
+                 * @brief 从牌池选一张：pick <序号>（allow_pass 时或 pass）。
+                 * @param allow_pass 拆/顺允许放弃（None 由引擎按非法选择处理）；
+                 *        五谷为强制选择，不提供 pass，输入 pass 视为非法重提示。
+                 * @note EOF 在两种模式下都返回空选择，由引擎给出诊断。
+                 */
                 DecisionChoice decide_pick(
-                    const DecisionRequest &req, const char *title)
+                    const DecisionRequest &req, const char *title, bool allow_pass)
                 {
                     DecisionChoice out;
                     if (req.options.empty())
@@ -469,7 +474,10 @@ namespace tkw
                         out_ << "：\n";
                         print_view(req);
                         print_options(req, req.options);
-                        out_ << "输入 pick <序号> 或 pass：" << std::flush;
+                        if (allow_pass)
+                            out_ << "输入 pick <序号> 或 pass：" << std::flush;
+                        else
+                            out_ << "输入 pick <序号>：" << std::flush;
 
                         const auto input = read_tokens();
                         if (input.is_none())
@@ -479,7 +487,12 @@ namespace tkw
                         if (tokens.empty())
                             continue;
                         if (tokens.size() == 1 && tokens[0] == "pass")
-                            return out;
+                        {
+                            if (allow_pass)
+                                return out;
+                            print_invalid("请输入 pick <序号>。");
+                            continue;
+                        }
 
                         int index = 0;
                         if (tokens.size() == 2 && tokens[0] == "pick")
@@ -493,7 +506,9 @@ namespace tkw
                             print_invalid(index_hint(req.options.size()));
                             continue;
                         }
-                        print_invalid("请输入 pick <序号> 或 pass。");
+                        print_invalid(
+                            allow_pass ? "请输入 pick <序号> 或 pass。"
+                                       : "请输入 pick <序号>。");
                     }
                 }
 

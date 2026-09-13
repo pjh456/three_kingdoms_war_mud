@@ -532,6 +532,51 @@ TEST_CASE("game: wugu reveals one card per player at the eight-player cap")
     CHECK(g.cards.discard_size() == 1);     // 仅打出的五谷
 }
 
+TEST_CASE("game: wugu rejects a revealed pick outside the candidates")
+{
+    // 五谷为强制选择：决策源返回的 instance_id 不在亮牌中时必须整体失败，
+    // 不得静默改取首张。首个玩家的合法选择也一并回滚，打出的牌与亮牌都
+    // 回到结算前，无牌滞留。
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "wugu", "w#0");
+
+    TestDecider decider;
+    decider.bogus_revealed = true;
+    decider.valid_revealed_first = 1;  // a 先正常选，b 返回不在亮牌中的牌
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"a", "b"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidChoice);
+    CHECK(g.cards.hand_size("a") == 1);  // 打出的五谷被取回
+    CHECK(g.cards.hand_size("b") == 0);
+    CHECK(g.cards.draw_size() == 108);   // 全部亮牌放回摸牌堆
+    CHECK(g.cards.discard_size() == 0);
+}
+
+TEST_CASE("game: wugu forced pick rejects a decline")
+{
+    // 五谷卡面要求必选：决策源放弃（None）同样按非法选择拒绝，而不是代选首张。
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("a", "wugu", "w#0");
+
+    TestDecider decider;
+    decider.decline_revealed = true;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"a", "b"});
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidChoice);
+    CHECK(g.cards.hand_size("a") == 1);
+    CHECK(g.cards.hand_size("b") == 0);
+    CHECK(g.cards.draw_size() == 108);
+    CHECK(g.cards.discard_size() == 0);
+}
+
 TEST_CASE("game: guohe discards target card")
 {
     TestGame g("deck");
