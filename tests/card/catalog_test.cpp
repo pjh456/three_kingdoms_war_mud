@@ -249,6 +249,50 @@ TEST_CASE("card: judge damage action requires a positive amount")
           ConfigError{ConfigErrorKind::InvalidValue, "x.judge.amount"});
 }
 
+TEST_CASE("card: out-of-range numeric fields are rejected instead of narrowed")
+{
+    // 超出 int 可表示范围的 int64（收窄后会变成合法小数）必须在加载期拒载
+    auto amount = parse_card_def(
+        doc(R"({"id": "a", "name": "a", "type": "basic", "copies": [],
+                 "effect": {"kind": "damage", "amount": 4294967297}})").root(), "a");
+    REQUIRE(amount.is_err());
+    CHECK(amount.unwrap_err() ==
+          ConfigError{ConfigErrorKind::InvalidValue, "a.effect.amount"});
+
+    auto count = parse_card_def(
+        doc(R"({"id": "a", "name": "a", "type": "trick", "copies": [],
+                 "effect": {"kind": "draw", "count": 4294967297}})").root(), "a");
+    REQUIRE(count.is_err());
+    CHECK(count.unwrap_err() ==
+          ConfigError{ConfigErrorKind::InvalidValue, "a.effect.count"});
+
+    auto range = parse_card_def(
+        doc(R"({"id": "a", "name": "a", "type": "trick", "copies": [],
+                 "effect": {"kind": "steal", "count": 1, "range": 4294967297}})")
+            .root(),
+        "a");
+    REQUIRE(range.is_err());
+    CHECK(range.unwrap_err() ==
+          ConfigError{ConfigErrorKind::InvalidValue, "a.effect.range"});
+
+    auto equip_range = parse_card_def(
+        doc(R"({"id": "a", "name": "a", "type": "equipment", "subtype": "horse",
+                 "copies": [],
+                 "equip": {"slot": "weapon", "range": 4294967297}})").root(), "a");
+    REQUIRE(equip_range.is_err());
+    CHECK(equip_range.unwrap_err() ==
+          ConfigError{ConfigErrorKind::InvalidValue, "a.equip.range"});
+
+    auto judge_amount = parse_card_def(
+        doc(R"({"id": "a", "name": "a", "type": "trick", "subtype": "delayed",
+                 "copies": [],
+                 "judge": {"trigger": "spade_2_9", "success": "damage",
+                           "amount": 4294967297}})").root(), "a");
+    REQUIRE(judge_amount.is_err());
+    CHECK(judge_amount.unwrap_err() ==
+          ConfigError{ConfigErrorKind::InvalidValue, "a.judge.amount"});
+}
+
 TEST_CASE("card: catalog loads deck + card files")
 {
     const auto dir = temp_dir("tkw_card_catalog");

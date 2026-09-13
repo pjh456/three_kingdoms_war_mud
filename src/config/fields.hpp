@@ -12,6 +12,7 @@
 #define INCLUDE_TKW_CONFIG_FIELDS_HPP
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <string_view>
 
@@ -156,6 +157,27 @@ namespace tkw
                 return fail<std::int64_t>(
                     ConfigErrorKind::TypeMismatch, field_path(path, key));
             return ConfigResult<std::int64_t>::Ok(*r);
+        }
+
+        /**
+         * @brief 可选整型字段，收窄为 int：缺失回落默认值。
+         * @return 缺失 → def；非对象容器/非整数 → TypeMismatch；数值超出
+         *         int 可表示范围 → InvalidValue（收窄前检查，不静默截断）。
+         */
+        inline ConfigResult<int> opt_int_range(
+            const json::Json &obj,
+            std::string_view key,
+            int def,
+            std::string_view path = {})
+        {
+            auto r = opt_int(obj, key, def, path);
+            if (r.is_err())
+                return ConfigResult<int>::Err(r.unwrap_err());
+            const std::int64_t v = r.unwrap();
+            if (v < std::numeric_limits<int>::min() ||
+                v > std::numeric_limits<int>::max())
+                return fail<int>(ConfigErrorKind::InvalidValue, field_path(path, key));
+            return ConfigResult<int>::Ok(static_cast<int>(v));
         }
 
         /** @brief 可选字符串字段：缺失回落默认值；类型不符仍失败。 */

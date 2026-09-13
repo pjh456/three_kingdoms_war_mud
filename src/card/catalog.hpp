@@ -178,15 +178,15 @@ namespace tkw
                     return cfg::ConfigResult<CardEffect>::Err(kind.unwrap_err());
                 eff.kind = kind.unwrap();
 
-                auto amount = cfg::opt_int(obj, "amount", 0, path);
+                auto amount = cfg::opt_int_range(obj, "amount", 0, path);
                 if (amount.is_err())
                     return cfg::ConfigResult<CardEffect>::Err(amount.unwrap_err());
-                eff.amount = static_cast<int>(amount.unwrap());
+                eff.amount = amount.unwrap();
 
-                auto count = cfg::opt_int(obj, "count", 0, path);
+                auto count = cfg::opt_int_range(obj, "count", 0, path);
                 if (count.is_err())
                     return cfg::ConfigResult<CardEffect>::Err(count.unwrap_err());
-                eff.count = static_cast<int>(count.unwrap());
+                eff.count = count.unwrap();
 
                 auto scope = opt_enum<Scope>(obj, "scope", path, scope_table);
                 if (scope.is_err())
@@ -200,10 +200,10 @@ namespace tkw
                     return cfg::ConfigResult<CardEffect>::Err(resp.unwrap_err());
                 eff.response = resp.unwrap();
 
-                auto range = cfg::opt_int(obj, "range", 0, path);
+                auto range = cfg::opt_int_range(obj, "range", 0, path);
                 if (range.is_err())
                     return cfg::ConfigResult<CardEffect>::Err(range.unwrap_err());
-                eff.range = static_cast<int>(range.unwrap());
+                eff.range = range.unwrap();
 
                 // kind 所需的字段不变量：缺失/为 0 一律加载失败（不静默按 0 结算）
                 switch (eff.kind)
@@ -256,10 +256,10 @@ namespace tkw
                     return cfg::ConfigResult<CardEquip>::Err(slot.unwrap_err());
                 eq.slot = slot.unwrap();
 
-                auto range = cfg::opt_int(obj, "range", 0, path);
+                auto range = cfg::opt_int_range(obj, "range", 0, path);
                 if (range.is_err())
                     return cfg::ConfigResult<CardEquip>::Err(range.unwrap_err());
-                eq.range = static_cast<int>(range.unwrap());
+                eq.range = range.unwrap();
 
                 return cfg::ConfigResult<CardEquip>::Ok(std::move(eq));
             }
@@ -300,10 +300,10 @@ namespace tkw
                     return cfg::ConfigResult<JudgeEffect>::Err(failure.unwrap_err());
                 j.failure = failure.unwrap().unwrap_or(JudgeAction::Nothing);
 
-                auto amount = cfg::opt_int(obj, "amount", 0, path);
+                auto amount = cfg::opt_int_range(obj, "amount", 0, path);
                 if (amount.is_err())
                     return cfg::ConfigResult<JudgeEffect>::Err(amount.unwrap_err());
-                j.amount = static_cast<int>(amount.unwrap());
+                j.amount = amount.unwrap();
 
                 auto scope = opt_enum<Scope>(obj, "scope", path, scope_table);
                 if (scope.is_err())
