@@ -110,7 +110,7 @@ namespace tkw
 
             Option<PlayAction> play_response(
                 const ReadOnlyContext &ctx, const std::string &entity,
-                ResponseKind kind) override
+                ResponseKind kind, const ResponsePrompt &) override
             {
                 if (!response_id.empty())
                     return Option<PlayAction>::Some(
@@ -160,7 +160,8 @@ namespace tkw
             Option<std::string> play_counter(
                 const ReadOnlyContext &ctx, const std::string &player,
                 const std::string &,
-                const std::vector<std::string> &trick_targets) override
+                const std::vector<std::string> &trick_targets,
+                const std::string &) override
             {
                 counter_windows.push_back(trick_targets);
                 if (!counter)
@@ -197,7 +198,8 @@ namespace tkw
 
             Option<card::Card> pick_from_revealed(
                 const ReadOnlyContext &, const std::string &,
-                const std::vector<card::Card> &options) override
+                const std::vector<card::Card> &options,
+                RevealSource) override
             {
                 ++revealed_calls;
                 if (bogus_revealed && revealed_calls > valid_revealed_first)

@@ -193,7 +193,8 @@ TEST_CASE("aggressive: pick_from_revealed prefers the highest value")
         tkw::card::Card{"r#2", "tao", tkw::card::Suit::Heart, 3}};
 
     tkw::game::AggressiveAI ai;
-    const auto picked = ai.pick_from_revealed(g.ctx, "a", revealed);
+    const auto picked = ai.pick_from_revealed(
+        g.ctx, "a", revealed, tkw::game::RevealSource::Qilin);
     REQUIRE(picked.is_some());
     CHECK(picked.unwrap().instance_id == "r#2");  // 贪心档取亮牌首张
 }

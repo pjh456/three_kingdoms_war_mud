@@ -57,16 +57,20 @@ namespace tkw
             return ctx.entities->order_from(start);
         }
 
-        /** @brief 询问某玩家是否打出无懈（有牌且决定出则消费）。 */
+        /**
+         * @brief 询问某玩家是否打出无懈（有牌且决定出则消费）。
+         * @param trick_def_id 被结算锦囊的 def id（只读事实，透传窗口文案）。
+         */
         inline bool try_play_counter(
             GameContext &ctx, DecisionSource &ai, const std::string &player,
             const std::string &trick_user,
-            const std::vector<std::string> &trick_targets)
+            const std::vector<std::string> &trick_targets,
+            const std::string &trick_def_id)
         {
             if (!has_counter_card(ctx, player))
                 return false;
             const auto chosen =
-                ai.play_counter(ctx, player, trick_user, trick_targets);
+                ai.play_counter(ctx, player, trick_user, trick_targets, trick_def_id);
             if (chosen.is_none())
                 return false;
             return consume_counter(ctx, player, chosen.unwrap());
@@ -74,8 +78,8 @@ namespace tkw
 
         /**
          * @brief 无懈响应窗口（链式）。
-         * @param trick 被结算的锦囊定义（规则扩展缝：将来可按锦囊/目标定制
-         *        可无懈性；当前实现只用它做语义占位）。
+         * @param trick 被结算的锦囊定义（def id 透传给窗口文案；当前实现
+         *        只用它做语义占位与展示）。
          * @param trick_user 锦囊使用者；空串 = 延时锦囊判定窗口（使用者不随牌
          *        记录，窗口主体为被判定玩家）。
          * @param trick_targets 锦囊目标集合（判定窗口 = 被判定玩家一人），
@@ -90,7 +94,6 @@ namespace tkw
             const std::string &trick_user,
             const std::vector<std::string> &trick_targets)
         {
-            (void)trick;
             const std::string &start =
                 trick_user.empty() ? trick_targets.front() : trick_user;
             const auto order = seat_order_from(ctx, start);
@@ -100,7 +103,8 @@ namespace tkw
                 bool any = false;
                 for (const auto &p : order)
                 {
-                    if (try_play_counter(ctx, ai, p, trick_user, trick_targets))
+                    if (try_play_counter(
+                            ctx, ai, p, trick_user, trick_targets, trick.id))
                     {
                         cancelled = !cancelled;
                         any = true;

@@ -46,7 +46,8 @@ namespace tkw
         // 杀响应窗口入口（决斗/南蛮/借刀共用；定义见结算区末尾）
         inline bool respond_sha(
             GameContext &ctx, DecisionSource &ai,
-            const std::string &entity, const std::string &victim);
+            const std::string &entity, const std::string &victim,
+            const ResponsePrompt &prompt);
 
         // ── 效果辅助 ────────────────────────────────────────────────────
 
@@ -127,9 +128,11 @@ namespace tkw
                     if (e.eff.response.is_some())
                     {
                         const auto kind = e.eff.response.unwrap();
+                        const ResponsePrompt prompt{
+                            e.def.id, e.player, e.eff.amount};
                         responded = kind == card::ResponseKind::Sha
-                            ? respond_sha(e.ctx, e.ai, t, "")
-                            : request_response(e.ctx, e.ai, t, kind);
+                            ? respond_sha(e.ctx, e.ai, t, "", prompt)
+                            : request_response(e.ctx, e.ai, t, kind, prompt);
                     }
                     if (!responded)
                         deal_damage(e.ctx, e.ai, e.player, t, e.eff.amount);
@@ -210,7 +213,9 @@ namespace tkw
                 std::string defender = e.targets.front();
                 for (int round = 0; round < rules_of(e.ctx).duel_rounds; ++round)
                 {
-                    if (!respond_sha(e.ctx, e.ai, defender, ""))
+                    if (!respond_sha(
+                            e.ctx, e.ai, defender, "",
+                            {e.def.id, e.player, e.eff.amount}))
                     {
                         deal_damage(e.ctx, e.ai, attacker, defender, e.eff.amount);
                         return GameResult<void>::Ok();
@@ -252,7 +257,8 @@ namespace tkw
                 {
                     if (revealed.empty())
                         break;
-                    const auto picked = e.ai.pick_from_revealed(e.ctx, p, revealed);
+                    const auto picked =
+                        e.ai.pick_from_revealed(e.ctx, p, revealed, RevealSource::Wugu);
                     std::size_t idx = revealed.size();
                     if (picked.is_some())
                         for (std::size_t k = 0; k < revealed.size(); ++k)
@@ -295,7 +301,9 @@ namespace tkw
                 const std::string &holder = e.targets[0];
                 const std::string &victim = e.targets[1];
 
-                if (respond_sha(e.ctx, e.ai, holder, victim))
+                if (respond_sha(
+                        e.ctx, e.ai, holder, victim,
+                        {e.def.id, e.player, 0}))
                     return GameResult<void>::Ok();
 
                 // 未出杀：使用者获得 holder 的武器
@@ -495,11 +503,13 @@ namespace tkw
          */
         inline bool respond_sha(
             GameContext &ctx, DecisionSource &ai,
-            const std::string &entity, const std::string &victim)
+            const std::string &entity, const std::string &victim,
+            const ResponsePrompt &prompt)
         {
             if (!has_response_card(ctx, entity, card::ResponseKind::Sha))
                 return false;
-            const auto chosen = ai.play_response(ctx, entity, card::ResponseKind::Sha);
+            const auto chosen =
+                ai.play_response(ctx, entity, card::ResponseKind::Sha, prompt);
             if (chosen.is_none())
                 return false;
             const auto &act = chosen.unwrap();

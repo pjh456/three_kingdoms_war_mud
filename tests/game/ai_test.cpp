@@ -245,7 +245,7 @@ TEST_CASE("ai: RequestDecisionSource forwards choices to decider")
     RequestDecisionSource src(noop);
     const tkw::game::TurnContext turn{"a", 0, 1};
     CHECK(src.choose_play(g.ctx, turn).is_none());
-    CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha).is_none());
+    CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha, {}).is_none());
     CHECK(src.choose_discards(g.ctx, "a", 1, tkw::game::DiscardReason::TurnLimit)
               .empty());
     CHECK_FALSE(src.trigger_effect(g.ctx, "a", tkw::card::Ability::NoShaLimit));
@@ -428,7 +428,7 @@ TEST_CASE("ai: human decider prints candidate card text in response and discard"
         std::ostringstream out;
         HumanDecider dec(in, out);
         RequestDecisionSource src(dec);
-        CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Jink)
+        CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Jink, {})
                   .is_none());
         CHECK(out.str().find("当你成为「杀」或「万箭齐发」的目标时") !=
               std::string::npos);
@@ -502,7 +502,7 @@ TEST_CASE("ai: simple ai answers a sha window with the zhangba pair")
 
     SimpleAI ai;
     const auto chosen =
-        ai.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha);
+        ai.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha, {});
     REQUIRE(chosen.is_some());
     CHECK(chosen.unwrap().instance_id == "x#1");
     CHECK(chosen.unwrap().second_instance_id == "x#2");
@@ -510,7 +510,7 @@ TEST_CASE("ai: simple ai answers a sha window with the zhangba pair")
     // 手牌有真杀：真杀优先，不出两张当杀
     g.give("a", "sha", "s#1");
     const auto again =
-        ai.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha);
+        ai.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha, {});
     REQUIRE(again.is_some());
     CHECK(again.unwrap().instance_id == "s#1");
     CHECK(again.unwrap().second_instance_id.empty());
@@ -531,7 +531,7 @@ TEST_CASE("ai: human decider answers a sha with a card pair")
     RequestDecisionSource src(dec);
 
     const auto chosen =
-        src.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha);
+        src.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha, {});
     REQUIRE(chosen.is_some());
     CHECK(chosen.unwrap().instance_id == "x#1");
     CHECK(chosen.unwrap().second_instance_id == "x#2");
@@ -553,7 +553,7 @@ TEST_CASE("ai: human decider reprompts on a single index in the pair response")
     RequestDecisionSource src(dec);
 
     const auto chosen =
-        src.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha);
+        src.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha, {});
     REQUIRE(chosen.is_some());
     CHECK(chosen.unwrap().instance_id == "x#1");
     CHECK(chosen.unwrap().second_instance_id == "x#2");
@@ -575,7 +575,7 @@ TEST_CASE("ai: human decider declines the zhangba pair response")
     RequestDecisionSource src(dec);
 
     CHECK(src.play_response(
-                g.ctx, "a", tkw::card::ResponseKind::Sha)
+                g.ctx, "a", tkw::card::ResponseKind::Sha, {})
               .is_none());
 }
 
@@ -594,7 +594,7 @@ TEST_CASE("ai: human decider treats eof as decline in the pair response")
     RequestDecisionSource src(dec);
 
     CHECK(src.play_response(
-                g.ctx, "a", tkw::card::ResponseKind::Sha)
+                g.ctx, "a", tkw::card::ResponseKind::Sha, {})
               .is_none());
 }
 
@@ -610,7 +610,7 @@ TEST_CASE("ai: human decider declines response")
     HumanDecider dec(in, out);
     RequestDecisionSource src(dec);
 
-    CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Jink).is_none());
+    CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Jink, {}).is_none());
 }
 
 TEST_CASE("ai: human decider names the required response card")
@@ -626,7 +626,7 @@ TEST_CASE("ai: human decider names the required response card")
         std::ostringstream out;
         HumanDecider dec(in, out);
         RequestDecisionSource src(dec);
-        CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha)
+        CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha, {})
                   .is_none());
         CHECK(out.str().find("需打出杀") != std::string::npos);
     }
@@ -635,7 +635,7 @@ TEST_CASE("ai: human decider names the required response card")
         std::ostringstream out;
         HumanDecider dec(in, out);
         RequestDecisionSource src(dec);
-        CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Jink)
+        CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Jink, {})
                   .is_none());
         CHECK(out.str().find("需打出闪") != std::string::npos);
     }
@@ -793,14 +793,16 @@ TEST_CASE("ai: human decider treats eof as decline")
     const tkw::game::TurnContext turn{"a", 0, 1};
 
     CHECK(src.choose_play(g.ctx, turn).is_none());
-    CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha).is_none());
-    CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Jink).is_none());
+    CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Sha, {}).is_none());
+    CHECK(src.play_response(g.ctx, "a", tkw::card::ResponseKind::Jink, {}).is_none());
     CHECK(src.play_peach(g.ctx, "a", "b").is_none());
-    CHECK(src.play_counter(g.ctx, "a", "", {}).is_none());
+    CHECK(src.play_counter(g.ctx, "a", "", {}, "").is_none());
     CHECK_FALSE(src.trigger_effect(g.ctx, "a", tkw::card::Ability::NoShaLimit));
     CHECK(src.pick_card_from_target(g.ctx, "a", "b").is_none());
     const auto revealed = g.ctx.cards->hand("a");
-    CHECK(src.pick_from_revealed(g.ctx, "a", revealed).is_none());
+    CHECK(src.pick_from_revealed(
+              g.ctx, "a", revealed, tkw::game::RevealSource::Wugu)
+              .is_none());
     CHECK(src.choose_discards(
                   g.ctx, "a", 1, tkw::game::DiscardReason::TurnLimit)
               .empty());
@@ -886,13 +888,13 @@ TEST_CASE("ai: routed ai falls back for non-human response window")
     RoutedAI routed({"a"}, in, out);
 
     const auto a_card =
-        routed.play_response(g.ctx, "a", tkw::card::ResponseKind::Jink);
+        routed.play_response(g.ctx, "a", tkw::card::ResponseKind::Jink, {});
     REQUIRE(a_card.is_some());
     CHECK(a_card.unwrap().instance_id == "j#1");
 
     // b 非真人：SimpleAI 取首张闪，不消费输入流（输入已被 a 读空）。
     const auto b_card =
-        routed.play_response(g.ctx, "b", tkw::card::ResponseKind::Jink);
+        routed.play_response(g.ctx, "b", tkw::card::ResponseKind::Jink, {});
     REQUIRE(b_card.is_some());
     CHECK(b_card.unwrap().instance_id == "j#2");
 }
@@ -960,7 +962,7 @@ TEST_CASE("ai: simple counter plays against an enemy trick targeting self")
     g.give("b", "wuxie", "w#0");
 
     SimpleAI ai;
-    const auto chosen = ai.play_counter(g.ctx, "b", "a", {"b"});
+    const auto chosen = ai.play_counter(g.ctx, "b", "a", {"b"}, "");
     REQUIRE(chosen.is_some());
     CHECK(chosen.unwrap() == "w#0");
 }
@@ -973,8 +975,8 @@ TEST_CASE("ai: simple counter declines own trick")
     g.give("a", "wuxie", "w#0");
 
     SimpleAI ai;
-    CHECK(ai.play_counter(g.ctx, "a", "a", {"b"}).is_none());  // 冲别人的
-    CHECK(ai.play_counter(g.ctx, "a", "a", {"a"}).is_none());  // 自益
+    CHECK(ai.play_counter(g.ctx, "a", "a", {"b"}, "").is_none());  // 冲别人的
+    CHECK(ai.play_counter(g.ctx, "a", "a", {"a"}, "").is_none());  // 自益
 }
 
 TEST_CASE("ai: simple counter declines a third party's trick")
@@ -990,9 +992,9 @@ TEST_CASE("ai: simple counter declines a third party's trick")
 
     SimpleAI ai;
     // a 的锦囊冲 c：旁观者 b/d 持无懈也不出（省牌），目标本人 c 出
-    CHECK(ai.play_counter(g.ctx, "b", "a", {"c"}).is_none());
-    CHECK(ai.play_counter(g.ctx, "d", "a", {"c"}).is_none());
-    const auto chosen = ai.play_counter(g.ctx, "c", "a", {"c"});
+    CHECK(ai.play_counter(g.ctx, "b", "a", {"c"}, "").is_none());
+    CHECK(ai.play_counter(g.ctx, "d", "a", {"c"}, "").is_none());
+    const auto chosen = ai.play_counter(g.ctx, "c", "a", {"c"}, "");
     REQUIRE(chosen.is_some());
     CHECK(chosen.unwrap() == "w#0");
 }
@@ -1007,11 +1009,11 @@ TEST_CASE("ai: simple counter plays on a delayed trick judged on self")
 
     SimpleAI ai;
     // 判定窗口：使用者空串哨兵，目标 = 被判定玩家
-    const auto chosen = ai.play_counter(g.ctx, "b", "", {"b"});
+    const auto chosen = ai.play_counter(g.ctx, "b", "", {"b"}, "");
     REQUIRE(chosen.is_some());
     CHECK(chosen.unwrap() == "w#0");
     // 第三方持无懈也不救
-    CHECK(ai.play_counter(g.ctx, "a", "", {"b"}).is_none());
+    CHECK(ai.play_counter(g.ctx, "a", "", {"b"}, "").is_none());
 }
 
 TEST_CASE("ai: human decider counter window renders context and reads play")
@@ -1026,11 +1028,12 @@ TEST_CASE("ai: human decider counter window renders context and reads play")
     HumanDecider dec(in, out);
     RequestDecisionSource src(dec);
 
-    const auto chosen = src.play_counter(g.ctx, "a", "b", {"a"});
+    const auto chosen = src.play_counter(g.ctx, "a", "b", {"a"}, "wugu");
     REQUIRE(chosen.is_some());
     CHECK(chosen.unwrap() == "w#0");
     CHECK(out.str().find("w#0") != std::string::npos);  // 无懈候选渲染
     CHECK(out.str().find("使用者: b") != std::string::npos);
+    CHECK(out.str().find("五谷丰登") != std::string::npos);
     CHECK(out.str().find("目标: a") != std::string::npos);
 }
 
@@ -1046,16 +1049,224 @@ TEST_CASE("ai: human decider counter window declines on pass or eof")
         std::ostringstream out;
         HumanDecider dec(in, out);
         RequestDecisionSource src(dec);
-        CHECK(src.play_counter(g.ctx, "a", "", {"a"}).is_none());
+        CHECK(src.play_counter(g.ctx, "a", "", {"a"}, "shandian").is_none());
         CHECK(out.str().find("延时锦囊判定") != std::string::npos);
+        CHECK(out.str().find("闪电") != std::string::npos);
     }
     {
         std::istringstream in;  // 空流：首次读取即 EOF
         std::ostringstream out;
         HumanDecider dec(in, out);
         RequestDecisionSource src(dec);
-        CHECK(src.play_counter(g.ctx, "a", "b", {"a"}).is_none());
+        CHECK(src.play_counter(g.ctx, "a", "b", {"a"}, "").is_none());
     }
+}
+
+TEST_CASE("ai: human discard window help prints usage and continues")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+    g.give("a", "shan", "j#2");
+    g.give("a", "tao", "t#3");
+
+    std::istringstream in("help\ndiscard 1 2\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    const auto chosen = src.choose_discards(
+        g.ctx, "a", 2, tkw::game::DiscardReason::TurnLimit);
+    REQUIRE(chosen.size() == 2);
+    CHECK(out.str().find("用法：") != std::string::npos);
+    CHECK(out.str().find("discard <序号>") != std::string::npos);
+}
+
+TEST_CASE("ai: human discard pass names the requirement")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+
+    std::istringstream in("pass\ndiscard 1\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    const auto chosen = src.choose_discards(
+        g.ctx, "a", 1, tkw::game::DiscardReason::TurnLimit);
+    REQUIRE(chosen.size() == 1);
+    CHECK(chosen[0] == "s#1");
+    CHECK(out.str().find("不能 pass") != std::string::npos);
+    CHECK(out.str().find("需弃 1 张") != std::string::npos);
+}
+
+TEST_CASE("ai: human discard eof announces give-up")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+
+    std::istringstream in;
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    const auto chosen = src.choose_discards(
+        g.ctx, "a", 1, tkw::game::DiscardReason::TurnLimit);
+    CHECK(chosen.empty());
+    CHECK(out.str().find("输入已结束") != std::string::npos);
+    CHECK(out.str().find("按放弃处理") != std::string::npos);
+}
+
+TEST_CASE("ai: human play window help prints usage")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+
+    std::istringstream in("?\npass\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+    const tkw::game::TurnContext turn{"a", 0, 1};
+
+    CHECK(src.choose_play(g.ctx, turn).is_none());
+    CHECK(out.str().find("用法：") != std::string::npos);
+    CHECK(out.str().find("pass 结束出牌阶段") != std::string::npos);
+}
+
+TEST_CASE("ai: human trigger window help prints usage")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+
+    std::istringstream in("help\ny\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    CHECK(src.trigger_effect(g.ctx, "a", tkw::card::Ability::NoShaLimit));
+    CHECK(out.str().find("输入 y 发动") != std::string::npos);
+}
+
+TEST_CASE("ai: human response window shows source and consequence")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "shan", "j#1");
+
+    std::istringstream in("pass\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    CHECK(src.play_response(
+              g.ctx, "a", tkw::card::ResponseKind::Jink,
+              tkw::game::ResponsePrompt{"wanjian", "b", 1})
+              .is_none());
+    CHECK(out.str().find("来源: b 的 万箭齐发") != std::string::npos);
+    CHECK(out.str().find("不出将受到 1 点伤害") != std::string::npos);
+}
+
+TEST_CASE("ai: human response window falls back when source unknown")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "shan", "j#1");
+
+    std::istringstream in("pass\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    CHECK(src.play_response(
+              g.ctx, "a", tkw::card::ResponseKind::Jink,
+              tkw::game::ResponsePrompt{})
+              .is_none());
+    CHECK(out.str().find("响应（需打出闪）") != std::string::npos);
+    CHECK(out.str().find("来源") == std::string::npos);
+}
+
+TEST_CASE("ai: human response window reports no candidate")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");  // 无闪：响应窗口无候选
+
+    std::istringstream in;
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    CHECK(src.play_response(
+              g.ctx, "a", tkw::card::ResponseKind::Jink,
+              tkw::game::ResponsePrompt{})
+              .is_none());
+    CHECK(out.str().find("无可用响应牌") != std::string::npos);
+}
+
+TEST_CASE("ai: human reveal window names wugu source")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+
+    std::istringstream in("pick 1\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    const auto picked = src.pick_from_revealed(
+        g.ctx, "a", g.ctx.cards->hand("a"), tkw::game::RevealSource::Wugu);
+    REQUIRE(picked.is_some());
+    CHECK(out.str().find("五谷丰登亮牌") != std::string::npos);
+}
+
+TEST_CASE("ai: human reveal window names qilin source")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.equip("b", "qilin", "h#1");
+    const auto horses = g.ctx.cards->equip("b");
+
+    std::istringstream in("pick 1\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    const auto picked = src.pick_from_revealed(
+        g.ctx, "a", horses, tkw::game::RevealSource::Qilin);
+    REQUIRE(picked.is_some());
+    CHECK(out.str().find("麒麟弓") != std::string::npos);
+}
+
+TEST_CASE("ai: human trigger window explains ability")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.equip("a", "qilin", "e#0");
+
+    std::istringstream in("y\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+
+    CHECK(src.trigger_effect(
+        g.ctx, "a", tkw::card::Ability::DiscardHorseOnDamage));
+    CHECK(out.str().find("麒麟弓") != std::string::npos);
+    CHECK(out.str().find("坐骑") != std::string::npos);
 }
 
 namespace

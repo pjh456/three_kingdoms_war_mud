@@ -46,16 +46,18 @@ namespace tkw
         /**
          * @brief 开响应窗口：先看实体是否有响应牌，有则询问决策源具体打哪张，
          *        校验后消费（移除+弃置）。返回实际消费的牌；None = 未响应。
+         * @param prompt 响应来源与后果（只读事实，透传给决策源做窗口文案）。
          * @note 单牌窗口（闪等）：只消费第一张；杀响应窗口走 resolve 层的
          *       respond_sha（另支持两张手牌当杀）。
          */
         inline Option<card::Card> consume_response(
             GameContext &ctx, DecisionSource &ai,
-            const std::string &entity_id, card::ResponseKind kind)
+            const std::string &entity_id, card::ResponseKind kind,
+            const ResponsePrompt &prompt)
         {
             if (!has_response_card(ctx, entity_id, kind))
                 return Option<card::Card>::None();
-            const auto chosen = ai.play_response(ctx, entity_id, kind);
+            const auto chosen = ai.play_response(ctx, entity_id, kind, prompt);
             if (chosen.is_none())
                 return Option<card::Card>::None();
 
@@ -70,9 +72,10 @@ namespace tkw
          */
         inline bool request_response(
             GameContext &ctx, DecisionSource &ai,
-            const std::string &entity_id, card::ResponseKind kind)
+            const std::string &entity_id, card::ResponseKind kind,
+            const ResponsePrompt &prompt)
         {
-            return consume_response(ctx, ai, entity_id, kind).is_some();
+            return consume_response(ctx, ai, entity_id, kind, prompt).is_some();
         }
     }
 }

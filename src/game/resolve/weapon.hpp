@@ -310,7 +310,8 @@ namespace tkw
             if (horses.empty())
                 return;
             std::string chosen = horses.front().instance_id;
-            const auto picked = sc.ai.pick_from_revealed(sc.ctx, sc.attacker, horses);
+            const auto picked = sc.ai.pick_from_revealed(
+                sc.ctx, sc.attacker, horses, RevealSource::Qilin);
             if (picked.is_some())
                 for (const auto &h : horses)
                     if (h.instance_id == picked.unwrap().instance_id)
@@ -406,8 +407,9 @@ namespace tkw
 
             run_sha_phase(sc, ShaPhase::Respond);
             if (!sc.responded)
-                sc.responded =
-                    request_response(ctx, ai, target, card::ResponseKind::Jink);
+                sc.responded = request_response(
+                    ctx, ai, target, card::ResponseKind::Jink,
+                    {sc.sha.def_id, sc.attacker, sc.amount});
 
             if (sc.responded)
                 run_sha_phase(sc, ShaPhase::PostJink);

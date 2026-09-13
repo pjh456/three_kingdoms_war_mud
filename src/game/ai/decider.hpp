@@ -61,8 +61,14 @@ namespace tkw
                 // Response / Peach / Counter / PickCard / PickRevealed / Discard
                 std::vector<card::Card> options;
 
+                // PickRevealed
+                RevealSource reveal_source = RevealSource::Wugu; /**< 亮牌来源结算 */
+
                 // Response
                 card::ResponseKind response_kind = card::ResponseKind::Sha;
+                std::string response_source; /**< Response：来源牌 def id（空 = 未知） */
+                std::string response_user;   /**< Response：来源使用者 id */
+                int response_damage = 0;     /**< Response：不响应伤害量（0 = 不适用） */
 
                 // Peach
                 std::string dying;
@@ -70,6 +76,7 @@ namespace tkw
                 // Counter
                 std::string counter_user;              /**< 锦囊使用者（延时判定窗口 = 空串哨兵） */
                 std::vector<std::string> counter_targets; /**< 锦囊目标集合（判定窗口 = 被判定玩家一人） */
+                std::string counter_trick;             /**< 被无懈的锦囊 def id（空 = 未知） */
 
                 // PickCard
                 std::string target;
@@ -114,11 +121,14 @@ namespace tkw
 
                 Option<PlayAction> play_response(
                     const ReadOnlyContext &ctx, const std::string &entity,
-                    card::ResponseKind kind) override
+                    card::ResponseKind kind, const ResponsePrompt &prompt) override
                 {
                     DecisionRequest req = base_request(ctx, entity);
                     req.kind = DecisionKind::Response;
                     req.response_kind = kind;
+                    req.response_source = prompt.source_def_id;
+                    req.response_user = prompt.source_user;
+                    req.response_damage = prompt.damage;
                     for (const auto &c : ctx.cards->hand(entity))
                         if (is_response_card(ctx, c, kind))
                             req.options.push_back(c);
@@ -150,12 +160,14 @@ namespace tkw
                 Option<std::string> play_counter(
                     const ReadOnlyContext &ctx, const std::string &player,
                     const std::string &trick_user,
-                    const std::vector<std::string> &trick_targets) override
+                    const std::vector<std::string> &trick_targets,
+                    const std::string &trick_def_id) override
                 {
                     DecisionRequest req = base_request(ctx, player);
                     req.kind = DecisionKind::Counter;
                     req.counter_user = trick_user;
                     req.counter_targets = trick_targets;
+                    req.counter_trick = trick_def_id;
                     for (const auto &c : ctx.cards->hand(player))
                         if (is_counter_card(ctx, c))
                             req.options.push_back(c);
@@ -193,11 +205,13 @@ namespace tkw
 
                 Option<card::Card> pick_from_revealed(
                     const ReadOnlyContext &ctx, const std::string &player,
-                    const std::vector<card::Card> &options) override
+                    const std::vector<card::Card> &options,
+                    RevealSource source) override
                 {
                     DecisionRequest req = base_request(ctx, player);
                     req.kind = DecisionKind::PickRevealed;
                     req.options = options;
+                    req.reveal_source = source;
                     return decider_->decide(req).card;
                 }
 

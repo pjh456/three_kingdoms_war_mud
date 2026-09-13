@@ -1158,9 +1158,13 @@ TEST_CASE("cli: resource and loop failures render Chinese reason labels")
           "判定时牌堆已空");
 
     // 合成文案：根因经出参渲染进「回合执行失败」；NoPlayers 回落角色不存在。
+    // 弃牌数量不足另给恢复引导（失败回合已部分结算，不可原地重试）。
     CHECK(tkw::cli::detail::format_turn_failure(
               LoopError::TurnFailed, TurnError::DiscardInsufficient, "P0") ==
-          "回合执行失败（角色 P0，弃牌数量不足）");
+          "回合执行失败（角色 P0，弃牌数量不足；本回合未完成，可重新 new 开局）");
+    CHECK(tkw::cli::detail::format_turn_failure(
+              LoopError::TurnFailed, TurnError::PlayRejected, "P0") ==
+          "回合执行失败（角色 P0，出牌被拒绝）");
     CHECK(tkw::cli::detail::format_turn_failure(
               LoopError::NoPlayers, TurnError::PlayRejected, "P1") ==
           "回合执行失败（角色 P1，角色不存在）");

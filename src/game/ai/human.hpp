@@ -3,7 +3,8 @@
  * @brief 真人决策接入：从输入流读取玩家选择，供 CLI 交互对局使用。
  * @note 只读契约不变：HumanDecider 只消费输入流并返回选择，不触碰对局状态；
  *       读取输入是决策源自身的副作用，串行 REPL 下与命令行解析无双读。
- *       候选按 1 起编号；非法输入重提示；EOF 一律视为放弃并立即返回。
+ *       候选按 1 起编号；非法输入重提示；窗口内输入 ? / help 打印用法；
+ *       EOF 打印提示后按放弃返回。
  */
 
 #ifndef INCLUDE_TKW_GAME_HUMAN_HPP
@@ -59,22 +60,35 @@ namespace tkw
                     case DecisionKind::Response:
                         if (!request.legal.empty())
                             return decide_response_pair(request);
+                        if (request.options.empty())
+                        {
+                            out_ << "无可用响应牌。\n";
+                            return DecisionChoice{};
+                        }
+                        return decide_choose_id(
+                            request, response_title(request, false));
+                    case DecisionKind::Peach:
+                        if (request.options.empty())
+                        {
+                            out_ << "无可用救场牌。\n";
+                            return DecisionChoice{};
+                        }
                         return decide_choose_id(
                             request,
-                            request.response_kind == card::ResponseKind::Jink
-                                ? "响应（需打出闪）"
-                                : "响应（需打出杀）");
-                    case DecisionKind::Peach:
-                        return decide_choose_id(
-                            request, "濒死救场（濒死者: " + request.dying + "）");
+                            "濒死救场（濒死者: " + request.dying + "）");
                     case DecisionKind::Counter:
+                        if (request.options.empty())
+                        {
+                            out_ << "无可用无懈可击。\n";
+                            return DecisionChoice{};
+                        }
                         return decide_choose_id(request, counter_title(request));
                     case DecisionKind::Trigger:
                         return decide_trigger(request);
                     case DecisionKind::PickCard:
                         return decide_pick(request, "选择目标区域的牌", true);
                     case DecisionKind::PickRevealed:
-                        return decide_pick(request, "从候选牌中选择", false);
+                        return decide_pick(request, reveal_title(request), false);
                     case DecisionKind::Discard:
                         return decide_discard(request);
                     }
@@ -120,19 +134,42 @@ namespace tkw
                  *        返回 Some(空列表)。
                  * @return None 表示输入结束，调用点返回默认选择；Some 表示
                  *         一行的 token，空列表表示空行（本函数已打印 `\n`）。
-                 * @note 非法输入的重提示与序号解析留在调用点，各决策保留其
+                 * @note EOF 单点打印「输入已结束，按放弃处理」后返回 None，
+                 *       覆盖全部决策窗口；各窗口按自身语义把空选择交给引擎。
+                 *       非法输入的重提示与序号解析留在调用点，各决策保留其
                  *       特有返回语义。
                  */
                 Option<std::vector<std::string>> read_tokens()
                 {
                     std::string line;
                     if (!read_line(line))
+                    {
+                        out_ << "\n输入已结束，按放弃处理。\n";
                         return Option<std::vector<std::string>>::None();
+                    }
 
                     auto tokens = tokenize(line);
                     if (tokens.empty())
                         out_ << "\n";
                     return Option<std::vector<std::string>>::Some(std::move(tokens));
+                }
+
+                /** @brief 该行是否为窗口内帮助请求（? / help）。 */
+                static bool is_help(const std::vector<std::string> &tokens)
+                {
+                    return tokens.size() == 1 &&
+                           (tokens[0] == "?" || tokens[0] == "help");
+                }
+
+                /**
+                 * @brief 打印当前决策窗口的输入用法（`?`/`help` 触发）。
+                 * @param tip 用法正文，不含「用法：」前缀。
+                 * @note 只打印窗口语法，不打印任何卡牌效果文案（那由
+                 *       `card <序号>` 负责）；不改变窗口返回契约。
+                 */
+                void print_help(const std::string &tip)
+                {
+                    out_ << "用法：" << tip << "\n";
                 }
 
                 /** @brief 解析 1 基序号并校验落在 [1, count]；失败返回 false。 */
@@ -284,16 +321,94 @@ namespace tkw
                 }
 
                 /**
+                 * @brief 响应窗口标题：有来源牌时给来源与伤害后果，否则回落
+                 *        「需打出闪/杀」旧口径（兼容无上下文调用）。
+                 * @param pair 是否两张手牌当杀窗口（丈八蛇矛）。
+                 */
+                std::string response_title(const DecisionRequest &req, bool pair)
+                {
+                    const bool jink =
+                        req.response_kind == card::ResponseKind::Jink;
+                    const std::string need =
+                        pair ? "需打出两张手牌当杀"
+                             : (jink ? "需打出闪" : "需打出杀");
+                    if (req.response_source.empty())
+                        return pair ? "响应（杀）：打出两张手牌当杀"
+                                    : "响应（" + need + "）";
+
+                    std::string title =
+                        "响应（来源: " + req.response_user + " 的 " +
+                        card::display_name(req.catalog, req.response_source) +
+                        "，" + need;
+                    if (req.response_damage > 0)
+                        title += "；不出将受到 " +
+                                 std::to_string(req.response_damage) + " 点伤害";
+                    title += "）";
+                    return title;
+                }
+
+                /** @brief 亮牌窗口标题：按来源结算分别渲染五谷丰登/麒麟弓。 */
+                static std::string reveal_title(const DecisionRequest &req)
+                {
+                    if (req.reveal_source == RevealSource::Qilin)
+                        return "麒麟弓：选择目标坐骑";
+                    return "五谷丰登亮牌（每名角色依次选一张）";
+                }
+
+                /** @brief 装备能力一句话效果（只读展示，不打印卡牌 text）。 */
+                static const char *ability_hint(card::Ability ability)
+                {
+                    switch (ability)
+                    {
+                    case card::Ability::NoShaLimit:
+                        return "出杀不受次数限制";
+                    case card::Ability::IgnoreArmor:
+                        return "无视目标的防具";
+                    case card::Ability::Cixiong:
+                        return "杀唯一异性目标时可令其弃一张手牌或令你摸一张";
+                    case card::Ability::ExtraShaAfterJink:
+                        return "杀被闪后可再出一张杀";
+                    case card::Ability::TwoCardsAsSha:
+                        return "两张手牌可当一张杀";
+                    case card::Ability::DiscardTwoForceDamage:
+                        return "弃两张牌令此杀依然造成伤害";
+                    case card::Ability::MultiTargetSha:
+                        return "杀为最后一张手牌时可额外指定目标";
+                    case card::Ability::DiscardHorseOnDamage:
+                        return "造成伤害后可弃置目标一匹坐骑";
+                    case card::Ability::DamageAsDiscard:
+                        return "可弃置目标两张牌以防止此伤害";
+                    case card::Ability::JudgementJink:
+                        return "需出闪时可判定，红色结果视为闪";
+                    case card::Ability::BlackShaImmune:
+                        return "黑色杀对你无效";
+                    }
+                    return "装备能力";
+                }
+
+                /**
                  * @brief 无懈窗口提示标题：锦囊使用者（判定窗口使用者不可考 →
-                 *        延时判定标注）与目标集合。
+                 *        延时判定标注）与目标集合；有锦囊名时一并渲染。
                  */
                 static std::string counter_title(const DecisionRequest &req)
                 {
                     std::string title = "无懈可击窗口";
                     if (req.counter_user.empty())
-                        title += "（延时锦囊判定）";
+                    {
+                        title += "（延时锦囊判定";
+                        if (!req.counter_trick.empty())
+                            title += "：" + card::display_name(
+                                                 req.catalog, req.counter_trick);
+                        title += "）";
+                    }
                     else
-                        title += "（使用者: " + req.counter_user + "）";
+                    {
+                        title += "（使用者: " + req.counter_user;
+                        if (!req.counter_trick.empty())
+                            title += " 的 " + card::display_name(
+                                                 req.catalog, req.counter_trick);
+                        title += "）";
+                    }
                     for (std::size_t i = 0; i < req.counter_targets.size(); ++i)
                     {
                         if (i > 0)
@@ -387,6 +502,13 @@ namespace tkw
                                 { return a.card.def_id; });
                             continue;
                         }
+                        if (is_help(tokens))
+                        {
+                            print_help(
+                                "输入 play <序号> 出牌（可连续出牌），"
+                                "pass 结束出牌阶段。");
+                            continue;
+                        }
 
                         int index = 0;
                         if (tokens.size() == 2 && tokens[0] == "play")
@@ -440,6 +562,11 @@ namespace tkw
                                 { return c.def_id; });
                             continue;
                         }
+                        if (is_help(tokens))
+                        {
+                            print_help("输入 play <序号> 打出该牌，pass 放弃。");
+                            continue;
+                        }
 
                         int index = 0;
                         if (tokens.size() == 2 && tokens[0] == "play")
@@ -472,7 +599,8 @@ namespace tkw
 
                     for (;;)
                     {
-                        out_ << "[" << req.actor << "] 响应（杀）：打出两张手牌当杀：\n";
+                        out_ << "[" << req.actor << "] "
+                             << response_title(req, true) << "：\n";
                         print_view(req);
                         for (std::size_t i = 0; i < hand.size(); ++i)
                             out_ << "  " << (i + 1) << ") "
@@ -495,6 +623,13 @@ namespace tkw
                                 req, tokens[1], hand,
                                 [](const card::Card &c) -> const std::string &
                                 { return c.def_id; });
+                            continue;
+                        }
+                        if (is_help(tokens))
+                        {
+                            print_help(
+                                "输入 play <序号> + <序号> 打出两张手牌当杀，"
+                                "pass 放弃。");
                             continue;
                         }
 
@@ -525,12 +660,14 @@ namespace tkw
 
                 /**
                  * @brief 从牌池选一张：pick <序号>（allow_pass 时或 pass）。
+                 * @param title 窗口标题（五谷/麒麟/目标区域，由调用点按来源定）。
                  * @param allow_pass 拆/顺允许放弃（None 由引擎按非法选择处理）；
                  *        五谷为强制选择，不提供 pass，输入 pass 视为非法重提示。
                  * @note EOF 在两种模式下都返回空选择，由引擎给出诊断。
                  */
                 DecisionChoice decide_pick(
-                    const DecisionRequest &req, const char *title, bool allow_pass)
+                    const DecisionRequest &req, const std::string &title,
+                    bool allow_pass)
                 {
                     DecisionChoice out;
                     if (req.options.empty())
@@ -569,6 +706,14 @@ namespace tkw
                                 req, tokens[1], req.options,
                                 [](const card::Card &c) -> const std::string &
                                 { return c.def_id; });
+                            continue;
+                        }
+                        if (is_help(tokens))
+                        {
+                            print_help(
+                                allow_pass
+                                    ? "输入 pick <序号> 选择，pass 放弃。"
+                                    : "输入 pick <序号> 选择（必须选一张）。");
                             continue;
                         }
 
@@ -630,9 +775,28 @@ namespace tkw
                                 { return c.def_id; });
                             continue;
                         }
+                        if (is_help(tokens))
+                        {
+                            print_help(
+                                "输入 discard <序号> ... 弃置 " +
+                                std::to_string(req.count) + " 张牌" +
+                                (can_pass ? "；pass 放弃弃牌。" : "。"));
+                            continue;
+                        }
+                        if (!can_pass && tokens.size() == 1 &&
+                            tokens[0] == "pass")
+                        {
+                            print_invalid(
+                                "弃牌阶段不能 pass：需弃 " +
+                                std::to_string(req.count) +
+                                " 张，请输入 discard <序号> ...。");
+                            continue;
+                        }
                         if (tokens[0] != "discard")
                         {
-                            print_invalid("请输入 discard <序号> ...。");
+                            print_invalid(
+                                "请输入 discard <序号> ...（需弃 " +
+                                std::to_string(req.count) + " 张）。");
                             continue;
                         }
                         if (tokens.size() !=
@@ -682,7 +846,8 @@ namespace tkw
                     {
                         print_view(req);
                         out_ << "[" << req.actor << "] 发动 " << ability_name(req)
-                             << "？(y/n)：" << std::flush;
+                             << "（" << ability_hint(req.ability) << "）？(y/n)："
+                             << std::flush;
 
                         const auto input = read_tokens();
                         if (input.is_none())
@@ -691,6 +856,11 @@ namespace tkw
                         const auto &tokens = input.unwrap();
                         if (tokens.empty())
                             continue;
+                        if (is_help(tokens))
+                        {
+                            print_help("输入 y 发动，n 不发动。");
+                            continue;
+                        }
                         if (tokens.size() == 1 &&
                             (tokens[0] == "y" || tokens[0] == "yes"))
                         {
@@ -748,9 +918,9 @@ namespace tkw
 
                 Option<PlayAction> play_response(
                     const ReadOnlyContext &ctx, const std::string &entity,
-                    card::ResponseKind kind) override
+                    card::ResponseKind kind, const ResponsePrompt &prompt) override
                 {
-                    return route(entity).play_response(ctx, entity, kind);
+                    return route(entity).play_response(ctx, entity, kind, prompt);
                 }
 
                 Option<card::Card> pick_card_from_target(
@@ -775,9 +945,11 @@ namespace tkw
 
                 Option<card::Card> pick_from_revealed(
                     const ReadOnlyContext &ctx, const std::string &player,
-                    const std::vector<card::Card> &options) override
+                    const std::vector<card::Card> &options,
+                    RevealSource source) override
                 {
-                    return route(player).pick_from_revealed(ctx, player, options);
+                    return route(player).pick_from_revealed(
+                        ctx, player, options, source);
                 }
 
                 Option<std::string> play_peach(
@@ -790,10 +962,11 @@ namespace tkw
                 Option<std::string> play_counter(
                     const ReadOnlyContext &ctx, const std::string &player,
                     const std::string &trick_user,
-                    const std::vector<std::string> &trick_targets) override
+                    const std::vector<std::string> &trick_targets,
+                    const std::string &trick_def_id) override
                 {
                     return route(player).play_counter(
-                        ctx, player, trick_user, trick_targets);
+                        ctx, player, trick_user, trick_targets, trick_def_id);
                 }
 
                 bool trigger_effect(

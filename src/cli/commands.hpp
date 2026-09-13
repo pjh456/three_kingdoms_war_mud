@@ -346,7 +346,8 @@ namespace tkw
              * @return 「回合执行失败（角色 <actor>，<标签>）」；`NoPlayers`
              *         表示会话角色已不存在，标签回落「角色不存在」。
              * @note 仅 `TurnFailed` 消费 `root`；`MaxRounds` 由调用方映射为平局，
-             *       不进入本函数。
+             *       不进入本函数。弃牌数量不足时追加「重新 new 开局」引导：失败
+             *       回合可能已部分结算，会话不推进，不可原地重试。
              */
             inline std::string format_turn_failure(
                 tkw::game::LoopError code, tkw::game::TurnError root,
@@ -354,8 +355,14 @@ namespace tkw
             {
                 if (code == tkw::game::LoopError::NoPlayers)
                     return "回合执行失败（角色 " + actor + "，角色不存在）";
-                return "回合执行失败（角色 " + actor + "，" +
-                       std::string(turn_error_label_zh(root)) + "）";
+                std::string text =
+                    "回合执行失败（角色 " + actor + "，" +
+                    std::string(turn_error_label_zh(root));
+                if (code == tkw::game::LoopError::TurnFailed &&
+                    root == tkw::game::TurnError::DiscardInsufficient)
+                    text += "；本回合未完成，可重新 new 开局";
+                text += "）";
+                return text;
             }
 
             /** 建局错误 → 用户可见文案（目录加载、玩家创建与身份局人数三类错误面）。 */

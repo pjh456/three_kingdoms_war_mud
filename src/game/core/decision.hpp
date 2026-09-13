@@ -8,6 +8,7 @@
 #ifndef INCLUDE_TKW_GAME_DECISION_HPP
 #define INCLUDE_TKW_GAME_DECISION_HPP
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -45,6 +46,21 @@ namespace tkw
             int sha_limit = 1;   /**< 本回合「杀」上限（连弩为 INT_MAX） */
         };
 
+        /** @brief 响应窗口的来源与后果（只读事实；来源未知时字段留空）。 */
+        struct ResponsePrompt
+        {
+            std::string source_def_id; /**< 触发响应的牌 def id（空 = 未知） */
+            std::string source_user;   /**< 来源使用者 id */
+            int damage = 0;            /**< 不响应将受到的伤害量（0 = 不适用） */
+        };
+
+        /** @brief 亮牌选择的来源结算（决定窗口文案）。 */
+        enum class RevealSource : std::uint8_t
+        {
+            Wugu,  /**< 五谷丰登：按座位序各选一张 */
+            Qilin, /**< 麒麟弓：攻击方选弃目标坐骑 */
+        };
+
         /**
          * @class DecisionSource
          * @brief 结算/回合期间的玩家决策接口。
@@ -58,13 +74,16 @@ namespace tkw
 
             /**
              * @brief 响应窗口：entity_id 选择打出的响应牌（杀/闪）。
+             * @param kind   需要的响应牌类别。
+             * @param prompt 来源牌/使用者/不响应伤害量（只读事实，来源未知时留空）。
              * @return 要打出的手牌（可带第二张，两张手牌当杀）；None = 不响应。
              *         结算器会先检查手牌里确有响应牌，并负责消费。
              */
             virtual Option<PlayAction> play_response(
                 const ReadOnlyContext &ctx,
                 const std::string &entity_id,
-                card::ResponseKind kind) = 0;
+                card::ResponseKind kind,
+                const ResponsePrompt &prompt) = 0;
 
             /**
              * @brief 从目标区域选一张牌（过河拆桥弃置 / 顺手牵羊获得）。
@@ -95,6 +114,7 @@ namespace tkw
 
             /**
              * @brief 从候选牌中选一张（五谷丰登亮牌 / 麒麟弓选弃目标坐骑）。
+             * @param source 亮牌来源结算（决定窗口文案，只读事实）。
              * @return 选中的牌，必须在 options 中；None = 放弃/非法。
              * @note 成员校验由结算器按调用点执行：五谷丰登为强制选择，返回
              *       None 或引用不在 options 中即 InvalidChoice 整体失败；麒麟弓
@@ -102,7 +122,7 @@ namespace tkw
              */
             virtual Option<card::Card> pick_from_revealed(
                 const ReadOnlyContext &ctx, const std::string &player,
-                const std::vector<card::Card> &options) = 0;
+                const std::vector<card::Card> &options, RevealSource source) = 0;
 
             /**
              * @brief 濒死救场：saver 对濒死的 dying 打出哪张桃。
@@ -118,6 +138,7 @@ namespace tkw
              * @param trick_user 被结算锦囊的使用者；空串 = 延时锦囊判定窗口
              *        （使用者不随牌记录，窗口主体为被判定玩家）。
              * @param trick_targets 锦囊目标集合（判定窗口 = 被判定玩家一人）。
+             * @param trick_def_id 被结算锦囊的 def id（只读事实；判定窗口亦携带）。
              * @return 要打出的手牌 instance_id；None = 不出。结算器先检查手牌
              *         确有牌再询问，并负责消费。
              * @note 接缝只传事实（谁的锦囊、冲谁），不传「该不该出」的结论。
@@ -125,7 +146,8 @@ namespace tkw
             virtual Option<std::string> play_counter(
                 const ReadOnlyContext &ctx, const std::string &player,
                 const std::string &trick_user,
-                const std::vector<std::string> &trick_targets) = 0;
+                const std::vector<std::string> &trick_targets,
+                const std::string &trick_def_id) = 0;
 
             /**
              * @brief 装备效果触发：player 是否发动 ability 指定的可选装备能力

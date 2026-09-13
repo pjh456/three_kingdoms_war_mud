@@ -378,6 +378,36 @@ add_test(NAME cli_repl_human_card_lookup
 set_tests_properties(cli_repl_human_card_lookup PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# 弃牌窗口出口：`pass` 不在弃牌阶段有效，提示必须弃满 N 张的下一步。
+# seed 固定 → P0 首回合弃牌数确定（手牌超上限，需弃 2 张）。
+add_test(NAME cli_repl_human_discard_pass_hint
+         COMMAND sh -c
+                 "out=$(printf 'new --players 2 --seed 1\\nstep\\npass\\npass\\nquit\\n' | $<TARGET_FILE:tkw> --human P0 repl --autosave '' 2>&1); \
+                  printf '%s' \"$out\" | grep -q '不能 pass' && \
+                  printf '%s' \"$out\" | grep -q '需弃'")
+set_tests_properties(cli_repl_human_discard_pass_hint PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 决策窗口可发现性：出牌窗口输入 `?` 打印该窗口的输入用法（pass 的语义）。
+add_test(NAME cli_repl_human_decision_help
+         COMMAND sh -c
+                 "out=$(printf 'new --players 2 --seed 1\\nstep\\n?\\nquit\\n' | $<TARGET_FILE:tkw> --human P0 repl --autosave '' 2>&1); \
+                  printf '%s' \"$out\" | grep -q '用法：' && \
+                  printf '%s' \"$out\" | grep -q 'pass 结束出牌阶段'")
+set_tests_properties(cli_repl_human_decision_help PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 弃牌 EOF：窗口吃 quit 非法后 EOF，打印按放弃处理，引擎报弃牌不足并给
+# 「重新 new 开局」恢复引导（失败回合不推进，不可原地重试）。
+add_test(NAME cli_repl_human_discard_eof_recovery
+         COMMAND sh -c
+                 "out=$(printf 'new --players 2 --seed 1\\nstep\\npass\\nquit\\n' | $<TARGET_FILE:tkw> --human P0 repl --autosave '' 2>&1); \
+                  printf '%s' \"$out\" | grep -q '弃牌数量不足' && \
+                  printf '%s' \"$out\" | grep -q '输入已结束，按放弃处理' && \
+                  printf '%s' \"$out\" | grep -q '重新 new 开局'")
+set_tests_properties(cli_repl_human_discard_eof_recovery PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 过程可见时 step/run 打印回合头，含回合序号与当前玩家；全 AI 默认静默无回合头。
 add_test(NAME cli_repl_turn_header
          COMMAND sh -c
