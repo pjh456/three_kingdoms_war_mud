@@ -38,14 +38,15 @@ namespace tkw
                 [](const card::CardDef &def) { return is_counter_def(def); });
         }
 
-        /** @brief 消费一张无懈牌：非法选择退回手牌返 false；成功后弃置并发 CardDiscarded。 */
+        /** @brief 消费一张无懈牌：非法选择退回手牌返 false；成功后弃置并发响应语义的 CardDiscarded。 */
         inline bool consume_counter(
             GameContext &ctx, const std::string &player,
             const std::string &instance_id)
         {
             return consume_hand_card_matching(
                        ctx, player, instance_id,
-                       [](const card::CardDef &def) { return is_counter_def(def); })
+                       [](const card::CardDef &def) { return is_counter_def(def); },
+                       DiscardKind::Response)
                 .is_some();
         }
 

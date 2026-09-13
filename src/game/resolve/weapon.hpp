@@ -200,7 +200,7 @@ namespace tkw
             if (judge.is_none())
                 return;
             const card::Card judge_card = std::move(judge).unwrap();
-            discard_and_emit(sc.ctx, sc.target, judge_card);
+            discard_and_emit(sc.ctx, sc.target, judge_card, DiscardKind::Judgement);
             if (judge_result(armor->judge.unwrap(), judge_card) ==
                 card::JudgeAction::Jink)
                 sc.responded = true;

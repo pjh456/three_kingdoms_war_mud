@@ -23,6 +23,14 @@ namespace tkw
     /** @brief 卡牌区域（card 域定义，game 域沿用短名）。 */
     using Zone = card::Zone;
 
+    /** @brief 弃置事件的来源语义：区分真实弃置与判定/响应触发的进弃牌堆。 */
+    enum class DiscardKind : std::uint8_t
+    {
+        Normal,    /**< 真实弃置（弃牌阶段/装备替换/能力代价等） */
+        Judgement, /**< 判定翻出的牌进弃牌堆 */
+        Response,  /**< 响应打出的牌进弃牌堆（闪/无懈/救桃/无目标响应杀） */
+    };
+
     DEFINE_EVENT_START(Card, Event)
     DEFINE_EVENT_END(Card)
 
@@ -48,6 +56,7 @@ public:
     std::string entity;
     std::string instance_id;
     std::string def_id;
+    DiscardKind kind = DiscardKind::Normal; /**< 进弃牌堆的来源语义（展示标签用） */
     DEFINE_EVENT_END(CardDiscarded)
 
     /** @brief 区域转移：一张牌从一个区域移到另一个区域（装备/顺牵/延时移送）。 */
@@ -88,7 +97,8 @@ public:
         }
 
         inline void emit_card_discarded(
-            GameContext &ctx, const std::string &entity, const card::Card &c)
+            GameContext &ctx, const std::string &entity, const card::Card &c,
+            DiscardKind kind = DiscardKind::Normal)
         {
             if (!ctx.bus)
                 return;
@@ -96,6 +106,7 @@ public:
             ev->entity = entity;
             ev->instance_id = c.instance_id;
             ev->def_id = c.def_id;
+            ev->kind = kind;
             ctx.bus->publish(ev);
         }
 

@@ -107,7 +107,7 @@ namespace tkw
                 return TurnResult<DelayedOutcome>::Err(TurnError::JudgeEmptyDeck);
             }
             const card::Card judge_card = std::move(judge).unwrap();
-            discard_and_emit(ctx, player, judge_card);  // 判定牌进弃牌堆
+            discard_and_emit(ctx, player, judge_card, DiscardKind::Judgement);  // 判定牌进弃牌堆
 
             if (def.judge.is_none())
             {

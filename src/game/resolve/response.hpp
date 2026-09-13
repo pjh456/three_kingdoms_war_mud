@@ -61,7 +61,8 @@ namespace tkw
 
             return consume_hand_card_matching(
                 ctx, entity_id, chosen.unwrap().instance_id,
-                [kind](const card::CardDef &def) { return is_response_def(def, kind); });
+                [kind](const card::CardDef &def) { return is_response_def(def, kind); },
+                DiscardKind::Response);
         }
 
         /**

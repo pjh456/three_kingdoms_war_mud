@@ -346,6 +346,17 @@ add_test(NAME cli_repl_turn_header
 set_tests_properties(cli_repl_turn_header PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# 日志标签保真：判定翻牌显示 [判定]（含被判定者与判定牌），响应打出显示 [打出]，
+# 真实弃置（延时锦囊判定后弃置）仍为 [弃置]。seed 固定，输出确定。
+add_test(NAME cli_verbose_judge_response_labels
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> --verbose deal 2 1 2>&1); \
+                  printf '%s' \"$out\" | grep -q '\\[判定\\] P1 青釭剑' && \
+                  printf '%s' \"$out\" | grep -q '\\[打出\\] P0 无懈可击' && \
+                  printf '%s' \"$out\" | grep -q '\\[弃置\\] P1 乐不思蜀'")
+set_tests_properties(cli_verbose_judge_response_labels PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 裸 tkw 与 REPL 各打印一行引导文案。
 add_test(NAME cli_bare_root_banner
          COMMAND sh -c "$<TARGET_FILE:tkw> 2>&1 | grep -q '无子命令'")

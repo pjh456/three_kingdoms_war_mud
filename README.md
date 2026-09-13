@@ -62,7 +62,7 @@ tkw --human P0 repl   # P0 真人参与，REPL 交互模式
 | `-p, --players <n>` | 玩家数（2–8，默认 4） |
 | `--hand <n>` | 初始手牌数（默认 4） |
 | `-s, --seed <n>` | 随机种子（默认 42） |
-| `-v, --verbose` | 打印事件日志（摸/打/弃牌、移牌、伤害、体力、阵亡；真人局默认开启，`--no-verbose` 关闭） |
+| `-v, --verbose` | 打印事件日志（摸/打/弃牌、判定翻牌、移牌、伤害、体力、阵亡；真人局默认开启，`--no-verbose` 关闭） |
 | `--autosave <path>` | REPL 退出时自动存档路径（空串关闭，默认 `tkw-autosave.json`） |
 | `--history <path>` | REPL 命令历史文件（默认不持久化，仅本次会话；父目录须已存在） |
 | `--human <seat>` | 真人座位（可重复：`--human P0 --human P2`；存档不保存，读档后需重新指定） |

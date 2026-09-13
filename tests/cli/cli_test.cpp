@@ -234,6 +234,34 @@ TEST_CASE("cli: verbose step and run print turn headers")
     CHECK(q.out.find("—— 回合") == std::string::npos);
 }
 
+TEST_CASE("cli: discard event label reflects judge and response semantics")
+{
+    Repl repl;
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+
+    auto handles = tkw::cli::detail::subscribe_event_log(*repl.session.game, true);
+    const auto publish = [&](tkw::DiscardKind kind)
+    {
+        auto ev = std::make_shared<tkw::CardDiscardedEvent>();
+        ev->entity = "P1";
+        ev->instance_id = "x";
+        ev->def_id = "sha";
+        ev->kind = kind;
+        repl.session.game->bus.publish(ev);
+    };
+
+    std::streambuf *old = std::cout.rdbuf(repl.captured_cout.rdbuf());
+    publish(tkw::DiscardKind::Judgement);
+    publish(tkw::DiscardKind::Response);
+    publish(tkw::DiscardKind::Normal);
+    std::cout.rdbuf(old);
+
+    const std::string out = repl.captured_cout.str();
+    CHECK(out.find("[判定] P1 杀") != std::string::npos);
+    CHECK(out.find("[打出] P1 杀") != std::string::npos);
+    CHECK(out.find("[弃置] P1 杀") != std::string::npos);
+}
+
 TEST_CASE("cli: verbose log renders card moved events")
 {
     Repl repl;

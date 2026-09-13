@@ -94,7 +94,13 @@ namespace tkw
                     game.bus.subscribe(tkw::Handler<tkw::CardDiscardedEvent>(
                         [&catalog = game.catalog](
                             tkw::HandlerContext<tkw::CardDiscardedEvent> &c) {
-                            std::cout << "[弃置] " << c.event.entity << " "
+                            // 判定翻牌/响应打出与真实弃置同走弃置事件，标签按来源语义区分。
+                            const char *label = "[弃置] ";
+                            if (c.event.kind == tkw::DiscardKind::Judgement)
+                                label = "[判定] ";
+                            else if (c.event.kind == tkw::DiscardKind::Response)
+                                label = "[打出] ";
+                            std::cout << label << c.event.entity << " "
                                       << tkw::card::display_name(
                                              catalog, c.event.def_id)
                                       << "\n";

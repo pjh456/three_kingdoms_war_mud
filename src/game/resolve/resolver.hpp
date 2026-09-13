@@ -490,8 +490,8 @@ namespace tkw
          * @note 响应侧不受出牌阶段杀次数限制（次数是出牌阶段「本回合已用杀」的
          *         簿记，响应窗口不在出牌阶段簿记内）。结算目标由引擎固定（借刀
          *         的 B，打出时已以同一距离谓词校验），响应侧不复核目标，与真杀
-         *         响应路径一致。借刀响应事件语法：对目标结算=打出、仅消费=弃置
-         *         （真杀与虚拟杀同口径）。
+         *         响应路径一致。借刀响应事件语法：对目标结算=打出、仅消费=响应
+         *         语义的弃置事件（展示为打出；真杀与虚拟杀同口径）。
          */
         inline bool respond_sha(
             GameContext &ctx, DecisionSource &ai,
@@ -571,7 +571,7 @@ namespace tkw
                 resolve_sha(ctx, ai, entity, card, victim, dmg);
             }
             else
-                emit_card_discarded(ctx, entity, card);
+                emit_card_discarded(ctx, entity, card, DiscardKind::Response);
             return true;
         }
     }
