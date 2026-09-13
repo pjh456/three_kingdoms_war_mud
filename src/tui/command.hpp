@@ -162,12 +162,6 @@ namespace tkw
                        std::to_string(rules.max_players) + "]";
             }
 
-            /** M1 真人决策拒绝文案（AI 局之外的真人接缝留待后续任务）。 */
-            inline const char *human_rejected_error()
-            {
-                return "TUI M1 暂不支持真人决策，请使用 `tkw repl`";
-            }
-
             /** 可选值缺失提示。 */
             inline std::string missing_value_error(const std::string &option)
             {
@@ -200,11 +194,20 @@ namespace tkw
                         return true;
                     };
 
-                    if (t == "--human")
-                        return CommandParseResult::Err(human_rejected_error());
-
                     std::string value;
-                    if (t == "--players")
+                    if (t == "--human")
+                    {
+                        // 可重复累积，与命令行 --human 同语义
+                        if (!value_of(value))
+                            return CommandParseResult::Err(
+                                missing_value_error(t));
+                        cmd.options.humans.push_back(value);
+                    }
+                    else if (t == "--no-human")
+                    {
+                        cmd.options.humans.clear();
+                    }
+                    else if (t == "--players")
                     {
                         if (!value_of(value))
                             return CommandParseResult::Err(
@@ -356,9 +359,10 @@ namespace tkw
          * @param line 用户输入的单行文本（首尾空白忽略）。
          * @param base 启动选项；new/deal 未显式给出的项沿用此基准。
          * @return Ok(Command)；Err 为面向用户的中文提示（未知命令/缺参/类型或
-         *         越界/未知选项/真人拒绝），不抛异常。
+         *         越界/未知选项），不抛异常。
          * @note 命令名与别名：run/r、status/st、quit/q、help/?。save/load 只取
-         *       一个文件位置参数；new 只接受行内长选项，不接受位置参数与 --human。
+         *       一个文件位置参数；new 只接受行内长选项与 --human/--no-human，
+         *       不接受位置参数。
          */
         inline CommandParseResult parse_command(
             std::string_view line, const tkw::cli::Options &base)

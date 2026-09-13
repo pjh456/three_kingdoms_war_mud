@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "cli/commands.hpp"
 #include "cli/error_zh.hpp"
 #include "cli/render.hpp"
 #include "cli/session.hpp"
@@ -38,6 +39,7 @@
 #include "save/session_meta.hpp"
 #include "save/writer.hpp"
 #include "tui/command.hpp"
+#include "tui/decision_source.hpp"
 #include "tui/log_lines.hpp"
 #include "tui/snapshot.hpp"
 #include "util/types.hpp"
@@ -179,6 +181,9 @@ namespace tkw
                 if (quit_requested_)
                     return;
                 quit_requested_ = true;
+                // 先唤醒可能阻塞在真人待决的 worker，再置取消位并 join，避免互等。
+                if (decision_)
+                    decision_->cancel();
                 cancel_ = true;
                 join_worker();
                 autosave();
@@ -190,6 +195,33 @@ namespace tkw
 
             /** @brief 阻塞等待当前 worker 结束（测试与关停用）。 */
             void wait_idle() { join_worker(); }
+
+            /**
+             * @brief 取走当前真人待决面板（每个待决仅返回真一次）。
+             * @param out 出参：有待决且未被取走时写入面板值视图。
+             * @return 取到返回 true；无待决/无真人决策源/已取走返回 false。
+             * @note 主线程调用；返回后面板值可安全渲染，不依赖引擎生命周期。
+             */
+            bool fetch_new_decision(DecisionPanelView &out)
+            {
+                return decision_ && decision_->fetch_new(out);
+            }
+
+            /** @brief 是否存在未被取走的真人待决。 */
+            bool has_pending_decision() const
+            {
+                return decision_ && decision_->has_pending();
+            }
+
+            /**
+             * @brief 提交真人待决的选择；非法选择被忽略且保持待决。
+             * @return 被接受返回 true；无待决/选择非法返回 false。
+             */
+            bool submit_decision(std::vector<std::size_t> selected, bool pass)
+            {
+                return decision_ &&
+                       decision_->submit(std::move(selected), pass);
+            }
 
             const UiSnapshot &snapshot() const noexcept
             {
@@ -216,12 +248,15 @@ namespace tkw
             std::function<void()> on_quit_;
             bool quit_requested_ = false;
 
-            // 声明序 = 析构保证：session_ 先、log_/stats 后、worker_ 最后。
+            // 声明序 = 析构保证：session_ 先、log_/stats 后、决策源与 worker_ 最后。
+            // adapter_ 只持 decision_ 的裸指针，声明在 decision_ 之后，析构先于它。
             tkw::cli::Session session_;
             LogBuffer log_;
             std::vector<tkw::EventBus::Handle> stats_handles_;
             std::atomic<bool> cancel_{false};
             std::string exit_message_;
+            std::shared_ptr<TuiDecisionSource> decision_;
+            std::unique_ptr<tkw::game::ai::RequestDecisionSource> adapter_;
             std::jthread worker_;
 
             /** @brief 若 worker 可 join 则等待结束；非阻塞于运行中的选择由调用方门控。 */
@@ -273,13 +308,43 @@ namespace tkw
                 return true;
             }
 
-            /** @brief 建决策源：M1 全 AI，按档取 Simple/Aggressive。 */
+            /** @brief 全 AI 决策源：按档取 Simple/Aggressive。 */
             static std::unique_ptr<tkw::game::DecisionSource> make_ai(
                 tkw::cli::AiLevel ai)
             {
                 if (ai == tkw::cli::AiLevel::Aggressive)
                     return std::make_unique<tkw::game::AggressiveAI>();
                 return std::make_unique<tkw::game::SimpleAI>();
+            }
+
+            /** @brief 真人局非真人座位的回落决策器：按档取 Simple/Aggressive。 */
+            static std::unique_ptr<tkw::game::ai::Decider> make_fallback_decider(
+                tkw::cli::AiLevel ai)
+            {
+                if (ai == tkw::cli::AiLevel::Aggressive)
+                    return std::make_unique<tkw::game::ai::AggressiveDecider>();
+                return std::make_unique<tkw::game::ai::SimpleDecider>();
+            }
+
+            /**
+             * @brief 按真人座位重建决策源与适配器（仅在 Idle 调用）。
+             * @param humans 本会话真人座位；空表示全 AI，清空决策源。
+             * @param ai     非真人座位的回落难度档。
+             * @note 先析构适配器再析构决策源；唤醒回调只投递一次空事件以触发重绘。
+             */
+            void rebuild_decision_source(const std::vector<std::string> &humans,
+                                         tkw::cli::AiLevel ai)
+            {
+                adapter_.reset();
+                decision_.reset();
+                if (humans.empty())
+                    return;
+                auto source = std::make_shared<TuiDecisionSource>(
+                    humans, make_fallback_decider(ai));
+                source->set_notify([this] { post_([] {}); });
+                decision_ = std::move(source);
+                adapter_ = std::make_unique<tkw::game::ai::RequestDecisionSource>(
+                    *decision_);
             }
 
             /**
@@ -299,9 +364,11 @@ namespace tkw
                 }
                 auto game = std::move(built).unwrap();
 
-                if (!opt.humans.empty())
+                const std::string verr =
+                    tkw::cli::detail::validate_humans(*game, opt.humans);
+                if (!verr.empty())
                 {
-                    append_line(detail::human_rejected_error());
+                    append_line(verr);
                     return;
                 }
 
@@ -311,7 +378,7 @@ namespace tkw
                 session_.stats = tkw::cli::BattleStats{};
 
                 // 日志订阅先于开局发牌，初始摸牌事件才会落入日志面板。
-                log_.bind(*game);
+                log_.bind(*game, opt.humans);
                 stats_handles_ =
                     tkw::cli::detail::subscribe_stats(*game, session_.stats);
 
@@ -331,6 +398,8 @@ namespace tkw
                 session_.ai = opt.ai;
                 session_.deck = opt.deck;
                 session_.active = true;
+                viewer_ = opt.humans.empty() ? "P0" : opt.humans.front();
+                rebuild_decision_source(opt.humans, opt.ai);
                 refresh_model();
                 append_line("新对局已开始");
             }
@@ -379,7 +448,18 @@ namespace tkw
             void run_job(bool to_end)
             {
                 auto ctx = session_.game->context();
-                auto ai = make_ai(session_.ai);
+                // 真人局走适配后的接入源，全 AI 局走既有单一决策源；两者只取其一。
+                std::unique_ptr<tkw::game::DecisionSource> ai;
+                tkw::game::DecisionSource *source = nullptr;
+                if (adapter_)
+                {
+                    source = adapter_.get();
+                }
+                else
+                {
+                    ai = make_ai(session_.ai);
+                    source = ai.get();
+                }
 
                 post_snapshot();
                 while (!cancel_.load() && !tkw::game::session_over(ctx))
@@ -388,8 +468,8 @@ namespace tkw
                         session_.state.current;  // 失败会推进，须先捕获
                     tkw::game::TurnError root =
                         tkw::game::TurnError::PlayRejected;
-                    auto r =
-                        tkw::game::step_session(ctx, *ai, session_.state, &root);
+                    auto r = tkw::game::step_session(ctx, *source, session_.state,
+                                                     &root);
                     if (r.is_err())
                     {
                         if (r.unwrap_err() == tkw::game::LoopError::MaxRounds)
@@ -511,9 +591,11 @@ namespace tkw
                         r.unwrap_err()));
                     return;
                 }
-                if (!base_.humans.empty())
+                const std::string verr =
+                    tkw::cli::detail::validate_humans(*game, base_.humans);
+                if (!verr.empty())
                 {
-                    append_line(detail::human_rejected_error());
+                    append_line(verr);
                     return;
                 }
 
@@ -525,7 +607,7 @@ namespace tkw
                 log_.unbind();
                 stats_handles_.clear();
                 session_.stats = std::move(meta.stats);
-                log_.bind(*game);
+                log_.bind(*game, base_.humans);
                 stats_handles_ =
                     tkw::cli::detail::subscribe_stats(*game, session_.stats);
                 session_.game = std::move(game);
@@ -534,6 +616,8 @@ namespace tkw
                 session_.ai = ai;
                 session_.deck = base_.deck;
                 session_.active = true;
+                viewer_ = base_.humans.empty() ? "P0" : base_.humans.front();
+                rebuild_decision_source(base_.humans, ai);
                 refresh_model();
                 append_line("已加载: " + file);
             }
@@ -543,7 +627,7 @@ namespace tkw
             {
                 append_line("命令: new [--players N] [--seed S] [--mode "
                             "brawl|identity] [--ai simple|aggressive] [--deck P] "
-                            "[--hand N]");
+                            "[--hand N] [--human <座位>] [--no-human]");
                 append_line("      deal <players> <seed>；step；run/r；status/st；"
                             "save <file>；load <file>；quit/q；help/?");
                 append_line("      卡牌查询: 请退出后运行 tkw rules [关键词] / "

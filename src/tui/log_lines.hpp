@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <deque>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -37,13 +38,21 @@ namespace tkw
 
             /**
              * @brief 订阅 game 的 7 类日志事件；重复调用先自动退订旧订阅。
-             * @param game 本局运行时；其生命周期必须长于本缓冲的订阅期。
+             * @param game   本局运行时；其生命周期必须长于本缓冲的订阅期。
+             * @param humans 真人座位 id；非空时摸牌牌名只对真人实体可见，
+             *               其余实体回落隐藏占位。空（默认）表示全可见，供
+             *               全 AI 对局与既有调用方保持原行为。
+             * @note 可见性口径与 CLI 事件日志同谓词同占位，单一事实源。
              */
-            void bind(tkw::game::Game &game)
+            void bind(tkw::game::Game &game,
+                      const std::vector<std::string> &humans = {})
             {
                 unbind();
+                const std::set<std::string> visible(humans.begin(), humans.end());
                 handles_ = tkw::cli::detail::subscribe_event_log_to(
-                    game, [this](std::string line) { push(std::move(line)); });
+                    game, [this](std::string line) { push(std::move(line)); },
+                    [visible](const std::string &entity)
+                    { return visible.empty() || visible.count(entity) > 0; });
             }
 
             /** @brief 退订全部句柄；Game 析构/覆盖前必须调用。 */

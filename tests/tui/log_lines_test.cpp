@@ -123,6 +123,30 @@ TEST_CASE("tui: log buffer captures subscribed events and survives unbind")
     CHECK_FALSE(buffer.lines().empty());
 }
 
+TEST_CASE("tui: log buffer hides card names of non-human seats")
+{
+    auto game = make_game(2, 1);
+    tkw::tui::LogBuffer buffer;
+    buffer.bind(*game, {"P0"});
+
+    auto ctx = game->context();
+    tkw::game::GameSession state;
+    REQUIRE(tkw::game::start_session(ctx, state, "P0", 2).is_ok());
+
+    bool human_named = false;
+    bool other_hidden = false;
+    for (const auto &line : buffer.lines())
+    {
+        if (line.rfind("[摸牌] P0 ", 0) == 0 &&
+            line.find("未知牌") == std::string::npos)
+            human_named = true;
+        if (line.rfind("[摸牌] P1 未知牌", 0) == 0)
+            other_hidden = true;
+    }
+    CHECK(human_named);
+    CHECK(other_hidden);
+}
+
 TEST_CASE("tui: log buffer keeps only the newest capacity lines")
 {
     tkw::tui::LogBuffer buffer(3);

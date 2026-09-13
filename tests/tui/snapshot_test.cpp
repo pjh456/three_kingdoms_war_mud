@@ -121,6 +121,25 @@ TEST_CASE("tui: identity snapshot exposes per-seat roles")
     }
 }
 
+TEST_CASE("tui: identity roles hidden for non-human seats until over")
+{
+    auto s = started_session(4, 1, 2, tkw::game::GameMode::Identity);
+    s.humans = {"P1"};
+    const auto snap = tkw::tui::make_snapshot(s, "P1");
+
+    REQUIRE(snap.players.size() == 4);
+    for (const auto &row : snap.players)
+    {
+        const auto real = s.game->roles.at(row.id);
+        const bool visible =
+            row.id == "P1" || real == tkw::game::Role::Lord;
+        if (visible)
+            CHECK(row.role == real);
+        else
+            CHECK(row.role == tkw::game::Role::None);
+    }
+}
+
 TEST_CASE("tui: finished session reports over and a winner label")
 {
     auto s = raw_session(2, 1);

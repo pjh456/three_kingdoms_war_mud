@@ -8,6 +8,7 @@
 #ifndef INCLUDE_TKW_TUI_VISIBILITY_HPP
 #define INCLUDE_TKW_TUI_VISIBILITY_HPP
 
+#include <algorithm>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -16,6 +17,7 @@
 #include "card/catalog.hpp"
 #include "card/def.hpp"
 #include "game/core/context.hpp"
+#include "game/core/roles.hpp"
 
 namespace tkw
 {
@@ -42,6 +44,26 @@ namespace tkw
 
             bool operator==(const ZoneView &) const = default;
         };
+
+        /**
+         * @brief 身份局角色是否向人类视角可见。
+         * @param humans 本会话真人座位 id 集合；空 = 无真人视角。
+         * @param over   对局是否已结束（终局全公开）。
+         * @param id     待判定角色的玩家 id。
+         * @param role   待判定角色的身份。
+         * @return 无真人或终局 → 全可见；否则主公与真人座位自身可见，其余隐藏。
+         * @note 与 CLI status 的身份可见性同口径（主公 ∪ 真人 ∪ 终局），
+         *       非身份局/全 AI 局不受影响。
+         */
+        inline bool role_visible(const std::vector<std::string> &humans, bool over,
+                                 const std::string &id, tkw::game::Role role)
+        {
+            if (humans.empty() || over)
+                return true;
+            if (role == tkw::game::Role::Lord)
+                return true;
+            return std::find(humans.begin(), humans.end(), id) != humans.end();
+        }
 
         /**
          * @brief 按 viewer 视角取 target 手牌：仅 viewer==target 时展开实体牌。

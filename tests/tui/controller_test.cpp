@@ -1,8 +1,11 @@
 #include <doctest/doctest.h>
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "cli/session.hpp"
 #include "tui/controller.hpp"
@@ -179,7 +182,7 @@ TEST_CASE("tui: invalid input logs a hint and leaves state untouched")
 
     c.execute_line("frobnicate");
     c.execute_line("new --players 99");
-    c.execute_line("new --human P0");
+    c.execute_line("new --human P9");
 
     CHECK(c.snapshot().turns == turns);
     CHECK(c.snapshot().players.size() == players);
@@ -198,6 +201,105 @@ TEST_CASE("tui: status appends a summary without advancing")
 
     CHECK(c.snapshot().turns == turns);
     CHECK(log_has_prefix(c.log_lines(), "状态:"));
+}
+
+TEST_CASE("tui: new --human validates and fills session seats")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+
+    c.execute_line("new --human P0 --players 2 --seed 1");
+    REQUIRE(c.snapshot().active);
+    CHECK(c.snapshot().humans == std::vector<std::string>({"P0"}));
+    CHECK(c.snapshot().viewer == "P0");
+    CHECK_FALSE(c.running());
+
+    // 非法座位只提示、不替换旧会话。
+    c.execute_line("new --human P9 --players 2 --seed 1");
+    CHECK(log_has_prefix(c.log_lines(), "真人座位不存在"));
+    CHECK(c.snapshot().humans == std::vector<std::string>({"P0"}));
+    CHECK(c.snapshot().players.size() == 2);
+}
+
+TEST_CASE("tui: human step blocks until decision submitted")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+    c.execute_line("new --human P0 --players 2 --seed 1");
+    REQUIRE_FALSE(c.running());
+
+    c.execute_line("step");
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    bool saw_pending = false;
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        if (c.has_pending_decision())
+        {
+            saw_pending = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    REQUIRE(saw_pending);
+
+    // 逐个提交直到 worker 结束；弃牌按需选满，其余取首项（无候选则放弃）。
+    while (c.running() && std::chrono::steady_clock::now() < deadline)
+    {
+        tkw::tui::DecisionPanelView panel;
+        if (!c.fetch_new_decision(panel))
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            continue;
+        }
+        std::vector<std::size_t> selected;
+        if (panel.options.empty())
+        {
+            c.submit_decision(selected, panel.allow_pass);
+            continue;
+        }
+        if (panel.kind == tkw::game::ai::DecisionKind::Discard)
+            for (int i = 0; i < panel.need_count &&
+                            static_cast<std::size_t>(i) < panel.options.size();
+                 ++i)
+                selected.push_back(static_cast<std::size_t>(i));
+        else
+            selected.push_back(0);
+        c.submit_decision(selected, false);
+    }
+    c.wait_idle();
+
+    CHECK_FALSE(c.running());
+    CHECK(c.snapshot().turns == 1);
+}
+
+TEST_CASE("tui: quit during pending human decision joins promptly")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+    c.execute_line("new --human P0 --players 2 --seed 1");
+    c.execute_line("step");
+
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    bool saw_pending = false;
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        if (c.has_pending_decision())
+        {
+            saw_pending = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    REQUIRE(saw_pending);
+
+    c.request_quit();
+    c.wait_idle();
+    CHECK_FALSE(c.running());
 }
 
 TEST_CASE("tui: repeated new and destruction release subscriptions safely")

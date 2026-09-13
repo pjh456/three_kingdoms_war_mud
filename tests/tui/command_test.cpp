@@ -55,6 +55,32 @@ TEST_CASE("tui: new applies inline overrides over base")
     CHECK(cmd.options.deck == "/tmp/deck");
 }
 
+TEST_CASE("tui: new accepts repeatable human seats and no-human reset")
+{
+    auto base = base_options();
+    base.humans = {"P1"};
+
+    auto single = parse_command("new --human P0", base);
+    REQUIRE(single.is_ok());
+    REQUIRE(single.unwrap().options.humans.size() == 2);
+    CHECK(single.unwrap().options.humans[0] == "P1");
+    CHECK(single.unwrap().options.humans[1] == "P0");
+
+    auto repeated = parse_command("new --human P0 --human P2", base);
+    REQUIRE(repeated.is_ok());
+    CHECK(repeated.unwrap().options.humans ==
+          std::vector<std::string>({"P1", "P0", "P2"}));
+
+    auto cleared = parse_command("new --no-human --human P3", base);
+    REQUIRE(cleared.is_ok());
+    CHECK(cleared.unwrap().options.humans ==
+          std::vector<std::string>({"P3"}));
+
+    auto missing = parse_command("new --human", base);
+    REQUIRE(missing.is_err());
+    CHECK(missing.unwrap_err().find("需要一个值") != std::string::npos);
+}
+
 TEST_CASE("tui: parse errors carry chinese hints")
 {
     const auto base = base_options();
@@ -78,10 +104,6 @@ TEST_CASE("tui: parse errors carry chinese hints")
     auto bad_seed = parse_command("new --seed -1", base);
     REQUIRE(bad_seed.is_err());
     CHECK(bad_seed.unwrap_err().find("非负整数") != std::string::npos);
-
-    auto human = parse_command("new --human P0", base);
-    REQUIRE(human.is_err());
-    CHECK(human.unwrap_err().find("不支持真人") != std::string::npos);
 
     auto empty = parse_command("   ", base);
     REQUIRE(empty.is_err());

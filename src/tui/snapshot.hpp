@@ -126,7 +126,10 @@ namespace tkw
                 row.distance = tkw::game::distance_between(ro, viewer, id);
                 row.in_attack_range =
                     tkw::game::in_attack_range(ro, viewer, id);
-                row.role = tkw::game::role_of(ro.roles, id);
+                const tkw::game::Role role = tkw::game::role_of(ro.roles, id);
+                row.role = role_visible(s.humans, snap.over, id, role)
+                               ? role
+                               : tkw::game::Role::None;
                 snap.players.push_back(std::move(row));
             }
 

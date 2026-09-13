@@ -92,7 +92,8 @@ doctest_discover_tests(cli_tests)
 
 add_executable(tui_tests test_main.cpp tui/visibility_test.cpp
                         tui/snapshot_test.cpp tui/log_lines_test.cpp
-                        tui/command_test.cpp tui/controller_test.cpp)
+                        tui/command_test.cpp tui/decision_test.cpp
+                        tui/controller_test.cpp)
 
 target_link_libraries(tui_tests PRIVATE tkw_tui doctest)
 
