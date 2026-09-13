@@ -150,7 +150,7 @@ namespace tkw
             }
 
             /**
-             * @brief 建局时的会话事件日志默认：真人座位存在且未显式选择过 verbose 时开启。
+             * @brief 建局/一次性跑局时的事件日志默认：真人座位存在且未显式选择过 verbose 时开启。
              * @param opt 合并后的选项；humans/verbose/verbose_explicit 均已就绪。
              * @return 显式提供过（含启动 --no-verbose）→ 取显式值；否则真人局为真、
              *         全 AI 局为假。
@@ -789,8 +789,11 @@ namespace tkw
                 if (!verr.empty())
                     return CliFailure{CliError(verr)};
 
+                // 一次性跑局与建局同口径：真人座位存在且未显式选 verbose 时开日志与回合头。
+                const bool verbose = session_verbose(opt);
+
                 auto ctx = game->context();
-                auto log = subscribe_event_log(*game, opt.verbose);
+                auto log = subscribe_event_log(*game, verbose);
                 BattleStats stats;
                 auto stats_handles = subscribe_stats(*game, stats);
 
@@ -798,7 +801,7 @@ namespace tkw
                 tkw::game::GameSession session;
                 if (tkw::game::start_session(ctx, session, "P0", opt.hand).is_err())
                     return CliFailure{CliError("开局失败")};
-                auto rr = run_to_completion(ctx, *ai, session, nullptr, opt.verbose);
+                auto rr = run_to_completion(ctx, *ai, session, nullptr, verbose);
                 if (rr.is_err())
                     return CliFailure{CliError(format_loop_error(rr.unwrap_err()))};
                 if (rr.unwrap() == RunOutcome::MaxRounds)

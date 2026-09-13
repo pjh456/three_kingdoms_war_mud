@@ -383,6 +383,23 @@ add_test(NAME cli_repl_human_default_verbose
 set_tests_properties(cli_repl_human_default_verbose PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# 一次性真人局默认事件日志：deal 与建局同口径，显式 --no-verbose 优先，
+# 全 AI 一键局保持静默。真人 EOF 可能回合失败，故不钉 rc、只钉文本。
+add_test(NAME cli_deal_human_default_verbose
+         COMMAND sh -c
+                 "loud=$(printf '' | $<TARGET_FILE:tkw> --human P0 deal 2 1 2>&1); printf '%s' \"$loud\" | grep -q '—— 回合 1：P0 ——' && \
+                  quiet=$(printf '' | $<TARGET_FILE:tkw> --human P0 --no-verbose deal 2 1 2>&1); ! printf '%s' \"$quiet\" | grep -q '—— 回合' && \
+                  ai=$(printf '' | $<TARGET_FILE:tkw> deal 2 1 2>&1); ! printf '%s' \"$ai\" | grep -q '\\['")
+set_tests_properties(cli_deal_human_default_verbose PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 裸 tkw 走根 action，覆盖第二条 run_game 调用点：真人座位默认开日志与回合头。
+add_test(NAME cli_bare_human_default_verbose
+         COMMAND sh -c
+                 "out=$(printf '' | $<TARGET_FILE:tkw> --human P0 --players 2 --seed 1 2>&1); printf '%s' \"$out\" | grep -q '—— 回合 1：P0 ——'")
+set_tests_properties(cli_bare_human_default_verbose PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 决策窗口可发现性：出牌窗口列出己方完整手牌（含不可出的闪/无懈），
 # `card <序号>` 打印候选卡文后再决定；对手手牌仍只给数量。
 # seed 固定 → 手牌序与候选序确定；窗口内 quit 会被吞，故末行 step 结束后再退出。

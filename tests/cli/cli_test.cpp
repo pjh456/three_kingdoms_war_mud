@@ -237,6 +237,43 @@ TEST_CASE("cli: verbose step and run print turn headers")
     CHECK(q.out.find("—— 回合") == std::string::npos);
 }
 
+TEST_CASE("cli: one-shot run defaults event log for human seats")
+{
+    // 一次性跑局（deal/裸 tkw）与建局同口径；真人 EOF 可能以回合失败收场，
+    // 但回合头在此之前已打印，故只断言展示门控、不检查成败。
+    const auto captured_run = [](tkw::cli::Options opt)
+    {
+        opt.deck = TKW_TEST_RESOURCE_DIR;
+        opt.players = 2;
+        opt.seed = 1;
+
+        std::istringstream in;
+        std::ostringstream captured;
+        std::streambuf *old_in = std::cin.rdbuf(in.rdbuf());
+        std::streambuf *old_out = std::cout.rdbuf(captured.rdbuf());
+        std::cin.clear();
+        const auto result = tkw::cli::detail::run_game(opt);
+        (void)result;
+        std::cout.rdbuf(old_out);
+        std::cin.rdbuf(old_in);
+        return captured.str();
+    };
+
+    tkw::cli::Options human;
+    human.humans = {"P0"};
+    CHECK(captured_run(human).find("—— 回合 1：P0 ——") != std::string::npos);
+
+    // 显式 --no-verbose 仍优先，压过真人默认。
+    tkw::cli::Options quiet;
+    quiet.humans = {"P0"};
+    quiet.verbose_explicit = true;
+    quiet.verbose = false;
+    CHECK(captured_run(quiet).find("—— 回合") == std::string::npos);
+
+    // 全 AI 一次性跑局保持静默。
+    CHECK(captured_run(tkw::cli::Options{}).find("—— 回合") == std::string::npos);
+}
+
 TEST_CASE("cli: discard event label reflects judge and response semantics")
 {
     Repl repl;
