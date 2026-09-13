@@ -413,6 +413,13 @@ namespace tkw
                 return detail::no_args<Command>(name, tokens, std::move(cmd));
             }
 
+            // 只读与批量查询命令仅 CLI 提供：TUI 无对应命令面，明确指路而非报“未知命令”。
+            if (name == "cards" || name == "rules" || name == "audit" ||
+                name == "simulate")
+                return CommandParseResult::Err(
+                    "TUI 暂不支持 " + name + "，请退出后运行 `tkw " + name +
+                    "`（REPL 内可直接用；help 查看 TUI 命令）");
+
             return CommandParseResult::Err("未知命令: '" + name +
                                            "'（help 查看用法）");
         }

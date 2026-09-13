@@ -546,6 +546,8 @@ namespace tkw
                             "[--hand N]");
                 append_line("      deal <players> <seed>；step；run/r；status/st；"
                             "save <file>；load <file>；quit/q；help/?");
+                append_line("      卡牌查询: 请退出后运行 tkw rules [关键词] / "
+                            "tkw cards / tkw audit（TUI 暂不支持）");
             }
 
             /**

@@ -88,6 +88,35 @@ TEST_CASE("tui: parse errors carry chinese hints")
     CHECK(empty.unwrap_err().find("空命令") != std::string::npos);
 }
 
+TEST_CASE("tui: cli-only queries point to tkw")
+{
+    const auto base = base_options();
+
+    auto cards = parse_command("cards", base);
+    REQUIRE(cards.is_err());
+    CHECK(cards.unwrap_err().find("tkw cards") != std::string::npos);
+
+    auto rules = parse_command("rules", base);
+    REQUIRE(rules.is_err());
+    CHECK(rules.unwrap_err().find("tkw rules") != std::string::npos);
+
+    auto rules_keyword = parse_command("rules 杀", base);
+    REQUIRE(rules_keyword.is_err());
+    CHECK(rules_keyword.unwrap_err().find("tkw rules") != std::string::npos);
+
+    auto audit = parse_command("audit", base);
+    REQUIRE(audit.is_err());
+    CHECK(audit.unwrap_err().find("tkw audit") != std::string::npos);
+
+    auto simulate = parse_command("simulate", base);
+    REQUIRE(simulate.is_err());
+    CHECK(simulate.unwrap_err().find("tkw simulate") != std::string::npos);
+
+    auto unknown = parse_command("frobnicate", base);
+    REQUIRE(unknown.is_err());
+    CHECK(unknown.unwrap_err().find("未知命令") != std::string::npos);
+}
+
 TEST_CASE("tui: deal takes positional players and seed")
 {
     auto r = parse_command("deal 3 11", base_options());

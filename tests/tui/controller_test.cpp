@@ -152,6 +152,21 @@ TEST_CASE("tui: autosave failure is not silent")
     CHECK(c.exit_message().find("自动存档失败") != std::string::npos);
 }
 
+TEST_CASE("tui: help mentions cli-only card queries")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+
+    c.execute_line("help");
+
+    bool mentions_rules = false;
+    for (const auto &line : c.log_lines())
+        if (line.find("tkw rules") != std::string::npos)
+            mentions_rules = true;
+    CHECK(mentions_rules);
+}
+
 TEST_CASE("tui: invalid input logs a hint and leaves state untouched")
 {
     tkw::tui::Controller c;

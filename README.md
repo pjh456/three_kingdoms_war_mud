@@ -70,6 +70,8 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
   `deal <players> <seed>`、`step`、`run`/`r`、`status`/`st`、`save <file>`、
   `load <file>`、`quit`/`q`、`help`/`?`；`Esc`/`Ctrl-C` 退出。目前仅支持 AI 对局，
   暂不支持 `--human`（真人参与请用 `tkw repl`）。
+- 卡牌查询（`tkw rules`/`tkw cards`/`tkw audit`）目前只在命令行/REPL 提供；
+  TUI 命令栏暂不支持，输入会提示改用 `tkw`。
 - 退出时若有进行中的会话，自动存档到当前目录的 `tkw-autosave.json`（与 REPL 同口径），
   退出信息写 stderr。
 - FTXUI 获取：优先 `find_package(ftxui CONFIG QUIET)`，未安装则 `FetchContent` 钉
