@@ -1,6 +1,6 @@
 /**
  * @file app.cpp
- * @brief TUI 壳实现：四面板渲染与命令输入，数据全部来自控制器值模型。
+ * @brief TUI 壳实现：四面板渲染、命令输入与真人决策面板，数据全部来自控制器值模型。
  * @note 渲染层不触引擎容器：快照与日志都是控制器回送的值拷贝，worker 运行
  *       期间主线程只读模型。屏幕回送经 screen.Post（FTXUI TaskQueue 自带锁），
  *       闭包只捕获模型 shared_ptr 与值，不捕获 App。
@@ -188,16 +188,16 @@ namespace
     }
 
     /**
-     * @brief 组装整屏 DOM：棋盘 / 手牌与日志 / 状态 / 命令输入行。
+     * @brief 组装整屏 DOM：棋盘 / 手牌与日志 / 状态 / 底部交互区。
      * @param snap 值快照。
      * @param log_lines 日志值拷贝。
      * @param notice 底部提示文案。
-     * @param input_line 命令输入行元素。
+     * @param bottom 底部交互区：命令输入行或真人决策面板。
      */
     ftxui::Element render_shell(const UiSnapshot &snap,
                                 const std::vector<std::string> &log_lines,
                                 const std::string &notice,
-                                ftxui::Element input_line)
+                                ftxui::Element bottom)
     {
         auto board = panel("棋盘", render_board(snap));
         auto hand = panel("手牌", render_hand(snap));
@@ -209,7 +209,7 @@ namespace
             ftxui::hbox({std::move(hand) | ftxui::flex,
                          std::move(log_panel) | ftxui::flex}),
             std::move(status),
-            ftxui::hbox({ftxui::text("> "), std::move(input_line)}),
+            std::move(bottom),
             ftxui::text(notice) | ftxui::dim,
         });
     }
@@ -226,12 +226,27 @@ namespace tkw
             controller_.bootstrap();
         }
 
+        void App::sync_decision()
+        {
+            if (decision_panel_.visible())
+                return;
+            DecisionPanelView view;
+            if (controller_.fetch_new_decision(view))
+                decision_panel_.show(std::move(view));
+        }
+
         ftxui::Element App::render() const
         {
-            ftxui::Element input_line =
-                input_ ? input_->Render() : ftxui::text("");
+            ftxui::Element bottom;
+            if (decision_panel_.visible())
+                bottom = decision_panel_.render();
+            else if (input_)
+                bottom = ftxui::hbox({ftxui::text("> "), input_->Render()});
+            else
+                bottom = ftxui::text("");
+
             return render_shell(controller_.snapshot(), controller_.log_lines(),
-                                notice_, std::move(input_line));
+                                notice_, std::move(bottom));
         }
 
         ftxui::Component App::component(ftxui::ScreenInteractive &screen)
@@ -249,6 +264,12 @@ namespace tkw
                         });
                 });
             controller_.set_on_quit([&screen] { screen.Exit(); });
+            decision_panel_.set_on_submit(
+                [this](std::vector<std::size_t> selected, bool pass)
+                {
+                    return controller_.submit_decision(std::move(selected),
+                                                       pass);
+                });
 
             ftxui::InputOption input_option;
             input_option.content = &command_input_;
@@ -272,6 +293,21 @@ namespace tkw
                                event == ftxui::Event::CtrlC)
                            {
                                controller_.request_quit();
+                               return true;
+                           }
+
+                           // 面板唤醒与渲染同帧：先取待决，再按键；
+                           // 面板可见期间吞掉其余按键，避免落入隐藏的命令输入。
+                           sync_decision();
+                           if (decision_panel_.visible())
+                           {
+                               // 命令输入已隐藏，q 无输入冲突：待决中仍可退出。
+                               if (event == ftxui::Event::q)
+                               {
+                                   controller_.request_quit();
+                                   return true;
+                               }
+                               decision_panel_.on_event(event);
                                return true;
                            }
                            return false;

@@ -2,6 +2,7 @@
 add_executable(tkw-tui
     main.cpp
     app.cpp
+    decision_panel.cpp
 )
 
 target_link_libraries(tkw-tui PRIVATE ftxui::ftxui tkw_tui pjh_platform)
