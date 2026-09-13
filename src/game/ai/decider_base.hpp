@@ -313,6 +313,9 @@ namespace tkw
                  * @return 该组的决策。
                  * @note 不含丈八扫描与满血自疗跳过（两档分歧，留在派生类）；
                  *       多目标动作（方天画戟）取目标最多者，否则集火最低体力。
+                 * @note 重铸候选（空目标）与正常动作同卡同组：目标选择只看带目标的
+                 *       候选，避免对空 targets 取 front；组内全无带目标候选时该卡无
+                 *       正常动作，唯一合法解即重铸，按空目标动作返回。
                  */
                 static DecisionChoice select_group_targets(
                     const DecisionRequest &req, const std::vector<LegalAction> &opts,
@@ -320,6 +323,14 @@ namespace tkw
                 {
                     DecisionChoice out;
                     const card::Card &c = opts.front().card;
+
+                    // 目标选择候选：剔除空目标的重铸动作；整组全空 = 仅重铸
+                    std::vector<LegalAction> targeted;
+                    for (const auto &a : opts)
+                        if (!a.targets.empty())
+                            targeted.push_back(a);
+                    if (targeted.empty())
+                        return pick_all(out, c.instance_id, opts.front().targets);
 
                     if (def.effect.is_none())
                     {
@@ -330,14 +341,15 @@ namespace tkw
                                       card::Scope::Self)
                                 : card::Scope::Self;
                         if (scope == card::Scope::OneOther)
-                            return pick_single(req.view, out, c.instance_id, opts);
-                        return pick_all(out, c.instance_id, opts.front().targets);
+                            return pick_single(
+                                req.view, out, c.instance_id, targeted);
+                        return pick_all(out, c.instance_id, targeted.front().targets);
                     }
 
                     const card::CardEffect &eff = def.effect.unwrap();
                     if (eff.kind == card::CardEffectKind::BorrowedSword)
                         return pick_borrowed_sword(
-                            req.view, out, c.instance_id, opts);
+                            req.view, out, c.instance_id, targeted);
 
                     const auto single_scope =
                         eff.scope.unwrap_or(card::Scope::Self);
@@ -346,27 +358,27 @@ namespace tkw
                     {
                         // 方天画戟：存在多目标动作时优先选目标最多者
                         //（否则贪心会把它丢成单目标）
-                        const LegalAction *most = &opts.front();
-                        for (const auto &a : opts)
+                        const LegalAction *most = &targeted.front();
+                        for (const auto &a : targeted)
                             if (a.targets.size() > most->targets.size())
                                 most = &a;
                         if (most->targets.size() > 1)
                             return pick_all(out, c.instance_id, most->targets);
-                        return pick_single(req.view, out, c.instance_id, opts);
+                        return pick_single(req.view, out, c.instance_id, targeted);
                     }
 
                     if (eff.scope.unwrap_or(card::Scope::Self) ==
                         card::Scope::OneOrTwo)
                     {
                         // 优先双目标：取目标最多者，同多取列表序（确定性）
-                        const LegalAction *most = &opts.front();
-                        for (const auto &a : opts)
+                        const LegalAction *most = &targeted.front();
+                        for (const auto &a : targeted)
                             if (a.targets.size() > most->targets.size())
                                 most = &a;
                         return pick_all(out, c.instance_id, most->targets);
                     }
 
-                    return pick_all(out, c.instance_id, opts.front().targets);
+                    return pick_all(out, c.instance_id, targeted.front().targets);
                 }
 
                 static DecisionChoice pick_single(

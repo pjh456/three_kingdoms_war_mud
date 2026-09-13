@@ -1,8 +1,10 @@
 #include <doctest/doctest.h>
 
 #include <cstddef>
+#include <filesystem>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <type_traits>
 #include <vector>
 
@@ -12,6 +14,7 @@
 #include "game/ai/legal.hpp"
 #include "game/ai/simple.hpp"
 #include "game/ai/view.hpp"
+#include "io/file.hpp"
 #include "test_game.hpp"
 
 namespace
@@ -218,6 +221,60 @@ TEST_CASE("ai: recast choice passes through the request source")
     REQUIRE(chosen.is_some());
     CHECK(chosen.unwrap().recast);
     CHECK(chosen.unwrap().targets.empty());
+}
+
+TEST_CASE("ai: recast candidate does not break single-target selection")
+{
+    namespace fs = std::filesystem;
+    const fs::path dir =
+        fs::temp_directory_path() / "tkw_ai_recast_single_target";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    REQUIRE(fs::create_directories(dir / "cards"));
+    REQUIRE(tkw::io::write_text(
+                dir / "deck.json",
+                R"({"name":"recast_scope","cards":["zhadan"]})")
+                .is_ok());
+    REQUIRE(tkw::io::write_text(
+                dir / "cards" / "zhadan.json",
+                R"({"id":"zhadan","name":"炸弹","type":"basic",)"
+                R"("effect":{"kind":"damage","amount":1,"scope":"one_other"},)"
+                R"("recast":true,"copies":[{"suit":"spade","number":1}]})")
+                .is_ok());
+
+    TestGame g("deck", 1, dir.string().c_str());
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "zhadan", "z#0");
+
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    const auto legal = tkw::game::legal_actions(g.ctx, "a", turn);
+    bool has_normal = false;
+    bool has_recast = false;
+    for (const auto &a : legal)
+    {
+        if (a.recast)
+            has_recast = true;
+        else
+            has_normal = true;
+    }
+    // 单目标重铸卡：正常动作与空目标重铸候选同组，目标选择不得越界取 front
+    CHECK(has_normal);
+    CHECK(has_recast);
+
+    tkw::game::SimpleAI simple;
+    const auto s = simple.choose_play(g.ctx, turn);
+    REQUIRE(s.is_some());
+    CHECK_FALSE(s.unwrap().recast);
+    CHECK(s.unwrap().targets == std::vector<std::string>{"b"});
+
+    tkw::game::AggressiveAI aggressive;
+    const auto ag = aggressive.choose_play(g.ctx, turn);
+    REQUIRE(ag.is_some());
+    CHECK_FALSE(ag.unwrap().recast);
+    CHECK(ag.unwrap().targets == std::vector<std::string>{"b"});
+
+    fs::remove_all(dir, ec);
 }
 
 TEST_CASE("ai: simple borrowed sword targets the lowest-hp victim")
