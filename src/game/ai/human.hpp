@@ -3,8 +3,8 @@
  * @brief 真人决策接入：从输入流读取玩家选择，供 CLI 交互对局使用。
  * @note 只读契约不变：HumanDecider 只消费输入流并返回选择，不触碰对局状态；
  *       读取输入是决策源自身的副作用，串行 REPL 下与命令行解析无双读。
- *       候选按 1 起编号；非法输入重提示；窗口内输入 ? / help 打印用法；
- *       EOF 打印提示后按放弃返回。
+ *       候选按 1 起编号；非法输入重提示；窗口内输入 ? / help 打印用法、
+ *       card <序号> 查看候选牌面；EOF 打印提示后按放弃返回。
  */
 
 #ifndef INCLUDE_TKW_GAME_HUMAN_HPP
@@ -160,6 +160,13 @@ namespace tkw
                     return tokens.size() == 1 &&
                            (tokens[0] == "?" || tokens[0] == "help");
                 }
+
+                /** @brief 候选窗口 Prompt 尾注：`?` 看用法、`card <序号>` 看候选牌面。 */
+                static constexpr const char *kCardHint =
+                    "? 看用法，card <序号> 看牌面";
+
+                /** @brief 无候选窗口 Prompt 尾注：只支持 `?` 看用法。 */
+                static constexpr const char *kHelpHint = "? 看用法";
 
                 /**
                  * @brief 打印当前决策窗口的输入用法（`?`/`help` 触发）。
@@ -347,10 +354,10 @@ namespace tkw
                     }
                 }
 
-                /** @brief 打印重提示分隔行与具体原因，保留「输入无效」标识。 */
+                /** @brief 打印重提示分隔行与具体原因，并附 `?` 出口，保留「输入无效」标识。 */
                 void print_invalid(const std::string &reason)
                 {
-                    out_ << "\n输入无效：" << reason << "\n";
+                    out_ << "\n输入无效：" << reason << "（" << kHelpHint << "）\n";
                 }
 
                 /** @brief 1 基序号的合法范围提示文本。 */
@@ -553,7 +560,8 @@ namespace tkw
                                      << " 将对你出杀，可能致你受伤或阵亡）";
                             out_ << "\n";
                         }
-                        out_ << "输入 play <序号> 或 pass：" << std::flush;
+                        out_ << "输入 play <序号> 或 pass（" << kCardHint
+                             << "）：" << std::flush;
 
                         const auto input = read_tokens();
                         if (input.is_none())
@@ -613,7 +621,8 @@ namespace tkw
                         out_ << "[" << req.actor << "] " << title << "：\n";
                         print_view(req);
                         print_options(req, req.options);
-                        out_ << "输入 play <序号> 或 pass：" << std::flush;
+                        out_ << "输入 play <序号> 或 pass（" << kCardHint
+                             << "）：" << std::flush;
 
                         const auto input = read_tokens();
                         if (input.is_none())
@@ -676,7 +685,8 @@ namespace tkw
                             out_ << "  " << (i + 1) << ") "
                                  << card::display_name(req.catalog, hand[i].def_id)
                                  << " " << hand[i].instance_id << "\n";
-                        out_ << "输入 play <序号> + <序号> 或 pass：" << std::flush;
+                        out_ << "输入 play <序号> + <序号> 或 pass（"
+                             << kCardHint << "）：" << std::flush;
 
                         const auto input = read_tokens();
                         if (input.is_none())
@@ -752,9 +762,11 @@ namespace tkw
                         print_view(req);
                         print_options(req, req.options);
                         if (allow_pass)
-                            out_ << "输入 pick <序号> 或 pass：" << std::flush;
+                            out_ << "输入 pick <序号> 或 pass（" << kCardHint
+                                 << "）：" << std::flush;
                         else
-                            out_ << "输入 pick <序号>：" << std::flush;
+                            out_ << "输入 pick <序号>（" << kCardHint
+                                 << "）：" << std::flush;
 
                         const auto input = read_tokens();
                         if (input.is_none())
@@ -823,10 +835,11 @@ namespace tkw
                         print_view(req);
                         print_options(req, req.options);
                         if (can_pass)
-                            out_ << "输入 discard <序号> ... 或 pass（放弃弃牌）："
-                                 << std::flush;
+                            out_ << "输入 discard <序号> ... 或 pass（放弃弃牌；"
+                                 << kCardHint << "）：" << std::flush;
                         else
-                            out_ << "输入 discard <序号> ...：" << std::flush;
+                            out_ << "输入 discard <序号> ...（" << kCardHint
+                                 << "）：" << std::flush;
 
                         const auto input = read_tokens();
                         if (input.is_none())
@@ -916,8 +929,8 @@ namespace tkw
                     {
                         print_view(req);
                         out_ << "[" << req.actor << "] 发动 " << ability_name(req)
-                             << "（" << ability_hint(req.ability) << "）？(y/n)："
-                             << std::flush;
+                             << "（" << ability_hint(req.ability) << "）？(y/n)（"
+                             << kHelpHint << "）：" << std::flush;
 
                         const auto input = read_tokens();
                         if (input.is_none())

@@ -392,6 +392,7 @@ add_test(NAME cli_repl_human_card_lookup
                   printf '%s' \"$out\" | grep -q '\\[P0\\] 体力 4/4  手牌 无懈可击/五谷丰登/无中生有/闪/顺手牵羊/杀' && \
                   printf '%s' \"$out\" | grep -q '五谷丰登：出牌阶段' && \
                   printf '%s' \"$out\" | grep -q '无懈可击：抵消一张锦囊牌' && \
+                  printf '%s' \"$out\" | grep -q '? 看用法，card <序号> 看牌面' && \
                   printf '%s' \"$out\" | grep -q 'P1 体力 4/4  手牌 4' && \
                   ! printf '%s' \"$out\" | grep -q 'P1 体力 4/4  手牌 无懈' && [ $rc -eq 0 ]")
 set_tests_properties(cli_repl_human_card_lookup PROPERTIES

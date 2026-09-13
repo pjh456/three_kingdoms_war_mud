@@ -342,6 +342,46 @@ TEST_CASE("ai: human decider plays chosen legal action")
     CHECK(out.str().find("s#1") != std::string::npos);
 }
 
+TEST_CASE("ai: human windows advertise help and card lookup exits")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "sha", "s#1");
+    g.give("a", "shan", "j#2");
+
+    {
+        // 有候选的窗口 Prompt 同时暴露 ? 与 card <序号>
+        std::istringstream in("card 1\npass\n");
+        std::ostringstream out;
+        HumanDecider dec(in, out);
+        RequestDecisionSource src(dec);
+        CHECK(src.choose_play(g.ctx, tkw::game::TurnContext{"a", 0, 1}).is_none());
+        CHECK(out.str().find("? 看用法，card <序号> 看牌面") !=
+              std::string::npos);
+    }
+    {
+        // 非法输入的通用兜底句尾附 ? 出口
+        std::istringstream in("foo\nplay 1\n");
+        std::ostringstream out;
+        HumanDecider dec(in, out);
+        RequestDecisionSource src(dec);
+        CHECK(src.choose_play(g.ctx, tkw::game::TurnContext{"a", 0, 1}).is_some());
+        CHECK(out.str().find("（? 看用法）") != std::string::npos);
+    }
+    {
+        // 触发确认无候选：只提示 ?，不宣称 card
+        std::istringstream in("?\nn\n");
+        std::ostringstream out;
+        HumanDecider dec(in, out);
+        RequestDecisionSource src(dec);
+        CHECK_FALSE(
+            src.trigger_effect(g.ctx, "a", tkw::card::Ability::NoShaLimit));
+        CHECK(out.str().find("（? 看用法）") != std::string::npos);
+        CHECK(out.str().find("card <序号>") == std::string::npos);
+    }
+}
+
 TEST_CASE("ai: human warns when borrowed sword targets self")
 {
     TestGame g("deck");
