@@ -247,6 +247,28 @@ namespace tkw
             }
 
             /**
+             * @brief 打印牌堆中引擎未实现的卡警告（建局与批量入口共用同一口径）。
+             * @param catalog 已严格加载的牌表目录。
+             * @param err     告警输出流。
+             * @note 只覆盖「枚举已存在但结算未实现」；未知机制名在严格加载期即失败，
+             *       到不了这里（未知机制的容错审计见 audit）。目录全部可结算时
+             *       不输出。建局入口与一次性命令都调用本函数，避免口径漂移。
+             */
+            inline void warn_unsupported_cards(
+                const tkw::card::CardDefCatalog &catalog,
+                std::ostream &err = std::cerr)
+            {
+                const auto unsupported = tkw::game::unsupported_cards(catalog);
+                if (unsupported.empty())
+                    return;
+                err << "警告: 牌堆含 " << unsupported.size()
+                    << " 张引擎未实现的卡:";
+                for (const auto &id : unsupported)
+                    err << ' ' << audit_entry_name(catalog, id);
+                err << "\n";
+            }
+
+            /**
              * @brief 牌堆加载失败 → 用户可见文案（中文根因标签 + detail）。
              * @param e 目录加载错误；detail 为文件路径或字段路径。
              * @return 固定前缀「加载牌堆失败」+ 类别中文标签 + detail 的文案。
@@ -510,6 +532,7 @@ namespace tkw
                 if (built.is_err())
                     return CliFailure{CliError(format_build_error(built.unwrap_err()))};
                 auto game = std::move(built).unwrap();
+                warn_unsupported_cards(game->catalog);
                 const std::string verr = validate_humans(*game, opt.humans);
                 if (!verr.empty())
                     return CliFailure{CliError(verr)};
@@ -647,6 +670,7 @@ namespace tkw
                 auto r = tkw::save::read(text.unwrap(), *game, state, &meta);
                 if (r.is_err())
                     return CliFailure{CliError(render_save_error_zh(r.unwrap_err()))};
+                warn_unsupported_cards(game->catalog);
                 const std::string verr = validate_humans(*game, opt.humans);
                 if (!verr.empty())
                     return CliFailure{CliError(verr)};
@@ -677,19 +701,7 @@ namespace tkw
                 if (built.is_err())
                     return CliFailure{CliError(format_build_error(built.unwrap_err()))};
                 auto game = std::move(built).unwrap();
-
-                // 此处只覆盖「枚举已存在但结算未实现」；未知机制名在严格加载期
-                // 即失败，不会到达这里（未知机制的审计报告见 audit 子命令）。
-                const auto unsupported =
-                    tkw::game::unsupported_cards(game->catalog);
-                if (!unsupported.empty())
-                {
-                    std::cerr << "警告: 牌堆含 " << unsupported.size()
-                              << " 张引擎未实现的卡:";
-                    for (const auto &id : unsupported)
-                        std::cerr << ' ' << audit_entry_name(game->catalog, id);
-                    std::cerr << "\n";
-                }
+                warn_unsupported_cards(game->catalog);
 
                 const std::string verr = validate_humans(*game, opt.humans);
                 if (!verr.empty())
@@ -836,16 +848,7 @@ namespace tkw
                     return CliFailure{CliError(format_load_error(e))};
                 }
                 const auto &cat = catalog.unwrap();
-                // 同 run_game：未知机制名到不了这里，非空只在未来枚举实现未补时出现。
-                const auto unsupported = tkw::game::unsupported_cards(cat);
-                if (!unsupported.empty())
-                {
-                    std::cerr << "警告: 牌堆含 " << unsupported.size()
-                              << " 张引擎未实现的卡:";
-                    for (const auto &id : unsupported)
-                        std::cerr << ' ' << audit_entry_name(cat, id);
-                    std::cerr << "\n";
-                }
+                warn_unsupported_cards(cat);
 
                 SimAggregate agg;
                 for (int i = 0; i < n; ++i)

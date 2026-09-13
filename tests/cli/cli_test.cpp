@@ -540,6 +540,18 @@ TEST_CASE("cli: audit entry name renders chinese name with id")
     CHECK(tkw::cli::detail::audit_entry_name(cat, "nope") == "nope(nope)");
 }
 
+TEST_CASE("cli: unsupported-card warning stays silent for a supported deck")
+{
+    // 建局/批量入口共用的告警口径：标准牌表全部可结算时不误报。
+    tkw::config::ResourceStore store(TKW_TEST_RESOURCE_DIR);
+    auto catalog = tkw::card::CardDefCatalog::load(store, "deck");
+    REQUIRE(catalog.is_ok());
+
+    std::ostringstream err;
+    tkw::cli::detail::warn_unsupported_cards(catalog.unwrap(), err);
+    CHECK(err.str().empty());
+}
+
 TEST_CASE("cli: new with --ai aggressive runs to the end in the session")
 {
     Repl repl;
