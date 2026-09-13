@@ -38,6 +38,7 @@ namespace tkw
                 bool in_attack_range = false; /**< 自己能否用杀够到 */
                 std::vector<card::Card> equip; /**< 装备区（明置，副本） */
                 std::vector<card::Card> judge; /**< 判定区（明置，副本） */
+                Role role = Role::None;        /**< 身份局角色（乱斗/未分配为 None） */
             };
 
             /** @brief 己方视角的完整观察。 */
@@ -49,15 +50,35 @@ namespace tkw
                 int self_max_hp = 0;
                 std::vector<card::Card> hand;  /**< 自己的手牌（副本） */
                 std::vector<card::Card> equip; /**< 自己的装备区（副本） */
-                std::vector<card::Card> judge; /**< 自己的判定区（副本） */
+                std::vector<card::Card> judge;  /**< 自己的判定区（副本） */
                 std::vector<EnemyView> others; /**< 其他角色（创建序） */
+                GameMode mode = GameMode::Brawl; /**< 对局模式（乱斗/未绑定为 Brawl） */
+                Role self_role = Role::None;   /**< 自己的角色（乱斗/未分配为 None） */
             };
+
+            /**
+             * @brief 取某角色在观察中的角色；自己走 self_role，其他走 others 条目。
+             * @param view 观察。
+             * @param id 玩家 id。
+             * @return 命中返回对应角色；不在观察中返回 Role::None。
+             */
+            inline Role role_in_view(const AiView &view, const std::string &id)
+            {
+                if (id == view.self)
+                    return view.self_role;
+                for (const auto &e : view.others)
+                    if (e.id == id)
+                        return e.role;
+                return Role::None;
+            }
 
             /** @brief 构造 player 的观察（拷贝必要数据，不引用对局内部容器）。 */
             inline AiView make_view(const ReadOnlyContext &ctx, const std::string &player)
             {
                 AiView v;
                 v.self = player;
+                v.mode = mode_of(ctx);
+                v.self_role = role_of(ctx.roles, player);
                 const auto me = ctx.entities->find(player);
                 if (me.is_some())
                 {
@@ -76,6 +97,7 @@ namespace tkw
                     EnemyView ev;
                     ev.id = e->get_id();
                     ev.seat = e->get_seat();
+                    ev.role = role_of(ctx.roles, ev.id);
                     ev.hp = e->get_hp();
                     ev.max_hp = e->get_hp_bar().get_max();
                     ev.hand_size = static_cast<int>(ctx.cards->hand_size(ev.id));

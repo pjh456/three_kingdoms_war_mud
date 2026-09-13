@@ -149,6 +149,25 @@ TEST_CASE("aggressive: focuses the lowest hp target")
     CHECK(chosen.unwrap().targets == std::vector<std::string>{"b"});  // b 1 血
 }
 
+TEST_CASE("aggressive: identity targets the hostile camp")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);  // 主公持杀
+    g.add_player("b", 1, 1);  // 忠臣，体力最低但非敌意
+    g.add_player("c", 2, 4);  // 反贼
+    g.give("a", "sha", "s#1");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Lord},
+               {"b", tkw::game::Role::Loyalist},
+               {"c", tkw::game::Role::Rebel}};
+
+    tkw::game::AggressiveAI ai;
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    const auto chosen = ai.choose_play(g.ctx, turn);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().targets == std::vector<std::string>{"c"});
+}
+
 TEST_CASE("aggressive: pick_card_from_target prefers the highest value")
 {
     TestGame g("deck");

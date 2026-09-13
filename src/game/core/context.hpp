@@ -38,6 +38,8 @@ namespace tkw
             const card::CardManager *cards = nullptr;
             const card::CardDefCatalog *catalog = nullptr;
             const RulesConfig *rules = nullptr;
+            const GameMode *mode = nullptr;    /**< 对局模式（由对局持有） */
+            const RoleTable *roles = nullptr;  /**< 身份局角色表（由对局持有） */
         };
 
         /** @brief 对局上下文（引用捆绑，不持有）。 */
@@ -52,10 +54,10 @@ namespace tkw
             const GameMode *mode = nullptr;      /**< 对局模式（由对局持有） */
             const RoleTable *roles = nullptr;    /**< 身份局角色表（由对局持有） */
 
-            /** @brief 隐式转出只读视图（值拷贝四个 const 指针），供决策接缝使用。 */
+            /** @brief 隐式转出只读视图（值拷贝六个 const 指针），供决策接缝使用。 */
             operator ReadOnlyContext() const
             {
-                return ReadOnlyContext{entities, cards, catalog, rules};
+                return ReadOnlyContext{entities, cards, catalog, rules, mode, roles};
             }
         };
 
@@ -68,6 +70,12 @@ namespace tkw
 
         /** @brief 取对局模式；ctx 未绑定模式时回落 Brawl（测试便利）。 */
         inline GameMode mode_of(const GameContext &ctx)
+        {
+            return ctx.mode ? *ctx.mode : GameMode::Brawl;
+        }
+
+        /** @brief 取对局模式（只读视图）；ctx 未绑定模式时回落 Brawl。 */
+        inline GameMode mode_of(const ReadOnlyContext &ctx)
         {
             return ctx.mode ? *ctx.mode : GameMode::Brawl;
         }

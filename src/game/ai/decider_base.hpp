@@ -255,7 +255,8 @@ namespace tkw
 
                 /**
                  * @brief 借刀杀人：在合法 {持武器者, 受害者} 对里选集火对象
-                 *        体力最低者（同血取列表序），整对作为目标传回。
+                 *        （先按阵营优先度、再体力最低；同档同血取列表序），
+                 *        整对作为目标传回。
                  * @note 目标是双元素对，不能走按 targets.front() 选目标的
                  *       单目标路径（那会把持武器者本身当目标）。
                  */
@@ -264,13 +265,16 @@ namespace tkw
                     const std::vector<LegalAction> &opts)
                 {
                     const LegalAction *best = &opts.front();
+                    int best_rank = target_priority(view, best->targets[1]);
                     int best_hp = hp_of(view, best->targets[1]);
                     for (const auto &a : opts)
                     {
+                        const int rank = target_priority(view, a.targets[1]);
                         const int h = hp_of(view, a.targets[1]);
-                        if (h < best_hp)
+                        if (rank < best_rank || (rank == best_rank && h < best_hp))
                         {
                             best = &a;
+                            best_rank = rank;
                             best_hp = h;
                         }
                     }
@@ -308,18 +312,57 @@ namespace tkw
                     return 0;
                 }
 
-                /** @brief 集火：在单目标动作里选体力最低者（同血取列表序）。 */
+                /**
+                 * @brief 阵营目标优先度：身份局按决策者阵营给敌对目标降档，
+                 *        数值小者优先；乱斗或无角色时全目标恒 0（退回最低体力）。
+                 * @param view 观察（含自身角色与其他角色）。
+                 * @param id 待评估目标。
+                 * @return 优先度：主公/忠臣视反贼与内奸同档最优先、其余后置；
+                 *         反贼视主公最优先、忠臣次之、其余最后；内奸或自身角色
+                 *         缺失一律 0。
+                 * @note 目标角色未知时按非敌意处理（主公阵营后置、反贼归最后档）。
+                 */
+                static int target_priority(const AiView &view, const std::string &id)
+                {
+                    if (view.mode != GameMode::Identity ||
+                        view.self_role == Role::None)
+                        return 0;
+
+                    const Role r = role_in_view(view, id);
+                    if (view.self_role == Role::Lord ||
+                        view.self_role == Role::Loyalist)
+                        return (r == Role::Rebel || r == Role::Traitor) ? 0 : 1;
+                    if (view.self_role == Role::Rebel)
+                    {
+                        if (r == Role::Lord)
+                            return 0;
+                        if (r == Role::Loyalist)
+                            return 1;
+                        return 2;
+                    }
+                    return 0;
+                }
+
+                /**
+                 * @brief 集火：在单目标动作里先按阵营优先度、再按体力最低者
+                 *        （同档同血取列表序）。
+                 * @note 乱斗或无角色时优先度恒 0，比较器退化为原「体力最低」。
+                 */
                 static std::string lowest_hp_action(
                     const AiView &view, const std::vector<LegalAction> &opts)
                 {
                     std::string best = opts.front().targets.front();
+                    int best_rank = target_priority(view, best);
                     int best_hp = hp_of(view, best);
                     for (const auto &a : opts)
                     {
-                        const int h = hp_of(view, a.targets.front());
-                        if (h < best_hp)
+                        const std::string &t = a.targets.front();
+                        const int rank = target_priority(view, t);
+                        const int h = hp_of(view, t);
+                        if (rank < best_rank || (rank == best_rank && h < best_hp))
                         {
-                            best = a.targets.front();
+                            best = t;
+                            best_rank = rank;
                             best_hp = h;
                         }
                     }

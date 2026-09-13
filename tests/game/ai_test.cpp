@@ -82,6 +82,34 @@ TEST_CASE("ai: view captures self and others")
     CHECK(v.others[0].judge.empty());
 }
 
+TEST_CASE("ai: view carries roles from the context")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Lord},
+               {"b", tkw::game::Role::Rebel},
+               {"c", tkw::game::Role::Loyalist}};
+
+    const auto v = make_view(g.ctx, "a");
+    CHECK(v.mode == tkw::game::GameMode::Identity);
+    CHECK(v.self_role == tkw::game::Role::Lord);
+    REQUIRE(v.others.size() == 2);
+    CHECK(v.others[0].role == tkw::game::Role::Rebel);
+    CHECK(v.others[1].role == tkw::game::Role::Loyalist);
+
+    TestGame b("deck");
+    b.add_player("a", 0, 4);
+    b.add_player("b", 1, 4);
+    const auto bv = make_view(b.ctx, "a");
+    CHECK(bv.mode == tkw::game::GameMode::Brawl);
+    CHECK(bv.self_role == tkw::game::Role::None);
+    REQUIRE(bv.others.size() == 1);
+    CHECK(bv.others[0].role == tkw::game::Role::None);
+}
+
 TEST_CASE("ai: evaluator scores cards")
 {
     TestGame g("deck");
@@ -131,6 +159,79 @@ TEST_CASE("ai: simple borrowed sword targets the lowest-hp victim")
     REQUIRE(chosen.is_some());
     CHECK(chosen.unwrap().instance_id == "j#0");
     CHECK(chosen.unwrap().targets == std::vector<std::string>{"b", "d"});
+}
+
+TEST_CASE("ai: identity lord camp targets the hostile not a lower-hp loyalist")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);  // 主公持杀
+    g.add_player("b", 1, 1);  // 忠臣，体力最低但非敌意
+    g.add_player("c", 2, 4);  // 反贼
+    g.give("a", "sha", "s#1");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Lord},
+               {"b", tkw::game::Role::Loyalist},
+               {"c", tkw::game::Role::Rebel}};
+
+    tkw::game::SimpleAI ai;
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    const auto chosen = ai.choose_play(g.ctx, turn);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().targets == std::vector<std::string>{"c"});
+}
+
+TEST_CASE("ai: identity rebel targets the lord before a lower-hp loyalist")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);  // 主公
+    g.add_player("b", 1, 4);  // 反贼持杀
+    g.add_player("c", 2, 1);  // 忠臣，体力最低
+    g.give("b", "sha", "s#1");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Lord},
+               {"b", tkw::game::Role::Rebel},
+               {"c", tkw::game::Role::Loyalist}};
+
+    tkw::game::SimpleAI ai;
+    const tkw::game::TurnContext turn{"b", 0, 1};
+    const auto chosen = ai.choose_play(g.ctx, turn);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().targets == std::vector<std::string>{"a"});
+}
+
+TEST_CASE("ai: identity traitor keeps the lowest-hp rule")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);  // 内奸持杀
+    g.add_player("b", 1, 4);  // 主公
+    g.add_player("c", 2, 1);  // 反贼，体力最低
+    g.give("a", "sha", "s#1");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Traitor},
+               {"b", tkw::game::Role::Lord},
+               {"c", tkw::game::Role::Rebel}};
+
+    tkw::game::SimpleAI ai;
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    const auto chosen = ai.choose_play(g.ctx, turn);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().targets == std::vector<std::string>{"c"});
+}
+
+TEST_CASE("ai: brawl targeting stays lowest-hp free-for-all")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 1);
+    g.add_player("c", 2, 4);
+    g.give("a", "sha", "s#1");
+    // 不设 mode/roles：默认乱斗，全体无角色
+
+    tkw::game::SimpleAI ai;
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    const auto chosen = ai.choose_play(g.ctx, turn);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().targets == std::vector<std::string>{"b"});
 }
 
 TEST_CASE("ai: RequestDecisionSource forwards choices to decider")
@@ -892,6 +993,10 @@ TEST_CASE("ai: decision context is read-only at compile time")
                                  const tkw::card::CardDefCatalog *>);
     static_assert(std::is_same_v<decltype(ReadOnlyContext{}.rules),
                                  const tkw::game::RulesConfig *>);
+    static_assert(std::is_same_v<decltype(ReadOnlyContext{}.mode),
+                                 const tkw::game::GameMode *>);
+    static_assert(std::is_same_v<decltype(ReadOnlyContext{}.roles),
+                                 const tkw::game::RoleTable *>);
     // 同一改状态操作在可变容器成立、在接缝的 const 容器上不可达
     static_assert(HasTakeDamage<tkw::entity::Entity>);
     static_assert(!HasTakeDamage<const tkw::entity::Entity>);
