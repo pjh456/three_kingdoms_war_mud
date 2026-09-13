@@ -995,9 +995,10 @@ namespace tkw
 
                 Option<card::Card> pick_card_from_target(
                     const ReadOnlyContext &ctx, const std::string &source,
-                    const std::string &target) override
+                    const std::string &target, PickCardScope scope) override
                 {
-                    return route(source).pick_card_from_target(ctx, source, target);
+                    return route(source).pick_card_from_target(
+                        ctx, source, target, scope);
                 }
 
                 Option<PlayAction> choose_play(

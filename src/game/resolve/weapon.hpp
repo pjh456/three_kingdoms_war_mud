@@ -10,7 +10,7 @@
  *       - 八卦阵：需出闪时可判定，判定描述来自装备数据（当前为红色=闪）；
  *       - 青龙偃月刀：被闪后可再对同一目标使用一张杀；
  *       - 贯石斧：被闪后可弃两张牌令杀依然命中；
- *       - 寒冰剑：命中前可防止伤害改为弃置目标两张牌；
+ *       - 寒冰剑：命中前可防止伤害改为弃置目标两张牌（仅手牌/装备区）；
  *       - 麒麟弓：造成伤害后可弃置目标一匹坐骑（由使用者选哪一匹）；
  *       - 方天画戟：杀为最后一张手牌时可额外指定至多两名目标
  *         （作用于目标集合，经目标数校验放宽实现，不走本表钩子）；
@@ -76,6 +76,7 @@ namespace tkw
 
         /**
          * @brief 弃置目标 count 张牌（寒冰剑）。
+         * @note 候选仅目标手牌与装备区：判定区延时锦囊不可被寒冰剑取走。
          * @return 实际弃成功的张数（决策源返回幽灵 id 或选不满时少于请求数）。
          */
         inline int discard_target_cards(
@@ -85,7 +86,8 @@ namespace tkw
             int discarded = 0;
             for (int i = 0; i < count; ++i)
             {
-                const auto picked = ai.pick_card_from_target(ctx, attacker, target);
+                const auto picked = ai.pick_card_from_target(
+                    ctx, attacker, target, PickCardScope::HandEquip);
                 if (picked.is_none())
                     break;
                 if (remove_any_and_discard(ctx, target, picked.unwrap().instance_id)
@@ -275,16 +277,15 @@ namespace tkw
 
         /**
          * @brief 寒冰剑：防止伤害改为弃置目标两张牌。
-         * @note 目标弃满两张才免伤：目标可选区（手牌+装备+判定）不足 2 张
-         *       不发动（不询问、不弃牌、不免伤）；实际弃不满 2 张（含幽灵
-         *       引用）不免伤。
+         * @note 目标弃满两张才免伤：目标手牌+装备不足 2 张不发动（不询问、
+         *       不弃牌、不免伤；判定区不计入代价，延时锦囊不可取）；实际弃不满
+         *       2 张（含幽灵引用）不免伤。
          */
         inline void hook_hanbing(ShaContext &sc)
         {
-            // 发动前置：目标可选区不足两张付不起代价，直接不发动
+            // 发动前置：可选区（手牌+装备）不足两张付不起代价，直接不发动
             if (sc.ctx.cards->hand_size(sc.target) +
-                    sc.ctx.cards->equip_size(sc.target) +
-                    sc.ctx.cards->judge_size(sc.target) <
+                    sc.ctx.cards->equip_size(sc.target) <
                 static_cast<std::size_t>(rules_of(sc.ctx).two_card_cost))
                 return;
 

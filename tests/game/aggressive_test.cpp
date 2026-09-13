@@ -177,9 +177,28 @@ TEST_CASE("aggressive: pick_card_from_target prefers the highest value")
     g.give("b", "tao", "t#2");   // 桃 50
 
     tkw::game::AggressiveAI ai;
-    const auto picked = ai.pick_card_from_target(g.ctx, "a", "b");
+    const auto picked = ai.pick_card_from_target(
+        g.ctx, "a", "b", tkw::game::PickCardScope::HandEquipJudge);
     REQUIRE(picked.is_some());
     CHECK(picked.unwrap().instance_id == "t#2");  // 贪心档取首张（闪）
+}
+
+TEST_CASE("aggressive: pick_card_from_target ignores the judgement zone for ice sword")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.equip("b", "qinglong", "e#1");  // 装备 30
+    // 判定区桃价值 50；寒冰剑范围下不得被取走
+    g.cards.add_to_judge(
+        "b", tkw::card::Card{"t#2", "tao", tkw::card::Suit::Heart, 3});
+
+    tkw::game::AggressiveAI ai;
+    const auto picked = ai.pick_card_from_target(
+        g.ctx, "a", "b", tkw::game::PickCardScope::HandEquip);
+    REQUIRE(picked.is_some());
+    CHECK(picked.unwrap().instance_id == "e#1");
+    CHECK(g.cards.judge_size("b") == 1);
 }
 
 TEST_CASE("aggressive: pick_from_revealed prefers the highest value")

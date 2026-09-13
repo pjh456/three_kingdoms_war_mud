@@ -3329,7 +3329,7 @@ TEST_CASE("game: hanbing does not prevent damage when the target holds fewer tha
     CHECK(g.cards.hand_size("b") == 1);  // 未弃任何牌
 }
 
-TEST_CASE("game: hanbing does not prevent damage when the cost cannot be fully discarded")
+TEST_CASE("game: hanbing ignores judgement zone when the cost cannot be paid")
 {
     TestGame g("deck");
     g.add_player("a", 0, 4);
@@ -3337,16 +3337,56 @@ TEST_CASE("game: hanbing does not prevent damage when the cost cannot be fully d
     g.equip("a", "hanbing", "e#0");
     g.give("a", "sha", "s#1");
     g.give("b", "shan", "s#2");
-    g.cards.add_to_judge("b", Card{"j#1", "shan", Suit::Spade, 5});  // 可选总数 2，预检通过
+    g.cards.add_to_judge("b", Card{"j#1", "shan", Suit::Spade, 5});  // 判定区不计入代价
 
-    TestDecider decider;  // pick_card_from_target 只看手牌：第 2 次选不满
+    TestDecider decider;
     decider.triggers = {Ability::DamageAsDiscard};
     const auto played = g.cards.hand("a")[0];
     auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
     REQUIRE(r.is_ok());
-    CHECK(b->get_hp() == 3);            // 只弃了 1 张，不免伤
-    CHECK(g.cards.hand_size("b") == 0);  // 手牌已弃
-    CHECK(g.cards.judge_size("b") == 1);  // 判定区未动（部分代价不回滚）
+    CHECK(decider.trigger_calls.empty());  // 手牌+装备只有 1 张，不询问
+    CHECK(b->get_hp() == 3);               // 伤害照常
+    CHECK(g.cards.hand_size("b") == 1);    // 未弃任何牌
+    CHECK(g.cards.judge_size("b") == 1);   // 判定区始终未动
+}
+
+TEST_CASE("game: hanbing cannot take judgement zone cards")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "hanbing", "e#0");
+    g.give("a", "sha", "s#1");
+    g.equip("b", "qinglong", "e#1");  // 装备 1 张
+    // 判定区桃价值 50 > 装备 30，但判定区不可取：可选代价只有 1 张
+    g.cards.add_to_judge("b", Card{"t#2", "tao", Suit::Heart, 3});
+
+    SimpleAI ai;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, ai, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);              // 付不起两张，伤害照常
+    CHECK(g.cards.equip_size("b") == 1);  // 装备未被弃
+    CHECK(g.cards.judge_size("b") == 1);  // 判定区未被取
+}
+
+TEST_CASE("game: hanbing still discards two cards from hand and equipment")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("a", "hanbing", "e#0");
+    g.give("a", "sha", "s#1");
+    g.give("b", "sha", "s#2");
+    g.equip("b", "qinglong", "e#1");
+
+    SimpleAI ai;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, ai, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 4);             // 手牌+装备弃满两张，免伤
+    CHECK(g.cards.hand_size("b") == 0);
+    CHECK(g.cards.equip_size("b") == 0);
 }
 
 TEST_CASE("game: qinglong follows up with another sha after jink")

@@ -74,7 +74,8 @@ namespace tkw
                 // 无懈窗口逐目标单元素，与 EffectInvocation::nullified 同口径
                 if (is_trick && resolve_nullification(ctx, ai, def, player, {t}))
                     continue;
-                const auto picked = ai.pick_card_from_target(ctx, player, t);
+                const auto picked = ai.pick_card_from_target(
+                    ctx, player, t, PickCardScope::HandEquipJudge);
                 if (picked.is_none() ||
                     !ctx.cards->has_card(t, picked.unwrap().instance_id))
                     return GameResult<TargetPicks>::Err(EffectError::InvalidChoice);

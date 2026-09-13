@@ -61,6 +61,13 @@ namespace tkw
             Qilin, /**< 麒麟弓：攻击方选弃目标坐骑 */
         };
 
+        /** @brief 目标区域选牌的候选范围。 */
+        enum class PickCardScope : std::uint8_t
+        {
+            HandEquipJudge, /**< 手牌 + 装备区 + 判定区（顺手牵羊/过河拆桥） */
+            HandEquip,      /**< 仅手牌 + 装备区（寒冰剑；判定区延时锦囊不可取） */
+        };
+
         /**
          * @class DecisionSource
          * @brief 结算/回合期间的玩家决策接口。
@@ -86,14 +93,17 @@ namespace tkw
                 const ResponsePrompt &prompt) = 0;
 
             /**
-             * @brief 从目标区域选一张牌（过河拆桥弃置 / 顺手牵羊获得）。
+             * @brief 从目标区域选一张牌（过河拆桥弃置 / 顺手牵羊获得 / 寒冰剑弃置）。
+             * @param scope 候选范围：顺手牵羊/过河拆桥取手牌+装备+判定区；寒冰剑
+             *              仅取手牌+装备区（判定区延时锦囊不可取）。
              * @return 选中的牌；None = 放弃/无可选（结算器按规则处理，不再
              *         依赖默认构造的牌）。
              */
             virtual Option<card::Card> pick_card_from_target(
                 const ReadOnlyContext &ctx,
                 const std::string &source,
-                const std::string &target) = 0;
+                const std::string &target,
+                PickCardScope scope) = 0;
 
             /**
              * @brief 出牌阶段：选择打出一张手牌及其目标；None = 结束出牌。

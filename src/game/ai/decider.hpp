@@ -186,7 +186,7 @@ namespace tkw
 
                 Option<card::Card> pick_card_from_target(
                     const ReadOnlyContext &ctx, const std::string &source,
-                    const std::string &target) override
+                    const std::string &target, PickCardScope scope) override
                 {
                     DecisionRequest req = base_request(ctx, source);
                     req.kind = DecisionKind::PickCard;
@@ -197,9 +197,10 @@ namespace tkw
                     append_zone(
                         req.options, req.zone_labels, ctx.cards->equip(target),
                         card::Zone::Equip);
-                    append_zone(
-                        req.options, req.zone_labels, ctx.cards->judge(target),
-                        card::Zone::Judge);
+                    if (scope == PickCardScope::HandEquipJudge)
+                        append_zone(
+                            req.options, req.zone_labels, ctx.cards->judge(target),
+                            card::Zone::Judge);
                     return decider_->decide(req).card;
                 }
 

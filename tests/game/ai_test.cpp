@@ -32,11 +32,15 @@ namespace
         std::size_t legal_count = 0;
         std::size_t pick_index = 0;     /**< 选中的 legal 动作下标（默认首个） */
         std::string second_instance_id; /**< 最近一次透传的第二张手牌 */
+        std::vector<tkw::card::Card> options;     /**< 最近一次请求的候选牌 */
+        std::vector<tkw::card::Zone> zone_labels; /**< 与 options 等长的来源分区 */
 
         DecisionChoice decide(const DecisionRequest &req) override
         {
             last = req.kind;
             legal_count = req.legal.size();
+            options = req.options;
+            zone_labels = req.zone_labels;
             DecisionChoice out;
             if (req.kind == DecisionKind::Play && req.legal.size() > pick_index)
             {
@@ -824,7 +828,9 @@ TEST_CASE("ai: human decider treats eof as decline")
     CHECK(src.play_peach(g.ctx, "a", "b").is_none());
     CHECK(src.play_counter(g.ctx, "a", "", {}, "").is_none());
     CHECK_FALSE(src.trigger_effect(g.ctx, "a", tkw::card::Ability::NoShaLimit));
-    CHECK(src.pick_card_from_target(g.ctx, "a", "b").is_none());
+    CHECK(src.pick_card_from_target(
+              g.ctx, "a", "b", tkw::game::PickCardScope::HandEquipJudge)
+              .is_none());
     const auto revealed = g.ctx.cards->hand("a");
     CHECK(src.pick_from_revealed(
               g.ctx, "a", revealed, tkw::game::RevealSource::Wugu)
@@ -846,9 +852,45 @@ TEST_CASE("ai: human decider picks card from target")
     HumanDecider dec(in, out);
     RequestDecisionSource src(dec);
 
-    const auto picked = src.pick_card_from_target(g.ctx, "a", "b");
+    const auto picked = src.pick_card_from_target(
+        g.ctx, "a", "b", tkw::game::PickCardScope::HandEquipJudge);
     REQUIRE(picked.is_some());
     CHECK(picked.unwrap().instance_id == "s#2");
+}
+
+TEST_CASE("ai: pick_card_from_target filters the judgement zone by scope")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("b", "sha", "s#2");
+    g.equip("b", "qinglong", "e#1");
+    const auto lesi = g.catalog.find("lesi");
+    REQUIRE(lesi.is_some());
+    const auto &copy = lesi.unwrap()->copies[0];
+    g.cards.add_to_judge(
+        "b", tkw::card::Card{"d#1", "lesi", copy.suit, copy.number});
+
+    RecordingDecider dec;
+    RequestDecisionSource src(dec);
+
+    // 寒冰剑范围：判定区不进候选，手牌/装备相对序不变
+    (void)src.pick_card_from_target(
+        g.ctx, "a", "b", tkw::game::PickCardScope::HandEquip);
+    REQUIRE(dec.zone_labels.size() == 2);
+    CHECK(dec.zone_labels[0] == tkw::card::Zone::Hand);
+    CHECK(dec.zone_labels[1] == tkw::card::Zone::Equip);
+    REQUIRE(dec.options.size() == 2);
+    CHECK(dec.options[0].instance_id == "s#2");
+    CHECK(dec.options[1].instance_id == "e#1");
+
+    // 顺手牵羊/过河拆桥范围：判定区照常进入候选
+    (void)src.pick_card_from_target(
+        g.ctx, "a", "b", tkw::game::PickCardScope::HandEquipJudge);
+    REQUIRE(dec.zone_labels.size() == 3);
+    CHECK(dec.zone_labels[2] == tkw::card::Zone::Judge);
+    REQUIRE(dec.options.size() == 3);
+    CHECK(dec.options[2].instance_id == "d#1");
 }
 
 TEST_CASE("ai: human decider labels the target card zone")
@@ -870,7 +912,8 @@ TEST_CASE("ai: human decider labels the target card zone")
         std::ostringstream out;
         HumanDecider dec(in, out);
         RequestDecisionSource src(dec);
-        const auto picked = src.pick_card_from_target(g.ctx, "a", "b");
+        const auto picked = src.pick_card_from_target(
+            g.ctx, "a", "b", tkw::game::PickCardScope::HandEquipJudge);
         REQUIRE(picked.is_some());
         CHECK(picked.unwrap().instance_id == "s#2");
 
@@ -888,7 +931,8 @@ TEST_CASE("ai: human decider labels the target card zone")
         std::ostringstream out;
         HumanDecider dec(in, out);
         RequestDecisionSource src(dec);
-        const auto picked = src.pick_card_from_target(g.ctx, "a", "b");
+        const auto picked = src.pick_card_from_target(
+            g.ctx, "a", "b", tkw::game::PickCardScope::HandEquipJudge);
         REQUIRE(picked.is_some());
         CHECK(picked.unwrap().instance_id == "e#1");
     }
@@ -897,7 +941,8 @@ TEST_CASE("ai: human decider labels the target card zone")
         std::ostringstream out;
         HumanDecider dec(in, out);
         RequestDecisionSource src(dec);
-        const auto picked = src.pick_card_from_target(g.ctx, "a", "b");
+        const auto picked = src.pick_card_from_target(
+            g.ctx, "a", "b", tkw::game::PickCardScope::HandEquipJudge);
         REQUIRE(picked.is_some());
         CHECK(picked.unwrap().instance_id == "d#1");
     }
@@ -917,7 +962,8 @@ TEST_CASE("ai: human decider hides target hand card text on card lookup")
     HumanDecider dec(in, out);
     RequestDecisionSource src(dec);
 
-    const auto picked = src.pick_card_from_target(g.ctx, "a", "b");
+    const auto picked = src.pick_card_from_target(
+        g.ctx, "a", "b", tkw::game::PickCardScope::HandEquipJudge);
     REQUIRE(picked.is_some());
     CHECK(picked.unwrap().instance_id == "s#2");
 
@@ -941,7 +987,8 @@ TEST_CASE("ai: human decider still shows revealed zone card text")
     HumanDecider dec(in, out);
     RequestDecisionSource src(dec);
 
-    const auto picked = src.pick_card_from_target(g.ctx, "a", "b");
+    const auto picked = src.pick_card_from_target(
+        g.ctx, "a", "b", tkw::game::PickCardScope::HandEquipJudge);
     REQUIRE(picked.is_some());
     CHECK(picked.unwrap().instance_id == "e#1");
 

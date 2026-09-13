@@ -187,7 +187,7 @@ namespace tkw
 
             Option<card::Card> pick_card_from_target(
                 const ReadOnlyContext &ctx, const std::string &,
-                const std::string &target) override
+                const std::string &target, PickCardScope) override
             {
                 if (bogus_pick)
                     return Option<card::Card>::Some(
