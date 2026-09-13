@@ -36,6 +36,8 @@ namespace tkw
         /**
          * @brief 面板候选项：展示文本 + 回填 DecisionChoice 所需的纯值载荷。
          * @note text 在构造面板时由目录一次性解析成展示名，之后不再触目录。
+         * @note card_* 三项是把牌面折成的展示纯值（查看牌面用）；对手手牌占位
+         *       候选 hidden 为真且三项恒空，不泄漏隐藏信息。
          */
         struct PanelOption
         {
@@ -45,6 +47,10 @@ namespace tkw
             std::vector<std::string> targets; /**< Play 目标 */
             std::size_t option_index = 0;   /**< PickCard/PickRevealed 候选下标 */
             bool accepted = false;          /**< Trigger：true=发动 */
+            std::string card_name;          /**< 卡牌展示名；无牌候选为空 */
+            std::string card_meta;          /**< 花色点数展示串（如 ♠7）；隐藏/无牌为空 */
+            std::string card_text;          /**< 卡牌效果文案；空 = 无说明 */
+            bool hidden = false;            /**< 对手手牌占位：card_* 三项恒空 */
         };
 
         /**
@@ -260,6 +266,73 @@ namespace tkw
                 return out;
             }
 
+            /** @brief 花色 → UTF-8 符号；只读展示，未知值兜底问号。 */
+            inline const char *suit_glyph(tkw::card::Suit suit)
+            {
+                switch (suit)
+                {
+                case tkw::card::Suit::Spade:
+                    return "♠";
+                case tkw::card::Suit::Club:
+                    return "♣";
+                case tkw::card::Suit::Heart:
+                    return "♥";
+                case tkw::card::Suit::Diamond:
+                    return "♦";
+                }
+                return "?";
+            }
+
+            /** @brief 实体牌花色点数 → 展示串（如 ♠7）；供面板查看牌面。 */
+            inline std::string card_meta(const tkw::card::Card &c)
+            {
+                return std::string(suit_glyph(c.suit)) + std::to_string(c.number);
+            }
+
+            /**
+             * @brief 候选是否属于对手手牌、需向决策者遮挡内容。
+             * @param req   当前决策请求。
+             * @param index 候选的 0 基下标。
+             * @return 仅 PickCard 的手牌候选返回 true；缺少分区标签时防御性返回
+             *         true（平行数组缺口不得导致漏遮）。
+             * @note 装备区/判定区为明置信息，其余决策类别的候选均为决策者自己
+             *       可见的牌，一律返回 false。此谓词是候选遮挡的唯一判据。
+             */
+            inline bool is_hidden_pick_option(
+                const tkw::game::ai::DecisionRequest &req, std::size_t index)
+            {
+                if (req.kind != tkw::game::ai::DecisionKind::PickCard)
+                    return false;
+                if (index >= req.zone_labels.size())
+                    return true;
+                return req.zone_labels[index] == tkw::card::Zone::Hand;
+            }
+
+            /**
+             * @brief 把实体牌折成候选的展示纯值：牌名、花色点数与效果文案。
+             * @param opt 出参：就地写入 card_name/card_meta/card_text。
+             * @param req 决策请求；目录缺失时只填牌名与花色点数。
+             * @param c   实体牌；def_id 为空（隐藏占位槽）时直接返回，不折出假牌面。
+             * @note 只在 make_panel 内调用，产物为字符串，不持目录指针；效果文案
+             *       缺失留空，由渲染侧回落「（无说明）」。
+             */
+            inline void fill_card_fields(
+                PanelOption &opt, const tkw::game::ai::DecisionRequest &req,
+                const tkw::card::Card &c)
+            {
+                if (c.def_id.empty())
+                    return;
+
+                opt.card_name = tkw::card::display_name(req.catalog, c.def_id);
+                if (req.catalog)
+                {
+                    const auto def = req.catalog->find(c.def_id);
+                    if (def.is_some())
+                        opt.card_text = def.unwrap()->text;
+                }
+                opt.card_meta = card_meta(c);
+            }
+
             /**
              * @brief Play 候选的一行文本：牌名 + 实例 + 可选第二张 + 可选目标 + 借刀警示。
              */
@@ -291,10 +364,7 @@ namespace tkw
                 std::string text = zone_tag(zone);
                 if (!text.empty())
                     text += " ";
-                const bool hidden =
-                    index >= req.zone_labels.size() ||
-                    zone == tkw::card::Zone::Hand;
-                if (hidden)
+                if (is_hidden_pick_option(req, index))
                 {
                     text += kHiddenHandPlaceholder;
                     return text;
@@ -333,6 +403,7 @@ namespace tkw
                     opt.instance_id = act.card.instance_id;
                     opt.second_instance_id = act.second_instance_id;
                     opt.targets = act.targets;
+                    detail::fill_card_fields(opt, req, act.card);
                     panel.options.push_back(std::move(opt));
                 }
                 break;
@@ -353,6 +424,7 @@ namespace tkw
                             act.second_instance_id;
                         opt.instance_id = act.card.instance_id;
                         opt.second_instance_id = act.second_instance_id;
+                        detail::fill_card_fields(opt, req, act.card);
                         panel.options.push_back(std::move(opt));
                     }
                 }
@@ -365,6 +437,7 @@ namespace tkw
                             tkw::card::display_name(req.catalog, c.def_id) + " " +
                             c.instance_id;
                         opt.instance_id = c.instance_id;
+                        detail::fill_card_fields(opt, req, c);
                         panel.options.push_back(std::move(opt));
                     }
                 }
@@ -380,6 +453,7 @@ namespace tkw
                     opt.text = tkw::card::display_name(req.catalog, c.def_id) +
                                " " + c.instance_id;
                     opt.instance_id = c.instance_id;
+                    detail::fill_card_fields(opt, req, c);
                     panel.options.push_back(std::move(opt));
                 }
                 break;
@@ -394,6 +468,7 @@ namespace tkw
                     opt.text = tkw::card::display_name(req.catalog, c.def_id) +
                                " " + c.instance_id;
                     opt.instance_id = c.instance_id;
+                    detail::fill_card_fields(opt, req, c);
                     panel.options.push_back(std::move(opt));
                 }
                 break;
@@ -424,6 +499,10 @@ namespace tkw
                     opt.text = detail::pick_option_text(req, i);
                     opt.instance_id = req.options[i].instance_id;
                     opt.option_index = i;
+                    if (detail::is_hidden_pick_option(req, i))
+                        opt.hidden = true;
+                    else
+                        detail::fill_card_fields(opt, req, req.options[i]);
                     panel.options.push_back(std::move(opt));
                 }
                 break;
@@ -440,6 +519,7 @@ namespace tkw
                         " " + req.options[i].instance_id;
                     opt.instance_id = req.options[i].instance_id;
                     opt.option_index = i;
+                    detail::fill_card_fields(opt, req, req.options[i]);
                     panel.options.push_back(std::move(opt));
                 }
                 break;
@@ -460,6 +540,7 @@ namespace tkw
                     opt.text = tkw::card::display_name(req.catalog, c.def_id) +
                                " " + c.instance_id;
                     opt.instance_id = c.instance_id;
+                    detail::fill_card_fields(opt, req, c);
                     panel.options.push_back(std::move(opt));
                 }
                 break;

@@ -78,6 +78,8 @@ TEST_CASE("tui: play panel maps legal actions to choice payload")
     auto req = base_request(DecisionKind::Play, catalog);
     tkw::game::LegalAction sha;
     sha.card = card_of("c1", "sha");
+    sha.card.suit = tkw::card::Suit::Spade;
+    sha.card.number = 7;
     sha.targets = {"P1"};
     tkw::game::LegalAction tao;
     tao.card = card_of("c2", "tao");
@@ -91,6 +93,11 @@ TEST_CASE("tui: play panel maps legal actions to choice payload")
     CHECK(panel.options[0].text.find("杀") != std::string::npos);
     CHECK(panel.options[0].text.find("P1") != std::string::npos);
     CHECK(panel.options[0].targets == std::vector<std::string>({"P1"}));
+    CHECK_FALSE(panel.options[0].hidden);
+    CHECK(panel.options[0].card_name == "杀");
+    CHECK(panel.options[0].card_meta.find("7") != std::string::npos);
+    CHECK(panel.options[0].card_meta.find("♠") != std::string::npos);
+    CHECK(panel.options[0].card_text.find("出牌阶段") != std::string::npos);
 
     DecisionChoice out;
     REQUIRE(make_choice(panel, {0}, false, out));
@@ -124,6 +131,9 @@ TEST_CASE("tui: response panel maps pairs and single cards")
     CHECK(pair_panel.title.find("1 点伤害") != std::string::npos);
     REQUIRE(pair_panel.options.size() == 1);
     CHECK(pair_panel.options[0].text.find("+") != std::string::npos);
+    CHECK(pair_panel.options[0].card_name.find("闪") != std::string::npos);
+    CHECK(pair_panel.options[0].card_meta.find("♠") != std::string::npos);
+    CHECK(pair_panel.options[0].card_text.find("抵消") != std::string::npos);
 
     DecisionChoice pair_choice;
     REQUIRE(make_choice(pair_panel, {0}, false, pair_choice));
@@ -184,6 +194,8 @@ TEST_CASE("tui: trigger panel is a yes no choice")
     REQUIRE(panel.options.size() == 2);
     CHECK(panel.options[0].accepted);
     CHECK_FALSE(panel.options[1].accepted);
+    CHECK(panel.options[0].card_name.empty());
+    CHECK(panel.options[1].card_name.empty());
 
     DecisionChoice yes;
     REQUIRE(make_choice(panel, {0}, false, yes));
@@ -211,8 +223,15 @@ TEST_CASE("tui: pick card panel hides opponent hand and reveals equip")
     CHECK(panel.options[0].text.find("未知手牌") != std::string::npos);
     CHECK(panel.options[0].text.find("[手]") != std::string::npos);
     CHECK(panel.options[0].text.find("八卦") == std::string::npos);
+    CHECK(panel.options[0].hidden);
+    CHECK(panel.options[0].card_name.empty());
+    CHECK(panel.options[0].card_meta.empty());
+    CHECK(panel.options[0].card_text.empty());
     CHECK(panel.options[1].text.find("[装]") != std::string::npos);
     CHECK(panel.options[1].text.find("八卦") != std::string::npos);
+    CHECK_FALSE(panel.options[1].hidden);
+    CHECK(panel.options[1].card_name.find("八卦") != std::string::npos);
+    CHECK(panel.options[1].card_text.find("防具") != std::string::npos);
     CHECK(panel.allow_pass);
 
     DecisionChoice out;
@@ -231,6 +250,11 @@ TEST_CASE("tui: revealed pick panel is mandatory")
     const DecisionPanelView panel = make_panel(req);
     CHECK(panel.title.find("五谷") != std::string::npos);
     CHECK_FALSE(panel.allow_pass);
+    REQUIRE(panel.options.size() == 2);
+    CHECK(panel.options[0].card_name == "杀");
+    CHECK(panel.options[1].card_name == "桃");
+    CHECK(panel.options[0].card_meta.find("♠") != std::string::npos);
+    CHECK(panel.options[0].card_text.find("出牌阶段") != std::string::npos);
     DecisionChoice out;
     CHECK_FALSE(make_choice(panel, {}, true, out));  // 强制选择不接受 pass
     REQUIRE(make_choice(panel, {1}, false, out));

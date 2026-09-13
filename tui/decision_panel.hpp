@@ -25,7 +25,8 @@ namespace tkw
     {
         /**
          * @class DecisionPanel
-         * @brief 待决决策的交互面板：↑/↓ 选项、Enter 确认、p 放弃、空格多选、数字直选。
+         * @brief 待决决策的交互面板：↑/↓ 选项、Enter 确认、p 放弃、空格多选、数字直选、
+         *        `card <序号>` 查看牌面、`?` 键位说明。
          * @note 每次 show() 重置光标与多选；只在面板可见时调用 on_event/render。
          */
         class DecisionPanel
@@ -72,6 +73,14 @@ namespace tkw
             void toggle_cursor();
 
             /**
+             * @brief 处理 `card <序号>` 命令输入态下的按键。
+             * @param event 当前按键。
+             * @return 恒为 true：命令输入期间键盘被独占，数字不落入直选。
+             * @note Return 解析缓冲并写详情/提示，Backspace 退格，其余可见字符追加。
+             */
+            bool handle_compose(const ftxui::Event &event);
+
+            /**
              * @brief 当前选中下标：多选取勾选集合，单选取光标。
              * @return 下标按升序；无候选时为空。
              */
@@ -81,6 +90,9 @@ namespace tkw
             std::size_t cursor_ = 0;                /**< 单/多选共有光标 */
             std::vector<bool> checked_;             /**< 多选勾选态 */
             std::string notice_;                    /**< 非法操作提示 */
+            std::string compose_;   /**< 非空 = 正在输入 card 命令 */
+            int detail_index_ = -1; /**< >=0 = 显示该 0 基候选的牌面 */
+            bool show_help_ = false; /**< ? 帮助开关 */
             Submit on_submit_;                      /**< 提交接缝 */
         };
     }  // namespace tui
