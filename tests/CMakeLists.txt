@@ -727,3 +727,33 @@ add_test(NAME cli_oneshot_deck_source
                   front=$($<TARGET_FILE:tkw> --deck resources cards 2>&1); printf '%s' \"$front\" | grep -q '牌表: resources'")
 set_tests_properties(cli_oneshot_deck_source PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 可选 TUI 端到端：仅 TKW_ENABLE_TUI=ON 时注册。add_test 里的 $<TARGET_FILE:tkw-tui>
+# 在 generate 期求值，tui/ 虽后于 tests/ 注册也能解析；门控必须用根级 option 变量，
+# configure 到此 if(TARGET tkw-tui) 尚为假。默认 OFF 时本块整体不存在，ctest 与
+# FTXUI 探测均零变化。
+if(TKW_ENABLE_TUI)
+  # 非 TTY 守卫：ctest 的输出本就是管道，直接运行即触发 stdin/stdout 双 fd 守卫；
+  # 包装 sh -c 只为把子进程 rc=1 转成断言结果，不需 script。
+  add_test(NAME tui_non_tty_guard
+           COMMAND sh -c
+                   "out=$($<TARGET_FILE:tkw-tui> 2>&1); rc=$?; printf '%s' \"$out\" | grep -Fq '需要交互式终端' && [ $rc -eq 1 ]")
+  set_tests_properties(tui_non_tty_guard PROPERTIES
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+  # PTY 冒烟：依赖 util-linux script 提供 pty，缺失则整条不注册（照抄 raw 冒烟先例）。
+  # ctest 下 script 继承的终端窗口是 0x0，须先在 pty 内 stty 固定尺寸。
+  # 在临时目录建 resources 符号链接并 cd 进去跑：牌表可加载、退出自动存档落临时
+  # 目录（不污染源码树、不覆盖开发者存档）。只钉 rc 与面板标题，不钉布局/动态值；
+  # grep -a 处理 FTXUI 输出里的 ANSI 转义，避免被当作二进制而静默不匹配。
+  if(TKW_SCRIPT_EXE)
+    add_test(NAME tui_pty_smoke
+             COMMAND sh -c
+                     "d=$(mktemp -d); ln -s '${CMAKE_SOURCE_DIR}/resources' $d/resources; \
+                      out=$(cd $d && { sleep 0.5; printf 'quit\\n'; sleep 0.5; } | script -qec 'stty rows 40 cols 120; $<TARGET_FILE:tkw-tui>' /dev/null 2>&1); rc=$?; rm -rf $d; \
+                      printf '%s' \"$out\" | grep -aq '棋盘' && [ $rc -eq 0 ]")
+    set_tests_properties(tui_pty_smoke PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        TIMEOUT 30)
+  endif()
+endif()

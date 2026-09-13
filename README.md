@@ -20,6 +20,8 @@ ctest --test-dir build        # 运行全部测试
 ```
 
 - 测试构建开关 `-DTKW_ENABLE_TESTS=ON|OFF`（默认 ON）；OFF 时 `tests/` 不进入构建。
+- 可选终端界面开关 `-DTKW_ENABLE_TUI=ON|OFF`（默认 OFF）；OFF 时不探测、不拉取
+  FTXUI，对 `tkw`/引擎/现有测试零影响，详见下文「可选终端界面（tkw-tui）」。
 - `build/` 是构建产物，不入库。
 - 下文示例中 `tkw` 均指 `./build/src/tkw`，且在仓库根目录执行（默认牌表路径
   `resources/` 相对当前工作目录）。
@@ -47,6 +49,35 @@ discard 1 2                # 弃牌阶段手牌超上限，按提示弃够张数
 `quit` 退出（有进行中会话时自动存档）。
 
 对局结束打印胜者（或平局）与对局统计块（回合数/每人体力/击杀/伤害/治疗）。
+
+## 可选终端界面（tkw-tui）
+
+除 CLI/REPL 外，另有一个可选的 FTXUI 全屏前端，默认关闭：
+
+```sh
+cmake -B build-tui -G Ninja -DTKW_ENABLE_TUI=ON   # 首次配置需联网拉取 FTXUI v7.0.3
+cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
+./build-tui/tui/tkw-tui
+```
+
+- 开关 `-DTKW_ENABLE_TUI=ON|OFF`（默认 OFF）；OFF 时不探测、不拉取 FTXUI，对
+  `tkw`/引擎/现有测试零影响。
+- 必须在仓库根目录运行：默认牌表 `resources/` 相对当前工作目录；且需要交互式终端
+  （标准输入与标准输出均为 TTY）。任一非 TTY 时打印「需要交互式终端」并以 1 退出，
+  请改用 `tkw repl`。
+- 四面板展示棋盘/手牌/日志/状态，底部命令栏：`new [--players N] [--seed S]
+  [--mode brawl|identity] [--ai simple|aggressive] [--deck P] [--hand N]`、
+  `deal <players> <seed>`、`step`、`run`/`r`、`status`/`st`、`save <file>`、
+  `load <file>`、`quit`/`q`、`help`/`?`；`Esc`/`Ctrl-C` 退出。目前仅支持 AI 对局，
+  暂不支持 `--human`（真人参与请用 `tkw repl`）。
+- 退出时若有进行中的会话，自动存档到当前目录的 `tkw-autosave.json`（与 REPL 同口径），
+  退出信息写 stderr。
+- FTXUI 获取：优先 `find_package(ftxui CONFIG QUIET)`，未安装则 `FetchContent` 钉
+  `v7.0.3`；离线可用 `-DFETCHCONTENT_SOURCE_DIR_FTXUI=<ftxui-src>` 指向预置源码，
+  或用 `-DFETCHCONTENT_FULLY_DISCONNECTED=ON` 配合已 populate 的 `_deps`。
+- 同时开启测试（默认 ON）时会注册 TUI 端到端测试：非 TTY 守卫直接运行；PTY 冒烟需
+  util-linux `script`（缺失则该条不注册）。
+- Windows/MSVC 未验证。
 
 ## 命令速查
 
@@ -197,14 +228,16 @@ tkw repl
 
 ```
 three_kingdoms_war_mud/
-├── CMakeLists.txt          # 顶层：C++20、TKW_ENABLE_TESTS 开关
+├── CMakeLists.txt          # 顶层：C++20、TKW_ENABLE_TESTS / TKW_ENABLE_TUI 开关
 ├── src/                    # 引擎（header-only，INTERFACE 库）
 │   ├── main.cpp            #   CLI 入口（src 下唯一 .cpp）
 │   ├── cli/  io/  config/  #   命令树 / 文件读写 / 资源加载
 │   ├── card/  entity/  event/  # 卡牌域 / 实体域 / 事件总线
 │   ├── game/               #   对局五层 core/query/resolve/flow/ai（严格单向依赖）
+│   ├── tui/                #   TUI 纯视图模型（可见性/快照/日志/命令/控制器，无 FTXUI）
 │   └── save/  util/        #   存档 / 通用（Result、随机源）
-├── tests/                  # doctest，目录镜像 src，11 个测试可执行文件
+├── tui/                    # 可选终端界面（TKW_ENABLE_TUI=ON 时构建 tkw-tui，含 FTXUI）
+├── tests/                  # doctest，目录镜像 src，12 个测试可执行文件
 ├── resources/              # 数据驱动牌表：deck.json + cards/<id>.json
 ├── thirdparty/             # 子模块：pjh_result / pjh_json / pjh_cli / pjh_platform
 └── build/                  # 构建产物（不入库）
