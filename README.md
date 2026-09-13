@@ -61,7 +61,7 @@ tkw --human P0 repl   # P0 真人参与，REPL 交互模式
 | `-p, --players <n>` | 玩家数（2–8，默认 4） |
 | `--hand <n>` | 初始手牌数（默认 4） |
 | `-s, --seed <n>` | 随机种子（默认 42） |
-| `-v, --verbose` | 打印事件日志（摸/打/弃牌、移牌、伤害、体力、阵亡） |
+| `-v, --verbose` | 打印事件日志（摸/打/弃牌、移牌、伤害、体力、阵亡；`--no-verbose` 关闭） |
 | `--autosave <path>` | REPL 退出时自动存档路径（空串关闭，默认 `tkw-autosave.json`） |
 | `--history <path>` | REPL 命令历史文件（默认不持久化，仅本次会话；父目录须已存在） |
 | `--human <seat>` | 真人座位（可重复：`--human P0 --human P2`；存档不保存，读档后需重新指定） |
@@ -91,6 +91,9 @@ tkw repl
 - 会话流：`new --players 2 --seed 1` 开新局 → `step` 执行一个回合（可重复）/
   `run` 跑到结束 → `status` 看状态 → `save s.json` 存档 / `load s.json` 续玩 →
   `quit` 退出；
+- 事件日志：`tkw --verbose repl` 进入后，`new`/`load` 建局默认继承启动日志开关；
+  在 `step`/`run` 上行内加 `--no-verbose` 可只关本次输出的日志，下一行仍回落
+  会话默认，无需重启；
 - 真人参与：`tkw --human P0 repl`，轮到你时按提示输入 `play <序号>`（出牌）或
   `pass`（不出），弃牌阶段输入 `discard <序号> ...`；REPL 内可用
   `new --no-human` 清空启动选项带入的真人座位（同命令给 `--human` 时清空优先）。

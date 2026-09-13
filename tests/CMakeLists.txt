@@ -311,6 +311,14 @@ add_test(NAME cli_verbose_card_moved
 set_tests_properties(cli_verbose_card_moved PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# --verbose 可关：启动 --verbose 后 new 继承日志（初始摸牌有 [摸牌]），行内
+# --no-verbose 只关本次命令的日志，step 不再打印 [打出] 等事件。
+add_test(NAME cli_verbose_negatable
+         COMMAND sh -c
+                 "out=$(printf 'new --players 2 --seed 1\\nstep --no-verbose\\nquit\\n' | $<TARGET_FILE:tkw> --verbose repl --autosave '' 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '\\[摸牌\\]' && ! printf '%s' \"$out\" | grep -q '\\[打出\\]' && ! printf '%s' \"$out\" | grep -q 'unknown option' && [ $rc -eq 0 ]")
+set_tests_properties(cli_verbose_negatable PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 裸 tkw 与 REPL 各打印一行引导文案。
 add_test(NAME cli_bare_root_banner
          COMMAND sh -c "$<TARGET_FILE:tkw> 2>&1 | grep -q '无子命令'")

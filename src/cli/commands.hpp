@@ -82,7 +82,10 @@ namespace tkw
                 opt.hand = ctx.get_or<int, fixed_string("hand")>(base.hand);
                 opt.seed = static_cast<std::uint32_t>(
                     ctx.get_or<int, fixed_string("seed")>(static_cast<int>(base.seed)));
-                opt.verbose = ctx.get_or<bool, fixed_string("verbose")>(base.verbose);
+                // 显式提供（含 --no-verbose）才覆盖会话继承；未提供时保持启动/会话值。
+                opt.verbose = ctx.was_provided<fixed_string("verbose")>()
+                                  ? ctx.get<bool, fixed_string("verbose")>()
+                                  : base.verbose;
                 opt.ai = ctx.get_or_enum<AiLevel, fixed_string("ai")>(base.ai);
                 opt.autosave =
                     ctx.get_or<std::filesystem::path, fixed_string("autosave")>(
@@ -101,6 +104,23 @@ namespace tkw
             inline Options options_from(ParseContext &ctx)
             {
                 return options_from(ctx, Options{});
+            }
+
+            /**
+             * @brief 解析本次命令是否打印事件日志。
+             * @param ctx     本次解析上下文。
+             * @param session 当前会话；携带建局命令确定的日志开关。
+             * @return 本行显式提供 --verbose/--no-verbose 时以显式值为准，否则取
+             *         会话值。
+             * @note REPL 每行独立解析，启动选项不进本行上下文，故未显式提供时
+             *       回落会话默认；显式值只影响本次命令，不改写会话默认，使
+             *       --no-verbose 能临时关闭启动带入的日志。
+             */
+            inline bool resolve_verbose(ParseContext &ctx, const Session &session)
+            {
+                return ctx.was_provided<fixed_string("verbose")>()
+                           ? ctx.get<bool, fixed_string("verbose")>()
+                           : session.verbose;
             }
 
             /**
@@ -140,8 +160,10 @@ namespace tkw
              *       启动选项回落；标量「最近声明胜出」即期望语义，故 per-leaf 重声明
              *       无副作用。默认值只以描述文字标注，禁用 .default_value()：它会让
              *       parse_finalizer 每次解析把默认值写进上下文，压过 REPL 启动选项
-             *       （session.base），破坏会话继承。--ai 走 enum 映射，值域外输入在
-             *       解析期报 enum_value_error（与未知选项同一 rc=2 错误面）。
+             *       （session.base），破坏会话继承。--verbose 标 negatable 以支持
+             *       --no-verbose 关闭；是否采用显式值由 was_provided 判定，未提供
+             *       时回落会话默认。--ai 走 enum 映射，值域外输入在解析期报
+             *       enum_value_error（与未知选项同一 rc=2 错误面）。
              */
             inline void declare_common_options(
                 pjh::cli::BaseCommand &cmd, const tkw::game::RulesConfig &rules)
@@ -166,8 +188,9 @@ namespace tkw
                     .min(0);
                 cmd.option<fixed_string("verbose")>(
                        "--verbose", 'v',
-                       "打印事件日志（摸牌/打出/弃置/移牌/伤害/体力/阵亡）")
-                    .boolean();
+                       "打印事件日志（摸牌/打出/弃置/移牌/伤害/体力/阵亡；--no-verbose 关闭）")
+                    .boolean()
+                    .negatable();
                 cmd.option<fixed_string("autosave")>(
                        "--autosave",
                        "REPL 退出时自动存档路径（默认 tkw-autosave.json，空串关闭）")
@@ -983,9 +1006,7 @@ namespace tkw
                 [&session](ParseContext &ctx) -> CliResult<void>
                 {
                     return detail::cmd_step(
-                        session,
-                        session.verbose ||
-                            ctx.get_or<bool, fixed_string("verbose")>(false));
+                        session, detail::resolve_verbose(ctx, session));
                 });
 
             // run：跑到对局结束（别名 r，REPL 会话流高频命令）
@@ -996,9 +1017,7 @@ namespace tkw
                 [&session](ParseContext &ctx) -> CliResult<void>
                 {
                     return detail::cmd_run(
-                        session,
-                        session.verbose ||
-                            ctx.get_or<bool, fixed_string("verbose")>(false));
+                        session, detail::resolve_verbose(ctx, session));
                 });
 
             // status：查看会话状态（别名 st）

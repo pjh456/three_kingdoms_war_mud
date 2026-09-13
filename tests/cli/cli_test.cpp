@@ -170,6 +170,30 @@ TEST_CASE("cli: inline --verbose enables event log for that command")
     CHECK(ran.out.find("[摸牌]") != std::string::npos);
 }
 
+TEST_CASE("cli: --no-verbose turns off a session-inherited event log")
+{
+    Repl repl;
+
+    // 建局命令显式开日志，会话默认记住。
+    REQUIRE(repl.run("new --players 2 --seed 1 --verbose").ok);
+    CHECK(repl.session.verbose);
+
+    auto loud = repl.run("step");
+    CHECK(loud.ok);
+    CHECK(loud.out.find("[打出]") != std::string::npos);
+
+    // 行内 --no-verbose 只关本次命令的日志，不改写会话默认。
+    auto quiet = repl.run("step --no-verbose");
+    CHECK(quiet.ok);
+    CHECK(quiet.out.find("[") == std::string::npos);
+    CHECK(repl.session.verbose);
+
+    // 下一行未显式提供时仍回落会话默认（开）。
+    auto again = repl.run("step");
+    CHECK(again.ok);
+    CHECK(again.out.find("[") != std::string::npos);
+}
+
 TEST_CASE("cli: verbose log renders card moved events")
 {
     Repl repl;
