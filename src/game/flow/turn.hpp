@@ -318,10 +318,10 @@ namespace tkw
             return TurnResult<TurnSkips>::Ok(skips);
         }
 
-        /** @brief 摸牌阶段：摸 rules.draw_per_turn 张。 */
+        /** @brief 摸牌阶段：摸 draw_phase_count 张（基础 rules.draw_per_turn，英姿 +1）。 */
         inline void run_draw_phase(GameContext &ctx, const std::string &player)
         {
-            apply_draw(ctx, player, rules_of(ctx).draw_per_turn);
+            apply_draw(ctx, player, draw_phase_count(ctx, player));
         }
 
         /**

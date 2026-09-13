@@ -1,0 +1,8 @@
+{
+  "id": "zhouyu",
+  "name": "周瑜",
+  "gender": "male",
+  "hp": 3,
+  "skills": ["yingzi"],
+  "text": "英姿：锁定技，摸牌阶段，你多摸一张牌。"
+}

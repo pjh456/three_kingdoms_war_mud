@@ -219,7 +219,7 @@ namespace tkw
                     "    tkw audit                审计牌堆\n"
                     "    tkw cards                列出牌表构成\n"
                     "    tkw decks                列出可用牌表（标准版/军争篇）\n"
-                    "    tkw heroes               列出可用武将（张飞/关羽）\n"
+                    "    tkw heroes               列出可用武将（张飞/关羽/周瑜）\n"
                     "    tkw --hero P0=zhangfei deal 2 1  指定 P0 为张飞后跑一局\n"
                     "    tkw --deck resources/junzheng deal 2 1  用军争篇牌表跑一局\n"
                     "    tkw rules 过河拆桥      查询卡牌效果说明\n"

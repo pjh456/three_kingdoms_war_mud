@@ -47,7 +47,7 @@ TEST_CASE("hero: standard catalog loads heroes and skill metadata")
     REQUIRE(cat.is_ok());
     const auto &catalog = cat.unwrap();
 
-    REQUIRE(catalog.size() == 2);
+    REQUIRE(catalog.size() == 3);
     const auto zhangfei = catalog.find("zhangfei");
     REQUIRE(zhangfei.is_some());
     const hero::HeroDef &zf = *zhangfei.unwrap();
@@ -59,9 +59,20 @@ TEST_CASE("hero: standard catalog loads heroes and skill metadata")
     CHECK(hero::display_hero_name(zf) == "张飞");
     CHECK(hero::display_skill_name(hero::HeroSkill::PaoXiao) == "咆哮");
 
-    // 咆哮与武圣均已实现：审计面不再标记为未实现
+    const auto zhouyu = catalog.find("zhouyu");
+    REQUIRE(zhouyu.is_some());
+    const hero::HeroDef &zy = *zhouyu.unwrap();
+    CHECK(zy.name == "周瑜");
+    REQUIRE(zy.gender.is_some());
+    CHECK(zy.gender.unwrap() == entity::Gender::Male);
+    CHECK(zy.hp == 3);
+    CHECK(has_skill(zy, hero::HeroSkill::YingZi));
+    CHECK(hero::display_skill_name(hero::HeroSkill::YingZi) == "英姿");
+
+    // 咆哮/武圣/英姿均已实现：审计面不再标记为未实现
     CHECK_FALSE(game::is_unimplemented_skill(hero::HeroSkill::PaoXiao));
     CHECK_FALSE(game::is_unimplemented_skill(hero::HeroSkill::WuSheng));
+    CHECK_FALSE(game::is_unimplemented_skill(hero::HeroSkill::YingZi));
 
     // 目录未命中回落 id
     CHECK(hero::display_hero_name(catalog, "nobody") == "nobody");

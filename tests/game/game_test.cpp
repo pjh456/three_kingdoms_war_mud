@@ -6237,3 +6237,68 @@ TEST_CASE("game: fire attack gets offense card value")
     REQUIRE(def.is_some());
     CHECK(ai::card_value(*def.unwrap()) == ai::kCardValueOffense);
 }
+
+// ── 英姿：锁定技，摸牌阶段多摸一张 ─────────────────────────────────────
+
+TEST_CASE("game: yingzi query adds one to the draw count")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Male, "zhouyu");
+    g.add_player("b", 1, 4);
+
+    // 锁定技只作用于绑定英姿的座位，其他座位仍取 rules.draw_per_turn
+    CHECK(draw_phase_count(g.ctx, "a") == g.rules.draw_per_turn + 1);
+    CHECK(draw_phase_count(g.ctx, "b") == g.rules.draw_per_turn);
+
+    g.rules.draw_per_turn = 3;
+    CHECK(draw_phase_count(g.ctx, "a") == 4);
+    CHECK(draw_phase_count(g.ctx, "b") == 3);
+
+    // 无武将目录：同名座位不加成
+    TestGame plain("deck");
+    plain.add_player("a", 0, 4);
+    CHECK(draw_phase_count(plain.ctx, "a") == plain.rules.draw_per_turn);
+}
+
+TEST_CASE("game: yingzi draws one extra card in the draw phase")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Male, "zhouyu");
+    g.cards.build_deck(g.catalog);
+
+    TestDecider decider;  // 无出牌脚本
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.hand_size("a") == 3);  // 摸牌阶段 2 + 英姿 1；上限 4 不弃
+
+    // 无武将座位同脚本只摸基础张数
+    TestGame plain("deck");
+    plain.add_player("a", 0, 4);
+    plain.cards.build_deck(plain.catalog);
+    TestDecider d2;
+    auto r2 = execute_turn(plain.ctx, d2, "a");
+    REQUIRE(r2.is_ok());
+    CHECK(plain.cards.hand_size("a") == 2);
+}
+
+TEST_CASE("game: bingliang skip draw suppresses yingzi")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.load_heroes();  // 武将目录来自标准资源目录，与军争牌表解耦
+    g.add_player("a", 0, 3, Gender::Male, "zhouyu");
+    g.give("a", "sha", "s#1");
+    g.cards.add_to_judge("a", Card{"B#0", "bingliang", Suit::Spade, 10});
+
+    // 堆顶为判定牌（黑桃 → 非梅花跳过摸牌），其下两张备用
+    g.cards.add_to_draw(Card{"d#0", "sha", Suit::Club, 2});
+    g.cards.add_to_draw(Card{"d#1", "shan", Suit::Diamond, 2});
+    g.cards.add_to_draw(Card{"j#0", "sha", Suit::Spade, 8});
+
+    TestDecider decider;  // 无出牌脚本
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.hand_size("a") == 1);  // 摸牌阶段整体跳过：英姿 +1 也不生效
+    CHECK(g.cards.judge_size("a") == 0);
+}

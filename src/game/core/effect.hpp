@@ -109,6 +109,8 @@ namespace tkw
                 return {true};
             case H::WuSheng:
                 return {true};
+            case H::YingZi:
+                return {true};
             }
             return {};
         }

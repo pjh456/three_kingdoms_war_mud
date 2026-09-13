@@ -58,6 +58,21 @@ namespace tkw
                     return true;
             return false;
         }
+
+        /**
+         * @brief 摸牌阶段摸牌张数：rules.draw_per_turn，锁定技「英姿」再 +1。
+         * @return 无目录 / 实体无武将 / 无英姿 → rules.draw_per_turn；有英姿 +1。
+         * @note 摸牌阶段张数的唯一采样点；兵粮寸断跳过整个摸牌阶段时不经本函数，
+         *       故英姿不会越过跳过语义（跳过在 execute_turn 的调用闸门）。
+         */
+        inline int draw_phase_count(
+            const ReadOnlyContext &ctx, const std::string &entity_id)
+        {
+            int count = rules_of(ctx).draw_per_turn;
+            if (has_hero_skill(ctx, entity_id, hero::HeroSkill::YingZi))
+                ++count;
+            return count;
+        }
     }
 }
 

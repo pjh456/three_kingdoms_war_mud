@@ -205,10 +205,10 @@ add_test(NAME cli_decks_help
 set_tests_properties(cli_decks_help PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-# heroes：列出可用武将。钉张飞行与技能；已实现技能不再标注「未实现」；缺 heroes.json 回落空数据不报错。
+# heroes：列出可用武将。钉张飞/关羽/周瑜行与技能；已实现技能不再标注「未实现」；缺 heroes.json 回落空数据不报错。
 add_test(NAME cli_heroes_list
          COMMAND sh -c
-                 "out=$($<TARGET_FILE:tkw> heroes 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '可用武将' && printf '%s' \"$out\" | grep -q '张飞(zhangfei)' && printf '%s' \"$out\" | grep -q '技能: 咆哮' && printf '%s' \"$out\" | grep -q '关羽(guanyu)' && printf '%s' \"$out\" | grep -q '技能: 武圣' && ! printf '%s' \"$out\" | grep -q '武圣（未实现）' && [ $rc -eq 0 ]")
+                 "out=$($<TARGET_FILE:tkw> heroes 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '可用武将' && printf '%s' \"$out\" | grep -q '张飞(zhangfei)' && printf '%s' \"$out\" | grep -q '技能: 咆哮' && printf '%s' \"$out\" | grep -q '关羽(guanyu)' && printf '%s' \"$out\" | grep -q '技能: 武圣' && ! printf '%s' \"$out\" | grep -q '武圣（未实现）' && printf '%s' \"$out\" | grep -q '周瑜(zhouyu)' && printf '%s' \"$out\" | grep -q '技能: 英姿' && ! printf '%s' \"$out\" | grep -q '英姿（未实现）' && [ $rc -eq 0 ]")
 set_tests_properties(cli_heroes_list PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
@@ -235,6 +235,13 @@ add_test(NAME cli_hero_default_no_column
          COMMAND sh -c
                  "out=$(printf 'new --players 2 --seed 1\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); ! printf '%s' \"$out\" | grep -q '武将'")
 set_tests_properties(cli_hero_default_no_column PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 英姿武将：选定周瑜后 status 展示武将，且不产生未实现技能警告。
+add_test(NAME cli_hero_zhouyu_status
+         COMMAND sh -c
+                 "out=$(printf 'new --hero P0=zhouyu --players 2 --seed 1\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '武将 周瑜' && ! printf '%s' \"$out\" | grep -q '未实现的技能' && [ $rc -eq 0 ]")
+set_tests_properties(cli_hero_zhouyu_status PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # --hero 未知 id：中文错误说明座位并指向 tkw heroes，rc=1。

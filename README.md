@@ -246,18 +246,20 @@ TUI 命令栏同样支持 `decks [--deck 路径]` 就地列出，结果写入日
 tkw heroes
 # 可用武将（tkw heroes [目录] 扫描；随 --deck 选择）:
 #   张飞(zhangfei) 4体力 男 技能: 咆哮
-#   关羽(guanyu) 4体力 男 技能: 武圣（未实现）
+#   关羽(guanyu) 4体力 男 技能: 武圣
+#   周瑜(zhouyu) 3体力 男 技能: 英姿
 ```
 
 用 `--hero <座位>=<武将>` 指定（可重复）；`status` 逐座展示武将，存档保留选择：
 
 ```sh
 tkw --hero P0=zhangfei deal 2 1     # P0 张飞：咆哮锁定技，使用【杀】无次数限制
+tkw --hero P0=zhouyu deal 2 1       # P0 周瑜：英姿锁定技，摸牌阶段多摸一张
 tkw --hero P0=zhangfei repl         # 或进 REPL：new --hero P0=zhangfei --players 2 --seed 1
 ```
 
 尚无 `heroes.json` 的自定义牌表照常可玩（武将回落无名座位）。被选中武将若含
-引擎未实现技能（如武圣），建局入口会打印中文警告，不会静默按无技能结算。
+引擎尚未实现的技能，建局入口会打印中文警告，不会静默按无技能结算。
 
 ## 自定义牌表
 
