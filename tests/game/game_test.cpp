@@ -5303,3 +5303,284 @@ TEST_CASE("game: zhangba response pair candidates are all accepted by the engine
         CHECK(fresh.cards.hand_size("b") == 1);
     }
 }
+
+// ── 铁索连环：横置/重置与属性伤害传导 ─────────────────────────────────
+
+namespace
+{
+    /** 将若干实体置为横置（连环）状态。 */
+    void chain_all(TestGame &g, std::initializer_list<const char *> ids)
+    {
+        for (const char *id : ids)
+            g.entities.find(id).unwrap()->set_chained(true);
+    }
+}
+
+TEST_CASE("game: tiesuo toggles chained state")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.give("a", "tiesuo", "t#0");
+    g.give("a", "tiesuo", "t#1");
+
+    TestDecider decider;
+    const Card first = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", first, {"b"}).is_ok());
+    CHECK(b->get_chained());  // 未横置 → 横置
+
+    const Card second = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", second, {"b"}).is_ok());
+    CHECK_FALSE(b->get_chained());  // 已横置 → 重置
+}
+
+TEST_CASE("game: tiesuo chains one or two targets")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    g.give("a", "tiesuo", "t#0");
+
+    const auto &def = *g.catalog.find("tiesuo").unwrap();
+    const Card card = g.cards.hand("a")[0];
+    const TurnContext turn{"a", 0, 1, false};
+
+    CHECK(validate_play_action(g.ctx, "a", def, card, {"b"}, turn).is_ok());
+    CHECK(validate_play_action(g.ctx, "a", def, card, {"b", "c"}, turn).is_ok());
+    // 空目标 / 三个目标 / 重复目标均被拒
+    CHECK(validate_play_action(g.ctx, "a", def, card, {}, turn).is_err());
+    CHECK(validate_play_action(g.ctx, "a", def, card, {"a", "b", "c"}, turn).is_err());
+    CHECK(validate_play_action(g.ctx, "a", def, card, {"b", "b"}, turn).is_err());
+
+    TestDecider decider;
+    REQUIRE(resolve_play(g.ctx, decider, "a", card, {"b", "c"}).is_ok());
+    CHECK(b->get_chained());
+    CHECK(c->get_chained());
+}
+
+TEST_CASE("game: tiesuo per-target wuxie")
+{
+    // 军争骨架牌表不含无懈可击：临时牌表让铁索连环与无懈同场
+    const auto dir = pjh::platform::Fs::temp_directory() / "tkw_tiesuo_wuxie";
+    std::filesystem::remove_all(dir);
+    REQUIRE(pjh::platform::Fs::create_directories(dir / "cards").is_ok());
+    CHECK(tkw::io::write_text(
+              dir / "deck.json",
+              R"({"name": "chain mix", "cards": ["tiesuo", "wuxie"]})")
+              .is_ok());
+    CHECK(tkw::io::write_text(dir / "cards" / "tiesuo.json", R"({
+        "id": "tiesuo", "name": "铁索连环", "type": "trick", "subtype": "instant",
+        "copies": [ {"suit": "club", "number": 10} ],
+        "text": "对一至两名角色使用，分别横置或重置这些角色。",
+        "effect": {"kind": "chain", "scope": "one_or_two"}
+    })").is_ok());
+    CHECK(tkw::io::write_text(dir / "cards" / "wuxie.json", R"({
+        "id": "wuxie", "name": "无懈可击", "type": "trick", "subtype": "instant",
+        "copies": [ {"suit": "spade", "number": 11} ],
+        "text": "抵消一张锦囊牌对一名角色产生的效果。",
+        "counter": true
+    })").is_ok());
+
+    const std::string root = dir.string();
+    TestGame g("deck", 1, root.c_str());
+    g.add_player("p", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.give("p", "tiesuo", "t#0");
+    g.give("p", "wuxie", "w#0");  // 只有一张无懈，只够抵消一名
+
+    TestDecider decider;
+    decider.counter = true;
+    const Card played = g.cards.hand("p")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "p", played, {"b", "c"}).is_ok());
+
+    CHECK_FALSE(g.entities.find("b").unwrap()->get_chained());
+    CHECK(g.entities.find("c").unwrap()->get_chained());
+    // 逐目标单元素窗口：窗口只携带被抵消的那一名，一张无懈不会抵消另一名
+    REQUIRE(decider.counter_windows.size() == 1);
+    CHECK(decider.counter_windows[0] == std::vector<std::string>{"b"});
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("game: chained fire damage transmits")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("p", 0, 4);
+    auto *a = g.add_player("a", 1, 4);
+    auto *b = g.add_player("b", 2, 4);
+    auto *c = g.add_player("c", 3, 4);
+    chain_all(g, {"a", "b", "c"});
+    g.give("p", "huosha", "h#0");
+
+    TestDecider decider;
+    const Card played = g.cards.hand("p")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "p", played, {"a"}).is_ok());
+    CHECK(a->get_hp() == 3);
+    CHECK(b->get_hp() == 3);
+    CHECK(c->get_hp() == 3);
+    CHECK_FALSE(a->get_chained());
+    CHECK_FALSE(b->get_chained());
+    CHECK_FALSE(c->get_chained());
+}
+
+TEST_CASE("game: chained thunder damage transmits")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("p", 0, 4);
+    auto *a = g.add_player("a", 1, 4);
+    auto *b = g.add_player("b", 2, 4);
+    chain_all(g, {"a", "b"});
+    g.give("p", "leisha", "l#0");
+
+    TestDecider decider;
+    const Card played = g.cards.hand("p")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "p", played, {"a"}).is_ok());
+    CHECK(a->get_hp() == 3);
+    CHECK(b->get_hp() == 3);
+    CHECK_FALSE(a->get_chained());
+    CHECK_FALSE(b->get_chained());
+}
+
+TEST_CASE("game: normal damage does not transmit")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("p", 0, 4);
+    auto *a = g.add_player("a", 1, 4);
+    auto *b = g.add_player("b", 2, 4);
+    chain_all(g, {"a", "b"});
+    g.give("p", "sha", "s#0");
+
+    TestDecider decider;
+    const Card played = g.cards.hand("p")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "p", played, {"a"}).is_ok());
+    CHECK(a->get_hp() == 3);
+    CHECK(b->get_hp() == 4);          // 普通伤害不触发传导
+    CHECK(a->get_chained());          // 横置状态保持
+    CHECK(b->get_chained());
+}
+
+TEST_CASE("game: transmitted damage does not re-transmit")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("p", 0, 4);
+    auto *a = g.add_player("a", 1, 4);
+    auto *b = g.add_player("b", 2, 4);
+    auto *c = g.add_player("c", 3, 4);
+    chain_all(g, {"a", "b", "c"});
+    g.give("p", "huosha", "h#0");
+
+    TestDecider decider;
+    const Card played = g.cards.hand("p")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "p", played, {"a"}).is_ok());
+    // 每人恰好受到一次伤害（无二次爆炸：a 不会因 b/c 的传导再次掉血）
+    CHECK(a->get_hp() == 3);
+    CHECK(b->get_hp() == 3);
+    CHECK(c->get_hp() == 3);
+}
+
+TEST_CASE("game: already-unchained target does not re-transmit")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("p", 0, 4);
+    auto *a = g.add_player("a", 1, 4);
+    auto *b = g.add_player("b", 2, 4);
+    chain_all(g, {"a", "b"});
+    g.give("p", "huosha", "h#0");
+    g.give("p", "huosha", "h#1");
+
+    TestDecider decider;
+    const Card first = g.cards.hand("p")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "p", first, {"a"}).is_ok());
+    CHECK(b->get_hp() == 3);
+    CHECK_FALSE(a->get_chained());
+
+    // 第二次火杀命中已重置的 a：不再传导，b 保持
+    const Card second = g.cards.hand("p")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "p", second, {"a"}).is_ok());
+    CHECK(a->get_hp() == 2);
+    CHECK(b->get_hp() == 3);
+}
+
+TEST_CASE("game: chain propagates even if origin dies")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("p", 0, 4);
+    g.add_player("a", 1, 1);
+    auto *b = g.add_player("b", 2, 4);
+    chain_all(g, {"a", "b"});
+    g.give("p", "huosha", "h#0");
+
+    TestDecider decider;
+    const Card played = g.cards.hand("p")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "p", played, {"a"}).is_ok());
+    CHECK(g.entities.find("a").is_none());  // 起点死亡不阻断传导
+    CHECK(b->get_hp() == 3);
+    CHECK_FALSE(b->get_chained());
+}
+
+TEST_CASE("game: simultaneous chained deaths are handled")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("p", 0, 4);
+    g.add_player("a", 1, 1);
+    g.add_player("b", 2, 1);
+    chain_all(g, {"a", "b"});
+    g.give("p", "huosha", "h#0");
+
+    TestDecider decider;
+    const Card played = g.cards.hand("p")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "p", played, {"a"}).is_ok());
+    CHECK(g.entities.find("a").is_none());  // 起点先死
+    CHECK(g.entities.find("b").is_none());  // 受传导者随后死亡，不悬空
+}
+
+TEST_CASE("game: unchained target unaffected by chain")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("p", 0, 4);
+    auto *a = g.add_player("a", 1, 4);
+    auto *b = g.add_player("b", 2, 4);
+    chain_all(g, {"a"});
+    g.give("p", "huosha", "h#0");
+
+    TestDecider decider;
+    const Card played = g.cards.hand("p")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "p", played, {"a"}).is_ok());
+    CHECK(a->get_hp() == 3);
+    CHECK(b->get_hp() == 4);  // 未横置者不参与传导
+}
+
+TEST_CASE("game: chain transmits tengjia-boosted fire amount")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("p", 0, 4);
+    auto *a = g.add_player("a", 1, 4);
+    auto *b = g.add_player("b", 2, 4);
+    chain_all(g, {"a", "b"});
+    equip_tengjia(g, "a", "e#0");
+    g.give("p", "huosha", "h#0");
+
+    TestDecider decider;
+    const Card played = g.cards.hand("p")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "p", played, {"a"}).is_ok());
+    CHECK(a->get_hp() == 2);  // 1 火焰 + 藤甲 1
+    CHECK(b->get_hp() == 2);  // 传导值 = 起点经藤甲修正后的实际伤害
+}
+
+TEST_CASE("game: chain respects silver lion cap at origin")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("p", 0, 4);
+    auto *a = g.add_player("a", 1, 4);
+    auto *b = g.add_player("b", 2, 4);
+    chain_all(g, {"a", "b"});
+    g.equip("a", "silver_lion", "e#0");
+
+    TestDecider decider;
+    deal_damage(g.ctx, decider, "p", "a", 3, tkw::card::DamageType::Fire);
+    CHECK(a->get_hp() == 3);  // 白银狮子封顶：3 → 1
+    CHECK(b->get_hp() == 3);  // 传导取封顶后的实际值 1
+    CHECK_FALSE(a->get_chained());
+    CHECK_FALSE(b->get_chained());
+}

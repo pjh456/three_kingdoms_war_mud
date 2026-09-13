@@ -19,6 +19,14 @@ namespace tkw
         inline constexpr std::string_view kFormat = "tkw-save";
         inline constexpr int kVersion = 1;
 
+        /**
+         * @brief 含连环状态时使用的存档版本。
+         * @note 版本号表示实际用到的格式特性：无任何实体处于连环时写 kVersion，
+         *       标准档逐字节不变；存在连环实体时写本值，旧二进制显式拒绝而非
+         *       静默丢弃规则状态。读取端同时接受 kVersion 与本值。
+         */
+        inline constexpr int kVersionChained = 2;
+
         /** @brief 性别 → 存档文本。 */
         inline constexpr const char *gender_name(entity::Gender g)
         {

@@ -223,6 +223,7 @@ namespace tkw
                         return kPlayPriorityHeal;
                     case card::CardEffectKind::Jink:
                     case card::CardEffectKind::RevealPick:
+                    case card::CardEffectKind::Chain:
                         break;
                     }
                     return kPlayPriorityOther;

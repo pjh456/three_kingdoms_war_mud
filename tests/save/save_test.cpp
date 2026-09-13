@@ -177,13 +177,59 @@ TEST_CASE("save: version mismatch is rejected")
     std::string bad = text;
     const auto pos = bad.find("\"version\":1");
     REQUIRE(pos != std::string::npos);
-    bad.replace(pos, 11, "\"version\":2");
+    bad.replace(pos, 11, "\"version\":3");
 
     auto b = make_game(1);
     GameSession sb;
     auto r = save::read(bad, *b, sb);
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err().kind == save::SaveErrorKind::VersionMismatch);
+
+    // version 2 是含连环状态的合法格式，读取端须接受
+    auto a2 = make_game(1);
+    a2->entities.find("P0").unwrap()->set_chained(true);
+    GameSession s2;
+    const std::string v2 = save::write(*a2, s2, "deck");
+    REQUIRE(v2.find("\"version\":2") != std::string::npos);
+    auto b2 = make_game(999);
+    GameSession sb2;
+    CHECK(save::read(v2, *b2, sb2).is_ok());
+    CHECK(b2->entities.find("P0").unwrap()->get_chained());
+}
+
+TEST_CASE("save: chained state round-trips and bumps version")
+{
+    auto a = make_game(1);
+    a->entities.find("P0").unwrap()->set_chained(true);
+    GameSession sa;
+    const std::string text = save::write(*a, sa, "deck");
+    CHECK(text.find("\"version\":2") != std::string::npos);
+    CHECK(text.find("\"chained\":true") != std::string::npos);
+
+    auto b = make_game(999);
+    GameSession sb;
+    REQUIRE(save::read(text, *b, sb).is_ok());
+    CHECK(b->entities.find("P0").unwrap()->get_chained());
+    CHECK_FALSE(b->entities.find("P1").unwrap()->get_chained());
+    // 规范化往返：同状态二次写出逐字节一致
+    CHECK(save::write(*b, sb, "deck") == text);
+}
+
+TEST_CASE("save: chainless save keeps version 1 and omits chained")
+{
+    auto a = make_game(1);
+    GameSession sa;
+    const std::string text = save::write(*a, sa, "deck");
+    CHECK(text.find("\"version\":1") != std::string::npos);
+    CHECK(text.find("chained") == std::string::npos);
+
+    // 旧格式（v1、无 chained 字段）新二进制可读，连环回落未横置
+    auto b = make_game(999);
+    GameSession sb;
+    REQUIRE(save::read(text, *b, sb).is_ok());
+    for (int i = 0; i < 4; ++i)
+        CHECK_FALSE(
+            b->entities.find("P" + std::to_string(i)).unwrap()->get_chained());
 }
 
 TEST_CASE("save: out-of-range integers are rejected instead of narrowed")

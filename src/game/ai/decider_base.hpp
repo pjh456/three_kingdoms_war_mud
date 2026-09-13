@@ -353,6 +353,17 @@ namespace tkw
                         return pick_single(req.view, out, c.instance_id, opts);
                     }
 
+                    if (eff.scope.unwrap_or(card::Scope::Self) ==
+                        card::Scope::OneOrTwo)
+                    {
+                        // 优先双目标：取目标最多者，同多取列表序（确定性）
+                        const LegalAction *most = &opts.front();
+                        for (const auto &a : opts)
+                            if (a.targets.size() > most->targets.size())
+                                most = &a;
+                        return pick_all(out, c.instance_id, most->targets);
+                    }
+
                     return pick_all(out, c.instance_id, opts.front().targets);
                 }
 
@@ -653,6 +664,7 @@ namespace tkw
                     case card::CardEffectKind::RevealPick:
                     case card::CardEffectKind::BorrowedSword:
                     case card::CardEffectKind::Analeptic:
+                    case card::CardEffectKind::Chain:
                         return false;
                     }
                     return false;

@@ -201,8 +201,9 @@ namespace tkw
          * @return Ok 或 Err(SaveError)；牌表指纹不符时拒绝。
          * @note 旧档缺失 ai/stats 字段时回落默认，不拒绝；缺 mode/roles 时回落
          *       乱斗 + 空角色表；身份局档要求角色表覆盖全部存活实体且恰含一名
-         *       主公，允许保留已阵亡玩家的角色条目；全部校验通过后才落子，出参
-         *       meta 与目标状态同批赋值，早退不污染。
+         *       主公，允许保留已阵亡玩家的角色条目；version 接受 1 与含连环状态
+         *       的 2；缺 chained 字段回落 false（旧档可读）；全部校验通过后才落子，
+         *       出参 meta 与目标状态同批赋值，早退不污染。
          */
         inline SaveResult<void> read(
             std::string_view text, game::Game &g, game::GameSession &session,
@@ -225,7 +226,8 @@ namespace tkw
             if (!fmt || *fmt != kFormat)
                 return detail::fail(SaveErrorKind::VersionMismatch, "format");
             int version = 0;
-            if (!detail::read_int(*obj, "version", version) || version != kVersion)
+            if (!detail::read_int(*obj, "version", version) ||
+                (version != kVersion && version != kVersionChained))
                 return detail::fail(SaveErrorKind::VersionMismatch, "version");
 
             // deck hash：写出侧按 int64 位型承载，高位指纹在此逐位还原为 uint64
@@ -382,6 +384,11 @@ namespace tkw
                         return detail::fail(
                             SaveErrorKind::StructureError, "entities.gender");
                 }
+                // 旧档无 chained 字段：回落 false（未横置），不拒绝旧档
+                if (eo->contains("chained") &&
+                    !detail::read_bool(*eo, "chained", e.chained))
+                    return detail::fail(
+                        SaveErrorKind::StructureError, "entities.chained");
                 ents.push_back(std::move(e));
             }
 

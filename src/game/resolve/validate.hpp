@@ -100,6 +100,11 @@ namespace tkw
                 for (const auto *e : ctx.entities->const_view())
                     out.push_back(e->get_id());
                 break;
+            case card::Scope::OneOrTwo:
+                // 1~2 名角色（含使用者），无距离限制
+                for (const auto *e : ctx.entities->const_view())
+                    out.push_back(e->get_id());
+                break;
             case card::Scope::AllOthers:
                 all_others();
                 break;
@@ -221,6 +226,16 @@ namespace tkw
                         uniq.erase(std::unique(uniq.begin(), uniq.end()), uniq.end());
                         target_ok = targets.size() == uniq.size() &&
                                     uniq.size() == legal.size();
+                    }
+                    break;
+                case card::Scope::OneOrTwo:
+                    // 一至两名：去重后仍须为 1~2 个，重复目标会重复翻转/结算
+                    {
+                        std::vector<std::string> uniq = targets;
+                        std::sort(uniq.begin(), uniq.end());
+                        uniq.erase(std::unique(uniq.begin(), uniq.end()), uniq.end());
+                        target_ok = targets.size() == uniq.size() &&
+                                    uniq.size() >= 1 && uniq.size() <= 2;
                     }
                     break;
                 }

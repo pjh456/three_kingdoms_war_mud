@@ -8,6 +8,7 @@
 #ifndef INCLUDE_TKW_GAME_LEGAL_HPP
 #define INCLUDE_TKW_GAME_LEGAL_HPP
 
+#include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
@@ -181,6 +182,25 @@ namespace tkw
                                 out.push_back(LegalAction{c, std::move(combo)});
                         }
                     }
+                }
+                else if (scope == card::Scope::OneOrTwo)
+                {
+                    // 单目标动作在前，双目标组合（i<j）在后；均过统一校验，
+                    // 确定性顺序 = valid_targets 序，组合上界 C(n,2)
+                    for (const auto &t : targets)
+                        if (validate_play_action(
+                                ctx, player, def, c, std::vector<std::string>{t}, turn)
+                                .is_ok())
+                            out.push_back(LegalAction{c, {t}});
+
+                    for (std::size_t i = 0; i < targets.size(); ++i)
+                        for (std::size_t j = i + 1; j < targets.size(); ++j)
+                        {
+                            std::vector<std::string> combo{targets[i], targets[j]};
+                            if (validate_play_action(ctx, player, def, c, combo, turn)
+                                    .is_ok())
+                                out.push_back(LegalAction{c, std::move(combo)});
+                        }
                 }
                 else
                 {

@@ -23,8 +23,9 @@ namespace tkw
 
         /**
          * @class Entity
-         * @brief 玩家实体：id + 座位 + 性别 + 血条（Hp：体力/上限）。构造时自动绑定
-         *        体力监听：cur 变化经注入的 EventBus 发布 EntityHpChangedEvent。
+         * @brief 玩家实体：id + 座位 + 性别 + 血条（Hp：体力/上限）+ 连环状态。
+         *        构造时自动绑定体力监听：cur 变化经注入的 EventBus 发布
+         *        EntityHpChangedEvent。
          * @note 事件总线须比实体存活更久（实体析构不发布事件，
          *       但存活期间的状态变化都会发布到该总线）。
          * @note 本类是**哑状态持有者**：体力可扣到非正（濒死值状态），
@@ -39,6 +40,7 @@ namespace tkw
             Hp hp;
             EventBus *bus;
             Gender gender = Gender::Male;
+            bool chained = false;
 
         public:
             Entity(
@@ -46,12 +48,14 @@ namespace tkw
                 int in_seat,
                 Hp in_hp,
                 EventBus &injected_bus,
-                Gender in_gender = Gender::Male) :
+                Gender in_gender = Gender::Male,
+                bool in_chained = false) :
                 id(std::move(eid)),
                 seat(in_seat),
                 hp(std::move(in_hp)),
                 bus(&injected_bus),
-                gender(in_gender)
+                gender(in_gender),
+                chained(in_chained)
             {
                 bind_status_events();
             }
@@ -61,6 +65,15 @@ namespace tkw
 
             /** @brief 性别（未显式指定时为 Male）。 */
             Gender get_gender() const noexcept { return gender; }
+
+            /** @brief 是否处于连环状态（属性伤害传导的载体）。 */
+            bool get_chained() const noexcept { return chained; }
+
+            /**
+             * @brief 设置连环状态（横置/重置）。
+             * @note 哑状态：不发事件，展示与传导判定由写层负责。
+             */
+            void set_chained(bool value) noexcept { chained = value; }
 
             /** @brief 当前体力（可为非正 = 濒死值状态）。 */
             int get_hp() const noexcept { return hp.get_cur(); }

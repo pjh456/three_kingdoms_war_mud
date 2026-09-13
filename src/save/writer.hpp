@@ -7,6 +7,7 @@
 #ifndef INCLUDE_TKW_SAVE_WRITER_HPP
 #define INCLUDE_TKW_SAVE_WRITER_HPP
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <map>
@@ -187,9 +188,17 @@ namespace tkw
         {
             const auto &r = g.rules;
             const auto snap = g.cards.snapshot();
+            const auto ents = g.entities.snapshot();
+
+            // 动态版本：仅当确有实体处于连环时写 v2，否则保持 v1 旧格式
+            const bool any_chained =
+                std::any_of(ents.begin(), ents.end(),
+                            [](const EntitySnapshot &e) { return e.chained; });
 
             std::ostringstream os;
-            os << "{\"format\":" << jstr(kFormat) << ",\"version\":" << kVersion;
+            os << "{\"format\":" << jstr(kFormat)
+               << ",\"version\":"
+               << (any_chained ? kVersionChained : kVersion);
             // 指纹按 int64 位型写出：JSON 数值只有 int64 精确域，高位指纹
             // （≥2^63）须落成负十进制，读取端再逐位还原为 uint64。
             os << ",\"deck\":{\"name\":" << jstr(deck_name)
@@ -253,15 +262,17 @@ namespace tkw
             os << "}";  // cards
 
             os << ",\"entities\":[";
-            const auto ents = g.entities.snapshot();
             for (std::size_t i = 0; i < ents.size(); ++i)
             {
                 if (i)
                     os << ",";
                 os << "{\"id\":" << jstr(ents[i].id) << ",\"seat\":" << ents[i].seat
                     << ",\"hp\":" << ents[i].hp << ",\"max_hp\":" << ents[i].max_hp
-                    << ",\"gender\":" << jstr(gender_name(ents[i].gender))
-                    << "}";
+                    << ",\"gender\":" << jstr(gender_name(ents[i].gender));
+                // 可选字段：仅为真时写出，未横置不写，标准档逐字节不变
+                if (ents[i].chained)
+                    os << ",\"chained\":true";
+                os << "}";
             }
             os << "]}";
             return os.str();

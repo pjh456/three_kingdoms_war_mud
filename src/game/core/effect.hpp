@@ -47,6 +47,7 @@ namespace tkw
             case E::RevealPick:
             case E::BorrowedSword:
             case E::Analeptic:
+            case E::Chain:
                 return {true, true, false, false};
             }
             return {};

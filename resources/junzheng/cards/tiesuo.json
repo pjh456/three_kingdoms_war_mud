@@ -1,0 +1,19 @@
+{
+    "id": "tiesuo",
+    "name": "铁索连环",
+    "type": "trick",
+    "subtype": "instant",
+    "copies": [
+        { "suit": "spade", "number": 11 },
+        { "suit": "spade", "number": 12 },
+        { "suit": "club", "number": 10 },
+        { "suit": "club", "number": 11 },
+        { "suit": "club", "number": 12 },
+        { "suit": "club", "number": 13 }
+    ],
+    "text": "出牌阶段，对一至两名角色使用。分别横置或重置这些角色。",
+    "effect": {
+        "kind": "chain",
+        "scope": "one_or_two"
+    }
+}

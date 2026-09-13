@@ -532,9 +532,9 @@ TEST_CASE("card: junzheng skeleton deck loads elemental slashes")
     auto r = CardDefCatalog::load(store, "deck");
     REQUIRE(r.is_ok());
     const auto &cat = r.unwrap();
-    CHECK(cat.size() == 14);
-    // 杀 30 + 火杀 5 + 雷杀 9 + 藤甲 2 + 丈八 1 + 青釭 1 + 南蛮 3 + 万箭 1 + 无中 4 + 桃 8 + 酒 5 + 兵粮寸断 2 + 古锭刀 1 + 白银狮子 1
-    CHECK(cat.total_copies() == 73);
+    CHECK(cat.size() == 15);
+    // 杀 30 + 火杀 5 + 雷杀 9 + 藤甲 2 + 丈八 1 + 青釭 1 + 南蛮 3 + 万箭 1 + 无中 4 + 桃 8 + 酒 5 + 兵粮寸断 2 + 古锭刀 1 + 白银狮子 1 + 铁索连环 6
+    CHECK(cat.total_copies() == 79);
 
     auto huosha = cat.find("huosha");
     REQUIRE(huosha.is_some());
@@ -617,10 +617,30 @@ TEST_CASE("card: junzheng skeleton deck loads elemental slashes")
     CHECK(ability_from_name("silver_lion").is_some());
     CHECK(ability_from_name("silver_lion").unwrap() == Ability::SilverLion);
 
-    // 容错扫描与严格加载同源：十四卡均为已知机制名
+    // 铁索连环：即时锦囊，1~2 名目标，无判定；6 张花色点数与权威牌表一致
+    auto tiesuo = cat.find("tiesuo");
+    REQUIRE(tiesuo.is_some());
+    CHECK(tiesuo.unwrap()->name == "铁索连环");
+    CHECK(tiesuo.unwrap()->type == CardType::Trick);
+    CHECK(tiesuo.unwrap()->subtype == "instant");
+    CHECK(tiesuo.unwrap()->judge.is_none());
+    REQUIRE(tiesuo.unwrap()->effect.is_some());
+    CHECK(tiesuo.unwrap()->effect.unwrap().kind == CardEffectKind::Chain);
+    CHECK(tiesuo.unwrap()->effect.unwrap().scope.contains(Scope::OneOrTwo));
+    REQUIRE(tiesuo.unwrap()->copies.size() == 6);
+    CHECK(tiesuo.unwrap()->copies[0] == CardCopy{Suit::Spade, 11});
+    CHECK(tiesuo.unwrap()->copies[1] == CardCopy{Suit::Spade, 12});
+    CHECK(tiesuo.unwrap()->copies[2] == CardCopy{Suit::Club, 10});
+    CHECK(tiesuo.unwrap()->copies[3] == CardCopy{Suit::Club, 11});
+    CHECK(tiesuo.unwrap()->copies[4] == CardCopy{Suit::Club, 12});
+    CHECK(tiesuo.unwrap()->copies[5] == CardCopy{Suit::Club, 13});
+    CHECK(effect_kind_from_name("chain").is_some());
+    CHECK(effect_kind_from_name("chain").unwrap() == CardEffectKind::Chain);
+
+    // 容错扫描与严格加载同源：十五卡均为已知机制名
     auto raws = scan_mechanisms(store, "deck");
     REQUIRE(raws.is_ok());
-    CHECK(raws.unwrap().size() == 14);
+    CHECK(raws.unwrap().size() == 15);
 }
 
 TEST_CASE("card: scan_mechanisms reads raw names and shares the name table")

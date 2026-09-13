@@ -125,6 +125,24 @@ namespace tkw
                 e.unwrap()->heal(amount);
         }
 
+        /** @brief 目标是否处于连环状态（实体不存在时返回 false）。 */
+        inline bool is_chained(const ReadOnlyContext &ctx, const std::string &id)
+        {
+            const auto e = ctx.entities->find(id);
+            return e.is_some() && e.unwrap()->get_chained();
+        }
+
+        /**
+         * @brief 设置目标的连环状态（横置/重置）。
+         * @note 空 id 或实体不存在时安全 no-op；不发事件，调用方负责结算语义。
+         */
+        inline void set_chained(GameContext &ctx, const std::string &id, bool chained)
+        {
+            const auto e = ctx.entities->find(id);
+            if (e.is_some())
+                e.unwrap()->set_chained(chained);
+        }
+
         /**
          * @brief 失去装备区一张牌后的触发结算：带「白银狮子」能力者回复 1 点体力。
          * @param owner 失去装备的实体（回复对象，非取牌者）。

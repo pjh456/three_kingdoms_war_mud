@@ -42,10 +42,11 @@ namespace tkw
                        s == "armor" || s == "horse";
             }
 
-            /** scope 字段封闭四值集：effect/judge 解析共用的单一表源。 */
+            /** scope 字段封闭五值集：effect/judge 解析共用的单一表源。 */
             inline constexpr std::initializer_list<std::pair<std::string_view, Scope>>
                 scope_table{{"self", Scope::Self}, {"one_other", Scope::OneOther},
-                             {"all_others", Scope::AllOthers}, {"all", Scope::All}};
+                             {"all_others", Scope::AllOthers}, {"all", Scope::All},
+                             {"one_or_two", Scope::OneOrTwo}};
 
             /** damage_type 字段封闭三值集：effect/judge 解析共用的单一表源。 */
             inline constexpr
@@ -67,7 +68,8 @@ namespace tkw
                                       {"duel", CardEffectKind::Duel},
                                       {"reveal_pick", CardEffectKind::RevealPick},
                                       {"borrowed_sword", CardEffectKind::BorrowedSword},
-                                      {"analeptic", CardEffectKind::Analeptic}};
+                                      {"analeptic", CardEffectKind::Analeptic},
+                                      {"chain", CardEffectKind::Chain}};
 
             /** abilities 封闭名表：严格解析与名称查询共用的单一表源。 */
             inline constexpr
@@ -254,6 +256,13 @@ namespace tkw
                 default:
                     break;
                 }
+
+                // 铁索连环必须显式声明目标范围：缺失会静默回落 Self 而选不出
+                // 1~2 名角色，加载期直接拒绝而非按 0/1 目标错结算
+                if (eff.kind == CardEffectKind::Chain && eff.scope.is_none())
+                    return cfg::fail<CardEffect>(
+                        cfg::ConfigErrorKind::InvalidValue,
+                        cfg::field_path(path, "scope"));
 
                 return cfg::ConfigResult<CardEffect>::Ok(std::move(eff));
             }

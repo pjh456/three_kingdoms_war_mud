@@ -388,6 +388,18 @@ namespace tkw
                 return GameResult<void>::Ok();
             }
 
+            /** @brief 铁索连环：逐目标单元素无懈窗，未被抵消者翻转连环状态。 */
+            inline GameResult<void> resolve_chain(const EffectInvocation &e)
+            {
+                for (const auto &t : e.targets)
+                {
+                    if (e.nullified({t}))
+                        continue;
+                    set_chained(e.ctx, t, !is_chained(e.ctx, t));
+                }
+                return GameResult<void>::Ok();
+            }
+
             /** @brief 按 effect.kind 分派到对应结算函数；未实现返回 UnsupportedKind。 */
             inline GameResult<void> apply_effect(const EffectInvocation &e)
             {
@@ -413,6 +425,8 @@ namespace tkw
                     return resolve_borrowed_sword(e);
                 case card::CardEffectKind::Analeptic:
                     return resolve_analeptic(e);
+                case card::CardEffectKind::Chain:
+                    return resolve_chain(e);
                 default:
                     return GameResult<void>::Err(EffectError::UnsupportedKind);
                 }

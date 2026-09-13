@@ -41,6 +41,7 @@ namespace tkw
                 case E::Steal:
                 case E::AoeDamage:
                 case E::RevealPick:
+                case E::Chain:
                     return kCardValueUtility;
                 case E::Damage:
                 case E::DiscardTarget:
