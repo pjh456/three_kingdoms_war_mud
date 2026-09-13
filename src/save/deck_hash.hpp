@@ -67,6 +67,9 @@ namespace tkw
                                ? static_cast<int>(e.response.unwrap())
                                : -1);
                     detail::hash_int(h, e.range);
+                    // 仅显式属性参与哈希：普通伤害不写字段，标准牌表指纹逐位不变
+                    if (e.damage_type != card::DamageType::Normal)
+                        detail::hash_int(h, static_cast<int>(e.damage_type));
                 }
                 if (def.equip.is_some())
                 {
@@ -83,6 +86,9 @@ namespace tkw
                     detail::hash_int(h, j.amount);
                     detail::hash_int(
                         h, j.scope.is_some() ? static_cast<int>(j.scope.unwrap()) : -1);
+                    // 同 effect：仅显式属性参与哈希，标准牌表指纹不变
+                    if (j.damage_type != card::DamageType::Normal)
+                        detail::hash_int(h, static_cast<int>(j.damage_type));
                 }
                 for (auto a : def.abilities)
                     detail::hash_int(h, static_cast<int>(a));

@@ -195,15 +195,17 @@ namespace tkw
         /**
          * @brief 造成伤害（流程入口）：扣血 → 濒死判定 → 死亡与击杀奖惩。
          * @param source 伤害来源（空串 = 无来源如闪电；为存活玩家时按模式与角色发奖惩）。
+         * @param type 伤害属性（默认普通；火焰/雷电透传到受伤事件）。
          */
         inline void deal_damage(
             GameContext &ctx, DecisionSource &ai, const std::string &source,
-            const std::string &target, int amount)
+            const std::string &target, int amount,
+            card::DamageType type = card::DamageType::Normal)
         {
             const auto e = ctx.entities->find(target);
             if (e.is_none())
                 return;
-            e.unwrap()->take_damage(source, amount, false);
+            e.unwrap()->take_damage(source, amount, false, type);
             if (e.unwrap()->get_hp() > 0)
                 return;
 

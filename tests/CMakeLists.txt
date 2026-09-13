@@ -181,6 +181,28 @@ add_test(NAME cli_cards_list
 set_tests_properties(cli_cards_list PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# 扩展牌表骨架经既有 --deck 目录选择可发现：头行显示牌堆名，逐卡行显示属性杀
+# 及其权威张数；默认牌表不动。
+add_test(NAME cli_junzheng_cards
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> cards --deck resources/junzheng 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '军争篇' && printf '%s' \"$out\" | grep -q '火杀(huosha) 基本 5' && printf '%s' \"$out\" | grep -q '雷杀(leisha) 基本 9' && [ $rc -eq 0 ]")
+set_tests_properties(cli_junzheng_cards PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 扩展牌表骨架审计：属性杀走既有 Damage 路径，全部可结算；rc=0。
+add_test(NAME cli_junzheng_audit
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> audit --deck resources/junzheng 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '牌堆全部可结算' && [ $rc -eq 0 ]")
+set_tests_properties(cli_junzheng_audit PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 扩展牌表骨架可独立开局跑到底：属性杀只有伤害路径，正常产出胜者/平局。
+add_test(NAME cli_junzheng_deal
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> deal 2 1 --deck resources/junzheng 2>&1); rc=$?; printf '%s' \"$out\" | grep -qE '胜者|平局' && [ $rc -eq 0 ]")
+set_tests_properties(cli_junzheng_deal PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # cards --text：逐卡附 CardDef.text 效果文案（数据源同一，默认不输出）。
 add_test(NAME cli_cards_text
          COMMAND sh -c

@@ -1,0 +1,25 @@
+{
+    "id": "leisha",
+    "name": "雷杀",
+    "type": "basic",
+    "subtype": "attack",
+    "copies": [
+        { "suit": "spade", "number": 4 },
+        { "suit": "spade", "number": 5 },
+        { "suit": "spade", "number": 6 },
+        { "suit": "spade", "number": 7 },
+        { "suit": "spade", "number": 8 },
+        { "suit": "club", "number": 5 },
+        { "suit": "club", "number": 6 },
+        { "suit": "club", "number": 7 },
+        { "suit": "club", "number": 8 }
+    ],
+    "text": "出牌阶段限一次，对攻击范围内的一名其他角色使用。目标需打出一张「闪」，否则受到你造成的1点雷电伤害。",
+    "effect": {
+        "kind": "damage",
+        "amount": 1,
+        "scope": "one_other",
+        "response": "jink",
+        "damage_type": "thunder"
+    }
+}

@@ -68,6 +68,18 @@ namespace tkw
             BorrowedSword, /**< 持武器者对攻击范围内角色出杀，否则使用者得其武器（借刀杀人） */
         };
 
+        /**
+         * @brief 伤害属性：普通 / 火焰 / 雷电。
+         * @note 属性只作事件与结算层标记，默认普通（普通牌不显式标注）；
+         *       火焰/雷电由数据卡显式声明，供藤甲、连环等按属性区分效果。
+         */
+        enum class DamageType : std::uint8_t
+        {
+            Normal,  /**< 普通伤害（杀/决斗/南蛮/万箭等） */
+            Fire,    /**< 火焰伤害（火杀/火攻） */
+            Thunder, /**< 雷电伤害（雷杀/闪电） */
+        };
+
         /** @brief 装备被动能力（一件装备可带多个，经 equip.hpp 查询）。 */
         enum class Ability : std::uint8_t
         {
@@ -120,6 +132,8 @@ namespace tkw
             JudgeAction success = JudgeAction::Nothing;
             JudgeAction failure = JudgeAction::Nothing;
             int amount = 0;
+            DamageType damage_type =
+                DamageType::Normal; /**< 伤害属性；仅火焰/雷电显式标注 */
             Option<Scope> scope =
                 Option<Scope>::None(); /**< 打出时的目标范围（延时锦囊用） */
 
@@ -177,6 +191,8 @@ namespace tkw
             Option<Scope> scope = Option<Scope>::None();
             Option<ResponseKind> response = Option<ResponseKind>::None();
             int range = 0;
+            DamageType damage_type =
+                DamageType::Normal; /**< 伤害属性；仅火焰/雷电显式标注 */
 
             bool operator==(const CardEffect &) const = default;
         };

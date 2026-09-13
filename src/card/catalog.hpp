@@ -47,6 +47,13 @@ namespace tkw
                 scope_table{{"self", Scope::Self}, {"one_other", Scope::OneOther},
                              {"all_others", Scope::AllOthers}, {"all", Scope::All}};
 
+            /** damage_type 字段封闭三值集：effect/judge 解析共用的单一表源。 */
+            inline constexpr
+                std::initializer_list<std::pair<std::string_view, DamageType>>
+                    damage_type_table{{"normal", DamageType::Normal},
+                                      {"fire", DamageType::Fire},
+                                      {"thunder", DamageType::Thunder}};
+
             /** effect.kind 封闭名表：严格解析与名称查询共用的单一表源。 */
             inline constexpr
                 std::initializer_list<std::pair<std::string_view, CardEffectKind>>
@@ -205,6 +212,12 @@ namespace tkw
                     return cfg::ConfigResult<CardEffect>::Err(range.unwrap_err());
                 eff.range = range.unwrap();
 
+                auto dtype =
+                    opt_enum<DamageType>(obj, "damage_type", path, damage_type_table);
+                if (dtype.is_err())
+                    return cfg::ConfigResult<CardEffect>::Err(dtype.unwrap_err());
+                eff.damage_type = dtype.unwrap().unwrap_or(DamageType::Normal);
+
                 // kind 所需的字段不变量：缺失/为 0 一律加载失败（不静默按 0 结算）
                 switch (eff.kind)
                 {
@@ -309,6 +322,12 @@ namespace tkw
                 if (scope.is_err())
                     return cfg::ConfigResult<JudgeEffect>::Err(scope.unwrap_err());
                 j.scope = scope.unwrap();
+
+                auto dtype =
+                    opt_enum<DamageType>(obj, "damage_type", path, damage_type_table);
+                if (dtype.is_err())
+                    return cfg::ConfigResult<JudgeEffect>::Err(dtype.unwrap_err());
+                j.damage_type = dtype.unwrap().unwrap_or(DamageType::Normal);
 
                 // Damage 动作的 amount 不变量同 effect 路径：非正一律加载失败
                 // （不静默按 0 结算，避免判定卡整局 0 伤无告警运行）

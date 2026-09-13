@@ -43,8 +43,11 @@ namespace tkw
         {
             GameContext ctx;
 
-            explicit TestGame(const char *deck_name, std::uint32_t seed = 1) :
-                Game(load_catalog(deck_name), std::make_unique<tkw::SeededRng>(seed)),
+            explicit TestGame(
+                const char *deck_name, std::uint32_t seed = 1,
+                const char *resource_root = TKW_TEST_RESOURCE_DIR) :
+                Game(load_catalog(resource_root, deck_name),
+                     std::make_unique<tkw::SeededRng>(seed)),
                 ctx(context())
             {
             }
@@ -74,9 +77,10 @@ namespace tkw
                 cards.add_to_equip(id, Card{inst, def_id, copy.suit, copy.number});
             }
 
-            static CardDefCatalog load_catalog(const char *name)
+            static CardDefCatalog load_catalog(
+                const char *root, const char *name)
             {
-                tkw::config::ResourceStore store(TKW_TEST_RESOURCE_DIR);
+                tkw::config::ResourceStore store(root);
                 auto r = CardDefCatalog::load(store, name);
                 REQUIRE(r.is_ok());
                 return std::move(r).unwrap();

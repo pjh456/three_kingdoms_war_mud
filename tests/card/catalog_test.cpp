@@ -170,6 +170,44 @@ TEST_CASE("card: opt default must not swallow type mismatch")
     CHECK(r.unwrap_err() == ConfigError{ConfigErrorKind::TypeMismatch, "a.effect.amount"});
 }
 
+TEST_CASE("card: damage_type parses and defaults normal")
+{
+    auto fire = parse_card_def(
+        doc(R"({"id": "h", "name": "火杀", "type": "basic", "copies": [],
+                 "effect": {"kind": "damage", "amount": 1, "damage_type": "fire"}})")
+            .root(),
+        "h");
+    REQUIRE(fire.is_ok());
+    REQUIRE(fire.unwrap().effect.is_some());
+    CHECK(fire.unwrap().effect.unwrap().damage_type == DamageType::Fire);
+
+    auto dft = parse_card_def(
+        doc(R"({"id": "s", "name": "杀", "type": "basic", "copies": [],
+                 "effect": {"kind": "damage", "amount": 1}})").root(),
+        "s");
+    REQUIRE(dft.is_ok());
+    CHECK(dft.unwrap().effect.unwrap().damage_type == DamageType::Normal);
+
+    auto bad = parse_card_def(
+        doc(R"({"id": "x", "name": "x", "type": "basic", "copies": [],
+                 "effect": {"kind": "damage", "amount": 1, "damage_type": "ice"}})")
+            .root(),
+        "x");
+    REQUIRE(bad.is_err());
+    CHECK(bad.unwrap_err() ==
+          ConfigError{ConfigErrorKind::InvalidValue, "x.effect.damage_type"});
+
+    auto judge = parse_card_def(
+        doc(R"({"id": "l", "name": "雷", "type": "trick", "subtype": "delayed",
+                 "copies": [ {"suit": "spade", "number": 1} ],
+                 "judge": {"trigger": "spade_2_9", "success": "damage", "amount": 3,
+                           "damage_type": "thunder"}})").root(),
+        "l");
+    REQUIRE(judge.is_ok());
+    REQUIRE(judge.unwrap().judge.is_some());
+    CHECK(judge.unwrap().judge.unwrap().damage_type == DamageType::Thunder);
+}
+
 TEST_CASE("card: rescue/counter flags parse with false default")
 {
     auto r = parse_card_def(
@@ -440,6 +478,8 @@ TEST_CASE("card: real standard deck loads to 108 copies")
     CHECK(sha.unwrap()->effect.unwrap().kind == CardEffectKind::Damage);
     CHECK(sha.unwrap()->effect.unwrap().scope.contains(Scope::OneOther));
     CHECK(sha.unwrap()->effect.unwrap().response.contains(ResponseKind::Jink));
+    // 标准杀不显式标注属性：默认普通，deck_hash 不受新字段影响
+    CHECK(sha.unwrap()->effect.unwrap().damage_type == DamageType::Normal);
 
     auto liangnu = cat.find("liangnu");
     REQUIRE(liangnu.is_some());
@@ -452,6 +492,36 @@ TEST_CASE("card: real standard deck loads to 108 copies")
     REQUIRE(taoyuan.unwrap()->effect.is_some());
     CHECK(taoyuan.unwrap()->effect.unwrap().kind == CardEffectKind::Heal);
     CHECK(taoyuan.unwrap()->effect.unwrap().scope.contains(Scope::All));
+}
+
+TEST_CASE("card: junzheng skeleton deck loads elemental slashes")
+{
+    // 扩展牌表落在 resources/ 的子目录：既有 --deck 目录选择直接生效
+    tkw::config::ResourceStore store(TKW_TEST_RESOURCE_DIR "/junzheng");
+    auto r = CardDefCatalog::load(store, "deck");
+    REQUIRE(r.is_ok());
+    const auto &cat = r.unwrap();
+    CHECK(cat.size() == 2);
+    CHECK(cat.total_copies() == 14);  // 火杀 5 + 雷杀 9
+
+    auto huosha = cat.find("huosha");
+    REQUIRE(huosha.is_some());
+    CHECK(huosha.unwrap()->name == "火杀");
+    REQUIRE(huosha.unwrap()->effect.is_some());
+    CHECK(huosha.unwrap()->effect.unwrap().kind == CardEffectKind::Damage);
+    CHECK(huosha.unwrap()->effect.unwrap().damage_type == DamageType::Fire);
+
+    auto leisha = cat.find("leisha");
+    REQUIRE(leisha.is_some());
+    CHECK(leisha.unwrap()->name == "雷杀");
+    REQUIRE(leisha.unwrap()->effect.is_some());
+    CHECK(leisha.unwrap()->effect.unwrap().kind == CardEffectKind::Damage);
+    CHECK(leisha.unwrap()->effect.unwrap().damage_type == DamageType::Thunder);
+
+    // 容错扫描与严格加载同源：两卡均为已知机制名
+    auto raws = scan_mechanisms(store, "deck");
+    REQUIRE(raws.is_ok());
+    CHECK(raws.unwrap().size() == 2);
 }
 
 TEST_CASE("card: scan_mechanisms reads raw names and shares the name table")

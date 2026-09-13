@@ -1750,6 +1750,56 @@ TEST_CASE("game: lightning damage has no source")
     CHECK(a->get_hp() == 1);
 }
 
+TEST_CASE("game: fire slash and thunder slash carry their damage type")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    auto *b = g.add_player("b", 1, 4);
+    g.add_player("a", 0, 4);
+
+    // 扩展牌表的属性杀按「杀」结算（Damage 效果 + 杀属性）
+    CHECK(is_sha(*g.catalog.find("huosha").unwrap()));
+    CHECK(is_sha(*g.catalog.find("leisha").unwrap()));
+
+    std::vector<tkw::card::DamageType> types;
+    auto h = g.bus.subscribe(tkw::Handler<tkw::EntityDamagedEvent>(
+        [&](tkw::HandlerContext<tkw::EntityDamagedEvent> &c)
+        { types.push_back(c.event.damage_type); }));
+
+    TestDecider decider;  // 不响应闪，伤害直接落地
+    g.give("a", "huosha", "H#0");
+    const Card huosha = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", huosha, {"b"}).is_ok());
+
+    g.give("a", "leisha", "L#0");
+    const Card leisha = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", leisha, {"b"}).is_ok());
+
+    REQUIRE(types.size() == 2);
+    CHECK(types[0] == tkw::card::DamageType::Fire);
+    CHECK(types[1] == tkw::card::DamageType::Thunder);
+    CHECK(b->get_hp() == 2);  // 1 + 1 点属性伤害
+}
+
+TEST_CASE("game: standard slash keeps normal damage type")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+
+    std::vector<tkw::card::DamageType> types;
+    auto h = g.bus.subscribe(tkw::Handler<tkw::EntityDamagedEvent>(
+        [&](tkw::HandlerContext<tkw::EntityDamagedEvent> &c)
+        { types.push_back(c.event.damage_type); }));
+
+    TestDecider decider;
+    g.give("a", "sha", "S#0");
+    const Card sha = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", sha, {"b"}).is_ok());
+
+    REQUIRE(types.size() == 1);
+    CHECK(types[0] == tkw::card::DamageType::Normal);
+}
+
 TEST_CASE("game: lightning passes to next player")
 {
     TestGame g("deck");
@@ -2617,6 +2667,15 @@ TEST_CASE("game: raw mechanism scan reports unknown abilities")
 TEST_CASE("game: raw mechanism scan keeps standard deck settleable")
 {
     tkw::config::ResourceStore store(TKW_TEST_RESOURCE_DIR);
+    auto r = unsupported_cards(store, "deck");
+    REQUIRE(r.is_ok());
+    CHECK(r.unwrap().empty());
+}
+
+TEST_CASE("game: junzheng skeleton deck has no unsupported cards")
+{
+    // 属性杀复用 Damage 结算路径：审计不因新卡误报未实现
+    tkw::config::ResourceStore store(TKW_TEST_RESOURCE_DIR "/junzheng");
     auto r = unsupported_cards(store, "deck");
     REQUIRE(r.is_ok());
     CHECK(r.unwrap().empty());

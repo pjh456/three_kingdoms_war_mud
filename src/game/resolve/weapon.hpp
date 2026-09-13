@@ -51,6 +51,8 @@ namespace tkw
             std::string attacker;
             std::string target;
             int amount = 1;
+            card::DamageType damage_type =
+                card::DamageType::Normal; /**< 伤害属性（火杀/雷杀透传） */
             bool ignore_armor = false; /**< 攻击方无视防具（青釭剑） */
             bool responded = false;    /**< 目标已打出/视为闪 */
             bool blocked = false;      /**< 防具直接无效（仁王盾） */
@@ -62,7 +64,8 @@ namespace tkw
         inline void resolve_sha(
             GameContext &ctx, DecisionSource &ai, const std::string &attacker,
             const card::Card &sha, const std::string &target, int amount,
-            int target_count = 1, bool virtual_sha = false);
+            int target_count = 1, bool virtual_sha = false,
+            card::DamageType damage_type = card::DamageType::Normal);
 
         // ── 装备效果（钩子实现）────────────────────────────────────────
 
@@ -241,7 +244,8 @@ namespace tkw
                 emit_card_played(sc.ctx, sc.attacker, extra_card);
             }
             resolve_sha(
-                sc.ctx, sc.ai, sc.attacker, extra.unwrap(), sc.target, sc.amount);
+                sc.ctx, sc.ai, sc.attacker, extra.unwrap(), sc.target, sc.amount, 1,
+                false, sc.damage_type);
         }
 
         /**
@@ -425,16 +429,18 @@ namespace tkw
          *        结算时由调用方传入，供仅唯一目标触发的能力判定）。
          * @param virtual_sha 是否虚拟杀（丈八两张当杀）：真无花色，仁王盾
          *        黑杀判定短路；此时 sha 参数可为占位对象。
+         * @param damage_type 伤害属性（默认普通；火杀/雷杀由 effect 透传）。
          */
         inline void resolve_sha(
             GameContext &ctx, DecisionSource &ai, const std::string &attacker,
             const card::Card &sha, const std::string &target, int amount,
-            int target_count, bool virtual_sha)
+            int target_count, bool virtual_sha, card::DamageType damage_type)
         {
             ShaContext sc{ctx, ai, sha, attacker, target, amount};
             sc.ignore_armor = has_ability(ctx, attacker, card::Ability::IgnoreArmor);
             sc.target_count = target_count;
             sc.virtual_sha = virtual_sha;
+            sc.damage_type = damage_type;
 
             run_sha_phase(sc, ShaPhase::OnTarget);
 
@@ -456,7 +462,7 @@ namespace tkw
                 run_sha_phase(sc, ShaPhase::PreDamage);
                 if (sc.prevented)
                     return;
-                deal_damage(ctx, ai, attacker, target, amount);
+                deal_damage(ctx, ai, attacker, target, amount, sc.damage_type);
                 run_sha_phase(sc, ShaPhase::OnHit);
             }
         }

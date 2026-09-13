@@ -18,7 +18,7 @@ add_library(tkw_entity INTERFACE)
 
 target_include_directories(tkw_entity INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(tkw_entity INTERFACE tkw_event pjh_result)
+target_link_libraries(tkw_entity INTERFACE tkw_event tkw_card pjh_result)
 
 add_library(tkw_event INTERFACE)
 

@@ -475,6 +475,14 @@ TEST_CASE("save: a low-bit fingerprint stays a positive integer for legacy reade
     CHECK(save::write(*b, sb, "deck") == text);
 }
 
+TEST_CASE("save: standard deck fingerprint stays pinned")
+{
+    // 新增 effect/judge 可选字段不得改变标准牌表指纹：普通属性不入哈希，
+    // 旧标准档继续可读（deck_hash 是持久化契约单点）。
+    auto a = make_game(1);
+    CHECK(save::deck_hash(a->catalog) == 5176414080095780405ULL);
+}
+
 TEST_CASE("save: deck hash errors distinguish structure from mismatch")
 {
     auto a = make_game(1);

@@ -73,9 +73,12 @@ namespace tkw
              * @brief 承受伤害（战斗结算入口）：发布 EntityDamagedEvent（原因层），
              *        再扣体力（状态层自动发布 HpChanged）。
              * @param indirect 是否间接伤害（连环传导等）。
+             * @param type 伤害属性（默认普通；火焰/雷电用于防具与传导判定）。
              * @return 实际血量损失（amount <= 0 时为 0）。
              */
-            int take_damage(const std::string &source, int amount, bool indirect)
+            int take_damage(
+                const std::string &source, int amount, bool indirect,
+                card::DamageType type = card::DamageType::Normal)
             {
                 if (amount <= 0)
                     return 0;
@@ -84,6 +87,7 @@ namespace tkw
                 ev->target = id;
                 ev->amount = amount;
                 ev->indirect = indirect;
+                ev->damage_type = type;
                 bus->publish(ev);
 
                 return hp.sub(amount);

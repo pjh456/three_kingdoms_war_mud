@@ -1,0 +1,21 @@
+{
+    "id": "huosha",
+    "name": "火杀",
+    "type": "basic",
+    "subtype": "attack",
+    "copies": [
+        { "suit": "heart", "number": 4 },
+        { "suit": "heart", "number": 7 },
+        { "suit": "heart", "number": 10 },
+        { "suit": "diamond", "number": 4 },
+        { "suit": "diamond", "number": 5 }
+    ],
+    "text": "出牌阶段限一次，对攻击范围内的一名其他角色使用。目标需打出一张「闪」，否则受到你造成的1点火焰伤害。",
+    "effect": {
+        "kind": "damage",
+        "amount": 1,
+        "scope": "one_other",
+        "response": "jink",
+        "damage_type": "fire"
+    }
+}

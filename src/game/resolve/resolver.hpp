@@ -138,13 +138,14 @@ namespace tkw
                 return ordered;
             }
 
-            /** @brief 杀：逐目标按实体杀结算。 */
+            /** @brief 杀：逐目标按实体杀结算（伤害属性来自效果数据）。 */
             inline GameResult<void> resolve_damage(const EffectInvocation &e)
             {
                 for (const auto &t : e.targets)
                     resolve_sha(
                         e.ctx, e.ai, e.player, e.played, t, e.eff.amount,
-                        static_cast<int>(e.targets.size()));
+                        static_cast<int>(e.targets.size()), false,
+                        e.eff.damage_type);
                 return GameResult<void>::Ok();
             }
 
@@ -612,10 +613,14 @@ namespace tkw
             {
                 // 对目标结算的响应计打出（与虚拟杀响应同口径）
                 int dmg = rules_of(ctx).default_damage;
+                card::DamageType dtype = card::DamageType::Normal;
                 if (def.unwrap()->effect.is_some())
+                {
                     dmg = def.unwrap()->effect.unwrap().amount;
+                    dtype = def.unwrap()->effect.unwrap().damage_type;
+                }
                 emit_card_played(ctx, entity, card);
-                resolve_sha(ctx, ai, entity, card, victim, dmg);
+                resolve_sha(ctx, ai, entity, card, victim, dmg, 1, false, dtype);
             }
             else
                 emit_card_discarded(ctx, entity, card, DiscardKind::Response);

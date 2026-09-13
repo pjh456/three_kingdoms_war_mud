@@ -3,6 +3,7 @@
 
 #include <string>
 
+#include "card/def.hpp"
 #include "event/event.hpp"
 #include "event/macro.hpp"
 
@@ -30,8 +31,9 @@ public:
 
     /**
      * @class EntityDamagedEvent
-     * @brief 实体受到伤害（原因层：来源、伤害量、是否间接伤害）。
+     * @brief 实体受到伤害（原因层：来源、伤害量、是否间接伤害、伤害属性）。
      * @note indirect = 连环传导等间接伤害；铁索传播判定与日志都看这个标志。
+     * @note damage_type 默认普通；火焰/雷电由数据卡显式声明。
      */
     DEFINE_EVENT_START(EntityDamaged, EntityEvent)
 public:
@@ -39,6 +41,7 @@ public:
     std::string target;
     int amount = 0;
     bool indirect = false;
+    card::DamageType damage_type = card::DamageType::Normal; /**< 伤害属性 */
     DEFINE_EVENT_END(EntityDamaged)
 
     /**
