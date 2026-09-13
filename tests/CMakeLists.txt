@@ -259,6 +259,13 @@ add_test(NAME cli_hero_bad_assignment
 set_tests_properties(cli_hero_bad_assignment PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# --hero 前导零座位与规范写法等价：P00 命中 P0 并在 status 展示武将，rc=0。
+add_test(NAME cli_hero_leading_zero
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> --hero P00=zhangfei new --players 2 --seed 1 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '武将 张飞' && [ $rc -eq 0 ]")
+set_tests_properties(cli_hero_leading_zero PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 扩展牌表骨架经既有 --deck 目录选择可发现：头行显示牌堆名，逐卡行显示基础杀、
 # 属性杀、防具与武器及其权威张数；默认牌表不动。
 add_test(NAME cli_junzheng_cards

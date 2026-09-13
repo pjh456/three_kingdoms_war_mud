@@ -355,10 +355,12 @@ namespace tkw
             /**
              * @brief 解析可重复 `--hero` 原文为「座位 id → 武将 id」映射。
              * @param raw     --hero 原始值列表（形如 "P0=zhangfei"）。
-             * @param players 本局玩家数，用于座位下标越界校验。
+             * @param players 本局玩家数，用于座位下标越界校验与可用座位列表。
              * @return Ok 为座位到武将的映射；Err 为中文提示（格式/座位/重复）。
-             * @note 座位格式固定 `P<非负十进制>`；重复座位报错而非后写覆盖，
-             *       避免静默丢弃用户选择。武将 id 是否存在于目录由 build_game
+             * @note 座位格式固定 `P<非负十进制>`，解析后归一为规范键 `P<下标>`
+             *       （`P00` 与 `P0` 等价），使所有等价写法都能被建局按规范座位
+             *       命中，不因键写法差异静默丢弃用户选择；重复经归一化键判定，
+             *       报错而非后写覆盖。武将 id 是否存在于目录由 build_game
              *       按当前牌表目录校验（解析期不读文件系统）。
              */
             inline tkw::Result<std::map<std::string, std::string>, std::string>
@@ -366,6 +368,14 @@ namespace tkw
                 const std::vector<std::string> &raw, int players)
             {
                 std::map<std::string, std::string> out;
+                std::vector<std::string> all_seats;
+                all_seats.reserve(static_cast<std::size_t>(players));
+                for (int i = 0; i < players; ++i)
+                    all_seats.push_back("P" + std::to_string(i));
+                const std::string seat_hint =
+                    all_seats.empty()
+                        ? "（无可用座位）"
+                        : "（可用座位: " + join_items(all_seats, "、") + "）";
                 for (const auto &item : raw)
                 {
                     const auto eq = item.find('=');
@@ -394,12 +404,13 @@ namespace tkw
                         return tkw::Result<std::map<std::string, std::string>,
                                            std::string>::Err(
                             "武将座位超出玩家数: " + seat + "（当前 " +
-                            std::to_string(players) + " 人）");
+                            std::to_string(players) + " 人）" + seat_hint);
 
-                    if (!out.emplace(seat, hero_id).second)
+                    const std::string canonical = "P" + std::to_string(index);
+                    if (!out.emplace(canonical, hero_id).second)
                         return tkw::Result<std::map<std::string, std::string>,
                                            std::string>::Err(
-                            "武将座位重复: " + seat +
+                            "武将座位重复: " + canonical +
                             "（每个座位只能指定一次）");
                 }
                 return tkw::Result<std::map<std::string, std::string>,

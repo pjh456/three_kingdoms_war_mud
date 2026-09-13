@@ -2054,3 +2054,28 @@ TEST_CASE("cli: no hero keeps default status without a hero column")
     REQUIRE(created.ok);
     CHECK(created.out.find("武将") == std::string::npos);
 }
+
+TEST_CASE("cli: --hero normalizes non-canonical seat keys")
+{
+    Repl repl;
+    repl.session.base.deck = TKW_TEST_RESOURCE_DIR;
+
+    // 前导零座位与规范写法等价：P00 仍命中 P0，不静默忽略
+    auto created = repl.run("new --hero P00=zhangfei --players 2 --seed 1");
+    REQUIRE(created.ok);
+    REQUIRE(repl.session.game != nullptr);
+    CHECK(repl.session.game->entities.find("P0").unwrap()->get_hero() ==
+          "zhangfei");
+
+    // 归一化键参与查重：P0 与 P00 是同一座位
+    auto dup = repl.run(
+        "new --hero P0=zhangfei --hero P00=guanyu --players 2 --seed 1");
+    CHECK_FALSE(dup.ok);
+    CHECK(dup.error.find("武将座位重复") != std::string::npos);
+
+    // 越界仍拒绝，并给出可用座位范围
+    auto oob = repl.run("new --hero P8=zhangfei --players 2 --seed 1");
+    CHECK_FALSE(oob.ok);
+    CHECK(oob.error.find("超出玩家数") != std::string::npos);
+    CHECK(oob.error.find("可用座位") != std::string::npos);
+}
