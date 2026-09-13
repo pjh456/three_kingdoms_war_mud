@@ -315,67 +315,6 @@ namespace tkw
             }
 
             /**
-             * @brief 牌堆加载失败 → 用户可见文案（中文根因标签 + detail）。
-             * @param e 目录加载错误；detail 为文件路径或字段路径。
-             * @return 固定前缀「加载牌堆失败」+ 类别中文标签 + detail 的文案。
-             */
-            inline std::string format_load_error(const tkw::config::ConfigError &e)
-            {
-                return "加载牌堆失败（" +
-                       std::string(config_error_kind_zh(e.kind)) + "）: " +
-                       e.detail;
-            }
-
-            /**
-             * @brief 对局失败 → 带中文根因标签的用户可见文案。
-             * @param code 非 MaxRounds 的流程错误；达回合上限由调用方映射为平局。
-             * @return 「对局失败（<标签>）」文案。
-             * @note 仅一次性跑局与批量模拟使用；step/run 经根因出参走
-             *       format_turn_failure，不经过本函数。
-             */
-            inline std::string format_loop_error(tkw::game::LoopError code)
-            {
-                return loop_error_zh(code);
-            }
-
-            /**
-             * @brief 回合失败 → 带中文根因标签的用户可见文案。
-             * @param code  step/run 循环返回的错误类别。
-             * @param root  根因出参写回的回合错误；仅 `TurnFailed` 有效。
-             * @param actor 失败回合的角色 id（调用方在推进前捕获）。
-             * @return 「回合执行失败（角色 <actor>，<标签>）」；`NoPlayers`
-             *         表示会话角色已不存在，标签回落「角色不存在」。
-             * @note 仅 `TurnFailed` 消费 `root`；`MaxRounds` 由调用方映射为平局，
-             *       不进入本函数。`TurnFailed` 追加恢复引导：失败回合已部分结算，
-             *       但引擎已消费该回合并推进，可继续 step/run。
-             */
-            inline std::string format_turn_failure(
-                tkw::game::LoopError code, tkw::game::TurnError root,
-                const std::string &actor)
-            {
-                if (code == tkw::game::LoopError::NoPlayers)
-                    return "回合执行失败（角色 " + actor + "，角色不存在）";
-                std::string text =
-                    "回合执行失败（角色 " + actor + "，" +
-                    std::string(turn_error_label_zh(root));
-                if (code == tkw::game::LoopError::TurnFailed)
-                    text += "；本回合已终止并跳过（已部分结算），可继续推进";
-                text += "）";
-                return text;
-            }
-
-            /** 建局错误 → 用户可见文案（目录加载、玩家创建与身份局人数三类错误面）。 */
-            inline std::string format_build_error(const tkw::game::BuildError &e)
-            {
-                if (e.kind == tkw::game::BuildError::Kind::CreatePlayer)
-                    return "创建玩家失败: P" + std::to_string(e.player_index);
-                if (e.kind == tkw::game::BuildError::Kind::IdentityPlayerCount)
-                    return "身份模式至少 4 人、至多 8 人: " +
-                           std::to_string(e.player_index);
-                return format_load_error(e.config);
-            }
-
-            /**
              * @brief 玩家数越界 → 用户可见文案。
              * @param value 实际传入的玩家数。
              * @param rules 玩家数上下限来源。

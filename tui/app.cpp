@@ -1,8 +1,9 @@
 /**
  * @file app.cpp
- * @brief TUI 壳实现：建默认真实对局、四面板渲染与退出组件。
- * @note 四面板数据全部来自 tkw_tui 的值快照与日志缓冲，渲染层不触引擎容器；
- *       中文/fullwidth 直接交给 FTXUI 计宽，不做按字节对齐。
+ * @brief TUI 壳实现：四面板渲染与命令输入，数据全部来自控制器值模型。
+ * @note 渲染层不触引擎容器：快照与日志都是控制器回送的值拷贝，worker 运行
+ *       期间主线程只读模型。屏幕回送经 screen.Post（FTXUI TaskQueue 自带锁），
+ *       闭包只捕获模型 shared_ptr 与值，不捕获 App。
  */
 
 #include <cstddef>
@@ -15,12 +16,9 @@
 #include "app.hpp"
 #include "cli/render.hpp"
 #include "game/core/roles.hpp"
-#include "game/flow/factory.hpp"
-#include "game/flow/loop.hpp"
 
 namespace
 {
-    using tkw::tui::LogBuffer;
     using tkw::tui::UiSnapshot;
 
     /** 日志面板最多展示的行数。 */
@@ -53,12 +51,6 @@ namespace
         default:
             return "?";
         }
-    }
-
-    /** @brief AI 难度档 → 展示字符串；与命令行/存档值域同名。 */
-    const char *ai_level_zh(tkw::cli::AiLevel ai)
-    {
-        return ai == tkw::cli::AiLevel::Aggressive ? "aggressive" : "simple";
     }
 
     /**
@@ -128,13 +120,12 @@ namespace
     }
 
     /**
-     * @brief 日志面板：取缓冲末段真实事件行。
-     * @param log 日志缓冲。
+     * @brief 日志面板：取值拷贝末段真实事件行。
+     * @param lines 控制器回送的日志值拷贝。
      * @return 末 kLogRows 行的 vbox；无内容时单行占位。
      */
-    ftxui::Element render_log(const LogBuffer &log)
+    ftxui::Element render_log(const std::vector<std::string> &lines)
     {
-        const auto &lines = log.lines();
         if (lines.empty())
             return ftxui::text("（暂无日志）");
 
@@ -175,7 +166,8 @@ namespace
         else
             rows.push_back(ftxui::text(
                 "第 " + std::to_string(snap.turns) + " 回合  下一回合: " +
-                snap.current + "  AI: " + ai_level_zh(snap.ai) + "  摸牌堆 " +
+                snap.current + "  AI: " +
+                tkw::tui::detail::ai_level_name(snap.ai) + "  摸牌堆 " +
                 std::to_string(snap.draw_size) + "  弃牌堆 " +
                 std::to_string(snap.discard_size)));
 
@@ -196,17 +188,20 @@ namespace
     }
 
     /**
-     * @brief 组装整屏 DOM：棋盘 / 手牌与日志 / 状态 / 提示行。
+     * @brief 组装整屏 DOM：棋盘 / 手牌与日志 / 状态 / 命令输入行。
      * @param snap 值快照。
-     * @param log 日志缓冲。
+     * @param log_lines 日志值拷贝。
      * @param notice 底部提示文案。
+     * @param input_line 命令输入行元素。
      */
-    ftxui::Element render_shell(const UiSnapshot &snap, const LogBuffer &log,
-                                const std::string &notice)
+    ftxui::Element render_shell(const UiSnapshot &snap,
+                                const std::vector<std::string> &log_lines,
+                                const std::string &notice,
+                                ftxui::Element input_line)
     {
         auto board = panel("棋盘", render_board(snap));
         auto hand = panel("手牌", render_hand(snap));
-        auto log_panel = panel("日志", render_log(log));
+        auto log_panel = panel("日志", render_log(log_lines));
         auto status = panel("状态", render_status(snap));
 
         return ftxui::vbox({
@@ -214,6 +209,7 @@ namespace
             ftxui::hbox({std::move(hand) | ftxui::flex,
                          std::move(log_panel) | ftxui::flex}),
             std::move(status),
+            ftxui::hbox({ftxui::text("> "), std::move(input_line)}),
             ftxui::text(notice) | ftxui::dim,
         });
     }
@@ -225,60 +221,57 @@ namespace tkw
     {
         void App::bootstrap()
         {
-            notice_ = "q / Esc / Ctrl-C 退出";
-
-            tkw::cli::Options opt;
-            auto built = tkw::game::build_game(tkw::game::BuildOptions{
-                opt.deck, opt.players, opt.seed, opt.mode});
-            if (built.is_err())
-            {
-                notice_ = "建局失败：请确认在仓库根目录运行（牌表 resources/）";
-                return;
-            }
-
-            session_.game = std::move(built).unwrap();
-            session_.deck = opt.deck;
-            session_.ai = opt.ai;
-
-            // 日志订阅先于开局发牌建立，初始摸牌事件才会进入面板。
-            log_.bind(*session_.game);
-
-            auto ctx = session_.game->context();
-            auto started =
-                tkw::game::start_session(ctx, session_.state, "P0", opt.hand);
-            if (started.is_err())
-            {
-                notice_ = "开局失败：场上没有玩家";
-                log_.unbind();
-                session_.game.reset();
-                return;
-            }
-
-            session_.active = true;
-            refresh();
-        }
-
-        void App::refresh()
-        {
-            snapshot_ = make_snapshot(session_, viewer_);
+            notice_ = "new / deal / step / run / status / save / load / quit；"
+                      "help 查看用法，Esc / Ctrl-C 退出";
+            controller_.bootstrap();
         }
 
         ftxui::Element App::render() const
         {
-            return render_shell(snapshot_, log_, notice_);
+            ftxui::Element input_line =
+                input_ ? input_->Render() : ftxui::text("");
+            return render_shell(controller_.snapshot(), controller_.log_lines(),
+                                notice_, std::move(input_line));
         }
 
         ftxui::Component App::component(ftxui::ScreenInteractive &screen)
         {
-            return ftxui::Renderer([this] { return render(); }) |
+            // 回送经 screen.Post；TaskQueue 自带锁，worker 可安全入队。
+            // PostEvent(Custom) 触发重绘，闭包只改控制器模型值。
+            controller_.set_post(
+                [&screen](std::function<void()> task)
+                {
+                    screen.Post(
+                        [&screen, task = std::move(task)]() mutable
+                        {
+                            task();
+                            screen.PostEvent(ftxui::Event::Custom);
+                        });
+                });
+            controller_.set_on_quit([&screen] { screen.Exit(); });
+
+            ftxui::InputOption input_option;
+            input_option.content = &command_input_;
+            input_option.placeholder = "输入命令（help 查看用法）";
+            input_option.multiline = false;
+            input_option.on_enter =
+                [this]
+                {
+                    std::string line = command_input_;
+                    command_input_.clear();
+                    controller_.execute_line(line);
+                };
+            input_ = ftxui::Input(input_option);
+
+            auto container = ftxui::Container::Vertical({input_});
+            return ftxui::Renderer(container, [this] { return render(); }) |
                    ftxui::CatchEvent(
-                       [&screen](ftxui::Event event)
+                       [this](ftxui::Event event)
                        {
-                           if (event == ftxui::Event::Character('q') ||
-                               event == ftxui::Event::Escape ||
+                           if (event == ftxui::Event::Escape ||
                                event == ftxui::Event::CtrlC)
                            {
-                               screen.Exit();
+                               controller_.request_quit();
                                return true;
                            }
                            return false;

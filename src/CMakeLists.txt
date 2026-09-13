@@ -1,3 +1,7 @@
+# TUI 控制器使用 std::jthread / std::atomic：线程库在此探测，经 tkw_tui 传递到
+# tkw-tui 与 tui_tests，默认配置的 tkw/引擎目标不链 Threads。
+find_package(Threads REQUIRED)
+
 add_library(tkw_io INTERFACE)
 
 target_include_directories(tkw_io INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -86,12 +90,13 @@ target_include_directories(tkw_cli INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(tkw_cli INTERFACE tkw_core pjh_cli)
 
-# TUI 纯视图模型：无 FTXUI、无新外链，只读消费 cli/引擎只读接口。
+# TUI 纯视图模型与控制器：无 FTXUI、无新外链，只读消费 cli/引擎只读接口；
+# 控制器起后台引擎线程，故向消费目标传递 Threads::Threads。
 add_library(tkw_tui INTERFACE)
 
 target_include_directories(tkw_tui INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(tkw_tui INTERFACE tkw_cli)
+target_link_libraries(tkw_tui INTERFACE tkw_cli Threads::Threads)
 
 add_executable(tkw
     main.cpp
