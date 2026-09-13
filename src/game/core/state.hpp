@@ -278,12 +278,14 @@ namespace tkw
 
         /**
          * @brief 从手牌移除指定牌并按谓词校验；合法则弃置并发布弃置事件。
-         * @tparam Accept 谓词类型：接受 `const card::CardDef &`、返回 bool。
+         * @tparam Accept 谓词类型：接受 `const card::CardDef &` 与
+         *         `const card::Card &`、返回 bool。
          * @param instance_id 待消费的手牌实例；不在手牌时直接失败。
          * @param kind 进弃牌堆的来源语义（响应/判定/真实弃置，供展示标签）。
          * @return Some(消费的牌) 成功；None = 牌不在手牌，或目录缺失/谓词不匹配
          *         （非法选择已退回手牌）。
          * @note 弃置按值拷贝、事件读原牌后再整体移动返回，返回值保持完整。
+         *       谓词接收牌面：花色在 Card 上，转化类判定（黑牌当闪等）需要。
          */
         template <class Accept>
         inline Option<card::Card> consume_hand_card_matching(
@@ -296,7 +298,7 @@ namespace tkw
             card::Card card = std::move(removed).unwrap();
 
             const auto def = ctx.catalog->find(card.def_id);
-            if (def.is_none() || !accept(*def.unwrap()))
+            if (def.is_none() || !accept(*def.unwrap(), card))
             {
                 ctx.cards->add_to_hand(owner, std::move(card));  // 非法选择退回
                 return Option<card::Card>::None();

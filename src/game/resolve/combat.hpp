@@ -57,7 +57,7 @@ namespace tkw
         {
             return consume_hand_card_matching(
                        ctx, player, instance_id,
-                       [is_self](const card::CardDef &def)
+                       [is_self](const card::CardDef &def, const card::Card &)
                        { return can_rescue_def(def, is_self); },
                        DiscardKind::Response)
                 .is_some();

@@ -45,7 +45,8 @@ namespace tkw
         {
             return consume_hand_card_matching(
                        ctx, player, instance_id,
-                       [](const card::CardDef &def) { return is_counter_def(def); },
+                       [](const card::CardDef &def, const card::Card &)
+                       { return is_counter_def(def); },
                        DiscardKind::Response)
                 .is_some();
         }

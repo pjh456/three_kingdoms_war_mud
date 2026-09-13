@@ -629,6 +629,34 @@ TEST_CASE("ai: response options include longdan jink as sha")
     CHECK_FALSE(saw_tao);
 }
 
+TEST_CASE("ai: response options include longdan sha as jink")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, tkw::entity::Gender::Male, "zhaoyun");
+    g.add_player("b", 1, 4);
+    g.cards.add_to_hand("a", tkw::card::Card{"x#1", "sha", tkw::card::Suit::Spade, 7});
+    g.cards.add_to_hand("a", tkw::card::Card{"x#2", "tao", tkw::card::Suit::Heart, 4});
+
+    RecordingDecider rec;
+    RequestDecisionSource src(rec);
+    const auto chosen = src.play_response(
+        g.ctx, "a", tkw::card::ResponseKind::Jink, tkw::game::ResponsePrompt{});
+    CHECK(chosen.is_none());
+
+    bool saw_sha = false;
+    bool saw_tao = false;
+    for (const auto &c : rec.options)
+    {
+        if (c.instance_id == "x#1")
+            saw_sha = true;
+        if (c.instance_id == "x#2")
+            saw_tao = true;
+    }
+    CHECK(saw_sha);
+    CHECK_FALSE(saw_tao);
+}
+
 TEST_CASE("ai: simple trigger respects the discard cost")
 {
     TestGame g("deck");

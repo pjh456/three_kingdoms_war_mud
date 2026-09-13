@@ -109,6 +109,45 @@ namespace tkw
         }
 
         /**
+         * @brief 该手牌能否被实体转化为虚拟「闪」（龙胆杀）。
+         * @param def 该手牌的目录定义（龙胆按效果类别判定）。
+         * @return 拥有龙胆且该牌为「杀」→ true；否则 false。
+         * @note 转化来源的唯一判定入口：Jink 响应窗口的存在性、候选与消费共用，
+         *       保证「哪些牌可当闪」各处口径一致。
+         */
+        inline bool can_convert_card_to_jink(
+            const ReadOnlyContext &ctx, const std::string &entity_id,
+            const card::Card &, const card::CardDef &def)
+        {
+            return has_hero_skill(ctx, entity_id, hero::HeroSkill::LongDan) &&
+                   def.effect.is_some() &&
+                   is_sha_kind(def.effect.unwrap().kind);
+        }
+
+        /**
+         * @brief 手牌中可作为虚拟闪打出的转化来源（手牌序，确定性；跳过真闪）。
+         * @return 满足 can_convert_card_to_jink 的手牌副本；目录未命中该牌的跳过。
+         * @note 真闪已有普通响应，跳过以避免重复产出；闪无主动使用，仅响应窗口用。
+         */
+        inline std::vector<card::Card> jink_conversion_cards(
+            const ReadOnlyContext &ctx, const std::string &entity_id)
+        {
+            std::vector<card::Card> out;
+            for (const auto &c : ctx.cards->hand(entity_id))
+            {
+                const auto d = ctx.catalog->find(c.def_id);
+                if (d.is_none())
+                    continue;
+                const card::CardDef &def = *d.unwrap();
+                if (is_response_def(def, card::ResponseKind::Jink))
+                    continue;
+                if (can_convert_card_to_jink(ctx, entity_id, c, def))
+                    out.push_back(c);
+            }
+            return out;
+        }
+
+        /**
          * @brief 实体使用锦囊牌时是否无视距离限制（锁定技「奇才」）。
          * @return 无目录 / 实体无武将 / 无奇才 → false；有奇才 → true。
          * @note 锦囊距离判定的唯一判定入口：主动锦囊（顺手牵羊）的目标枚举与

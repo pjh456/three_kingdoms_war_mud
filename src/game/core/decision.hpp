@@ -107,7 +107,7 @@ namespace tkw
              * @param prompt 来源牌/使用者/不响应伤害量（只读事实，来源未知时留空）。
              * @return 要打出的手牌（可带第二张，两张手牌当杀）；None = 不响应。
              *         结算器会先检查手牌里确有响应牌，并负责消费。
-             * @note 响应侧的转化来源（武圣红牌当杀 / 龙胆闪当杀）由引擎按
+             * @note 响应侧的转化来源（武圣红牌/龙胆闪当杀、龙胆杀当闪）由引擎按
              *       「武将技能 + 所选牌」识别，回传的 PlayAction 无需置 converted_sha。
              */
             virtual Option<PlayAction> play_response(

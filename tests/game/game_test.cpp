@@ -5697,6 +5697,135 @@ TEST_CASE("game: longdan response accepts a jink as sha")
     CHECK(plain.cards.hand_size("a") == 1);
 }
 
+// ── 龙胆：杀当闪（响应侧）──────────────────────────────────────────────
+
+TEST_CASE("game: has_response_card includes longdan sha as jink")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Male, "zhaoyun");
+    g.cards.add_to_hand("a", Card{"x#1", "sha", Suit::Spade, 7});
+    CHECK(has_response_card(g.ctx, "a", ResponseKind::Jink));
+
+    // 红桃非杀不可当闪
+    TestGame only_tao("deck");
+    only_tao.load_heroes();
+    only_tao.add_player("a", 0, 4, Gender::Male, "zhaoyun");
+    only_tao.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Heart, 3});
+    CHECK_FALSE(has_response_card(only_tao.ctx, "a", ResponseKind::Jink));
+
+    // 无武将同牌不响应
+    TestGame plain("deck");
+    plain.add_player("a", 0, 4);
+    plain.cards.add_to_hand("a", Card{"x#1", "sha", Suit::Spade, 7});
+    CHECK_FALSE(has_response_card(plain.ctx, "a", ResponseKind::Jink));
+}
+
+TEST_CASE("game: longdan consume_response accepts a sha as jink")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Male, "zhaoyun");
+    g.cards.add_to_hand("a", Card{"x#1", "sha", Suit::Spade, 7});
+
+    TestDecider decider;
+    decider.response_id = "x#1";
+    auto r = consume_response(g.ctx, decider, "a", ResponseKind::Jink,
+                              ResponsePrompt{});
+    REQUIRE(r.is_some());
+    CHECK(g.cards.hand_size("a") == 0);
+    CHECK(g.cards.discard_size() == 1);
+
+    // 非法选择（红桃非杀）被拒并退回手牌、不消耗
+    TestGame bad("deck");
+    bad.load_heroes();
+    bad.add_player("a", 0, 4, Gender::Male, "zhaoyun");
+    bad.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Heart, 3});
+    TestDecider d2;
+    d2.response_id = "x#1";
+    CHECK(consume_response(bad.ctx, d2, "a", ResponseKind::Jink,
+                           ResponsePrompt{})
+              .is_none());
+    CHECK(bad.cards.hand_size("a") == 1);
+    CHECK(bad.cards.discard_size() == 0);
+}
+
+TEST_CASE("game: longdan answers a real sha with a virtual jink")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4, Gender::Male, "zhaoyun");
+    g.give("a", "sha", "a#1");
+    g.give("b", "sha", "b#1");  // b 无真闪：杀当闪
+
+    TestDecider decider;
+    decider.response_id = "b#1";
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 4);            // 被杀当闪抵消
+    CHECK(g.cards.hand_size("b") == 0); // 来源杀已消费
+    CHECK(g.cards.discard_size() == 2); // 攻击杀的杀 + 响应的杀
+}
+
+TEST_CASE("game: longdan answers wanjian with a virtual jink")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4, Gender::Male, "zhaoyun");
+    g.give("a", "wanjian", "w#0");
+    g.give("b", "sha", "b#1");
+
+    TestDecider decider;
+    decider.response_id = "b#1";
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 4);            // 万箭齐发被闪开
+    CHECK(g.cards.hand_size("b") == 0);
+}
+
+TEST_CASE("game: longdan jink conversion defers to the bagua trigger")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4, Gender::Male, "zhaoyun");
+    g.give("a", "sha", "a#1");
+    g.equip("b", "bagua", "e#0");
+    g.give("b", "sha", "b#1");
+
+    TestDecider decider;
+    decider.response_id = "b#1";  // 未勾选发动八卦：回落闪响应窗
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    // 先询问八卦阵，再开闪响应窗消费转化的杀
+    REQUIRE(decider.trigger_calls.size() == 1);
+    CHECK(decider.trigger_calls.front() == Ability::JudgementJink);
+    CHECK(b->get_hp() == 4);
+    CHECK(g.cards.hand_size("b") == 0);
+}
+
+TEST_CASE("game: simple ai uses longdan sha as jink when holding no jink")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4, Gender::Male, "zhaoyun");
+    g.give("a", "sha", "a#1");
+    g.give("b", "sha", "b#1");  // 手牌无真闪，杀当闪
+
+    SimpleAI ai;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, ai, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 4);
+    CHECK(g.cards.hand_size("b") == 0);
+}
+
 // ── 铁索连环：横置/重置与属性伤害传导 ─────────────────────────────────
 
 namespace

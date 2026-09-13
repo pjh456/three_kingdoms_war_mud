@@ -61,7 +61,8 @@ namespace tkw
                 std::vector<LegalAction> legal; /**< Play 合法出牌动作；Response 两张当杀 pair 候选（丈八） */
 
                 // Response / Peach / Counter / PickCard / PickRevealed / Discard
-                // Response 单牌候选 = 真响应牌 + 单张转化杀（武圣红牌 / 龙胆闪）；
+                // Response 单牌候选 = 真响应牌 + 单张转化（武圣红牌/龙胆闪当杀、
+                // 龙胆杀当闪）；
                 // PickCard 的对手手牌候选为无身份占位槽（def_id/instance_id 空，
                 // zone_labels 仍标 Hand）；其余类别均为决策者可见牌或公开亮牌。
                 std::vector<card::Card> options;
@@ -150,6 +151,10 @@ namespace tkw
                     // 引擎按武将 + 牌面识别）
                     if (kind == card::ResponseKind::Sha)
                         for (const auto &c : sha_conversion_cards(ctx, entity))
+                            req.options.push_back(c);
+                    // 单张转化当闪（龙胆杀）：闪响应窗口并入单牌候选
+                    if (kind == card::ResponseKind::Jink)
+                        for (const auto &c : jink_conversion_cards(ctx, entity))
                             req.options.push_back(c);
                     // 杀响应窗口：携带两张当杀 pair 候选（与主动侧同一枚举口径）
                     if (kind == card::ResponseKind::Sha)

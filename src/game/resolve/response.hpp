@@ -30,7 +30,8 @@ namespace tkw
         /**
          * @brief 实体手牌中是否存在指定响应牌。
          * @note 杀响应额外计入「装备两张当杀能力且手牌 ≥2」（丈八蛇矛打出侧）
-         *       与转换来源（武圣红牌 / 龙胆闪当杀）。
+         *       与转换来源（武圣红牌 / 龙胆闪当杀）；闪响应额外计入转化来源
+         *       （龙胆杀当闪）。
          */
         inline bool has_response_card(
             const GameContext &ctx, const std::string &entity_id, card::ResponseKind kind)
@@ -41,7 +42,7 @@ namespace tkw
                     { return is_response_def(def, kind); }))
                 return true;
             if (kind != card::ResponseKind::Sha)
-                return false;
+                return !jink_conversion_cards(ctx, entity_id).empty();
             if (has_ability(ctx, entity_id, card::Ability::TwoCardsAsSha) &&
                 ctx.cards->hand_size(entity_id) >= 2)
                 return true;
@@ -53,7 +54,8 @@ namespace tkw
          *        校验后消费（移除+弃置）。返回实际消费的牌；None = 未响应。
          * @param prompt 响应来源与后果（只读事实，透传给决策源做窗口文案）。
          * @note 单牌窗口（闪等）：只消费第一张；杀响应窗口走 resolve 层的
-         *       respond_sha（另支持两张手牌当杀）。
+         *       respond_sha（另支持两张手牌当杀）。闪窗口的转化来源（龙胆杀
+         *       当闪）由谓词识别，消费的仍是所选那张牌。
          */
         inline Option<card::Card> consume_response(
             GameContext &ctx, DecisionSource &ai,
@@ -68,7 +70,13 @@ namespace tkw
 
             return consume_hand_card_matching(
                 ctx, entity_id, chosen.unwrap().instance_id,
-                [kind](const card::CardDef &def) { return is_response_def(def, kind); },
+                [&ctx, &entity_id, kind](const card::CardDef &def,
+                                         const card::Card &c)
+                {
+                    return is_response_def(def, kind) ||
+                           (kind == card::ResponseKind::Jink &&
+                            can_convert_card_to_jink(ctx, entity_id, c, def));
+                },
                 DiscardKind::Response);
         }
 
