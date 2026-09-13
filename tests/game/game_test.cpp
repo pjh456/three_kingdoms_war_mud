@@ -1896,15 +1896,21 @@ TEST_CASE("game: lightning damage has no source")
     g.cards.add_to_draw(Card{"j#0", "sha", Suit::Spade, 8});
 
     std::vector<std::string> sources;
+    std::vector<tkw::card::DamageType> types;
     auto h = g.bus.subscribe(tkw::Handler<tkw::EntityDamagedEvent>(
         [&](tkw::HandlerContext<tkw::EntityDamagedEvent> &c)
-        { sources.push_back(c.event.source); }));
+        {
+            sources.push_back(c.event.source);
+            types.push_back(c.event.damage_type);
+        }));
 
     TestDecider decider;
     auto r = execute_turn(g.ctx, decider, "a");
     REQUIRE(r.is_ok());
     REQUIRE(sources.size() == 1);
     CHECK(sources[0].empty());  // 闪电为无来源伤害
+    REQUIRE(types.size() == 1);
+    CHECK(types[0] == tkw::card::DamageType::Thunder);  // 闪电数据化为雷电伤害
     CHECK(a->get_hp() == 1);
 }
 
@@ -5517,6 +5523,28 @@ TEST_CASE("game: chained thunder damage transmits")
     REQUIRE(resolve_play(g.ctx, decider, "p", played, {"a"}).is_ok());
     CHECK(a->get_hp() == 3);
     CHECK(b->get_hp() == 3);
+    CHECK_FALSE(a->get_chained());
+    CHECK_FALSE(b->get_chained());
+}
+
+TEST_CASE("game: chained lightning thunder damage transmits")
+{
+    TestGame g("deck");
+    auto *a = g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    chain_all(g, {"a", "b"});
+    g.cards.add_to_judge("a", Card{"L#0", "shandian", Suit::Spade, 1});
+
+    g.cards.add_to_draw(Card{"d#0", "sha", Suit::Club, 2});
+    g.cards.add_to_draw(Card{"d#1", "shan", Suit::Diamond, 2});
+    g.cards.add_to_draw(Card{"j#0", "sha", Suit::Spade, 8});
+
+    TestDecider decider;
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(a->get_hp() == 1);  // 闪电雷伤 3
+    CHECK(b->get_hp() == 1);  // 雷伤命中横置者，经连环传导
     CHECK_FALSE(a->get_chained());
     CHECK_FALSE(b->get_chained());
 }

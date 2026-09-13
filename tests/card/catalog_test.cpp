@@ -523,6 +523,12 @@ TEST_CASE("card: real standard deck loads to 108 copies")
     REQUIRE(taoyuan.unwrap()->effect.is_some());
     CHECK(taoyuan.unwrap()->effect.unwrap().kind == CardEffectKind::Heal);
     CHECK(taoyuan.unwrap()->effect.unwrap().scope.contains(Scope::All));
+
+    // 闪电判定成功造成雷电伤害：字段与卡面文案一致，供属性传导区分
+    auto shandian = cat.find("shandian");
+    REQUIRE(shandian.is_some());
+    REQUIRE(shandian.unwrap()->judge.is_some());
+    CHECK(shandian.unwrap()->judge.unwrap().damage_type == DamageType::Thunder);
 }
 
 TEST_CASE("card: junzheng skeleton deck loads elemental slashes")

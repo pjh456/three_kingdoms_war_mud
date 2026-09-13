@@ -2,7 +2,8 @@
  * @file deck_hash.hpp
  * @brief 牌表指纹：对目录语义字段做 FNV-1a（存读档一致性校验）。
  * @note 指纹是持久化契约：初值、质数与字段哈希顺序决定旧档能否读入，改动须
- *       同步存档版本与迁移策略。
+ *       同步存档版本与迁移策略；判定属性尚未数据化时期写出的历史值经降级模式
+ *       重算，由 reader 一并接受。
  */
 
 #ifndef INCLUDE_TKW_SAVE_DECK_HASH_HPP
@@ -36,8 +37,14 @@ namespace tkw
             }
         }
 
-        /** @brief 牌表指纹：对目录语义字段做 FNV-1a（读档校验一致性）。 */
-        inline std::uint64_t deck_hash(const card::CardDefCatalog &catalog)
+        /**
+         * @brief 牌表指纹：对目录语义字段做 FNV-1a（读档校验一致性）。
+         * @param include_judge_damage_type 为真（默认）时 judge 的显式非普通属性参与哈希；
+         *        为假时跳过该字段，用于重算「判定属性尚未数据化」时期写出的历史标准档指纹。
+         */
+        inline std::uint64_t deck_hash(
+            const card::CardDefCatalog &catalog,
+            bool include_judge_damage_type = true)
         {
             std::uint64_t h = 1469598103934665603ULL;
             for (const auto &def : catalog)
@@ -94,8 +101,10 @@ namespace tkw
                     // 仅显式距离限制参与哈希：默认无限制不写字段，标准牌表指纹逐位不变
                     if (j.range > 0)
                         detail::hash_int(h, j.range);
-                    // 同 effect：仅显式属性参与哈希，标准牌表指纹不变
-                    if (j.damage_type != card::DamageType::Normal)
+                    // 同 effect：仅显式属性参与哈希；降级模式跳过该字段，
+                    // 以重算判定属性数据化前的历史标准档指纹
+                    if (include_judge_damage_type &&
+                        j.damage_type != card::DamageType::Normal)
                         detail::hash_int(h, static_cast<int>(j.damage_type));
                 }
                 for (auto a : def.abilities)

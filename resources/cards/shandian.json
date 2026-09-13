@@ -13,6 +13,7 @@
         "success": "damage",
         "failure": "pass_to_next",
         "amount": 3,
+        "damage_type": "thunder",
         "scope": "self"
     }
 }

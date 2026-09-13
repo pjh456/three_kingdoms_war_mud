@@ -523,10 +523,33 @@ TEST_CASE("save: a low-bit fingerprint stays a positive integer for legacy reade
 
 TEST_CASE("save: standard deck fingerprint stays pinned")
 {
-    // 新增 effect/judge 可选字段不得改变标准牌表指纹：普通属性不入哈希，
-    // 旧标准档继续可读（deck_hash 是持久化契约单点）。
+    // 闪电数据化为雷电属性后标准指纹更新；判定属性变更仍参与哈希，
+    // 显式改写属性会被检出；历史标准档由降级模式重算并经 reader 兼容。
     auto a = make_game(1);
-    CHECK(save::deck_hash(a->catalog) == 5176414080095780405ULL);
+    CHECK(save::deck_hash(a->catalog) == 4373990461741036563ULL);
+}
+
+TEST_CASE("save: legacy fingerprint without judge damage_type still loads")
+{
+    // 判定属性数据化前写出的标准档指纹等于「降级模式」重算值：reader 双指纹
+    // 接受，旧档可读；再次写出用当前指纹（兼容只在读侧，写出不回退）。
+    auto a = make_game(1);
+    GameSession sa;
+    const std::uint64_t legacy = save::deck_hash(a->catalog, false);
+    CHECK(legacy == 5176414080095780405ULL);
+    const std::uint64_t current = save::deck_hash(a->catalog);
+    REQUIRE(current != legacy);
+
+    std::string text = save::write(*a, sa, "deck");
+    const std::string from = "\"hash\":" + std::to_string(current);
+    const auto pos = text.find(from);
+    REQUIRE(pos != std::string::npos);
+    text.replace(pos, from.size(), "\"hash\":" + std::to_string(legacy));
+
+    auto b = make_game(999);
+    GameSession sb;
+    REQUIRE(save::read(text, *b, sb).is_ok());
+    CHECK(save::write(*b, sb, "deck").find(from) != std::string::npos);
 }
 
 TEST_CASE("save: deck hash errors distinguish structure from mismatch")

@@ -202,7 +202,8 @@ namespace tkw
          * @note 旧档缺失 ai/stats 字段时回落默认，不拒绝；缺 mode/roles 时回落
          *       乱斗 + 空角色表；身份局档要求角色表覆盖全部存活实体且恰含一名
          *       主公，允许保留已阵亡玩家的角色条目；version 接受 1 与含连环状态
-         *       的 2；缺 chained 字段回落 false（旧档可读）；全部校验通过后才落子，
+         *       的 2；缺 chained 字段回落 false（旧档可读）；牌表指纹并接受「判定
+         *       属性尚未数据化」时期写出的历史标准档值；全部校验通过后才落子，
          *       出参 meta 与目标状态同批赋值，早退不污染。
          */
         inline SaveResult<void> read(
@@ -238,7 +239,11 @@ namespace tkw
                                               : std::optional<std::int64_t>{};
             if (!hash)
                 return detail::fail(SaveErrorKind::StructureError, "deck.hash");
-            if (static_cast<std::uint64_t>(*hash) != deck_hash(g.catalog))
+            // 当前指纹；或「判定属性尚未数据化」时期写出的历史标准档指纹
+            // （闪电当时按普通伤哈希）。先算当前值，仅在不匹配时再算降级值。
+            const std::uint64_t stored = static_cast<std::uint64_t>(*hash);
+            if (stored != deck_hash(g.catalog) &&
+                stored != deck_hash(g.catalog, /*include_judge_damage_type=*/false))
                 return detail::fail(SaveErrorKind::DeckMismatch, "deck.hash");
 
             // rules
