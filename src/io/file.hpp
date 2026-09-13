@@ -77,24 +77,18 @@ namespace tkw
         }
 
         /**
-         * @brief 原子写：先写 `<path>.tmp`，再 rename 覆盖目标。
-         * @note 失败时清理临时文件，不破坏已有目标文件。
+         * @brief 原子写：委托平台以同目录唯一临时名写入后原子替换目标。
+         * @note 父目录必须已存在（本模块不建目录）；失败时清理临时文件，
+         *       不破坏已有目标文件，并发写不会互相覆盖临时文件。
+         * @return NotExist（父目录不存在）/ Permission（无写权限）/ IoFailed（其他失败）。
          */
         inline IOResult<void> write_text_atomic(
             const std::filesystem::path &path, std::string_view content)
         {
-            auto tmp = path;
-            tmp += ".tmp";
-            auto w = write_text(tmp, content);
-            if (w.is_err())
-                return w;
-            auto r = plat::Fs::rename(tmp, path, /*overwrite=*/true);
-            if (r.is_err())
-            {
-                (void)plat::Fs::remove_all(tmp);
-                return IOResult<void>::Err(map_error(r.unwrap_err()));
-            }
-            return IOResult<void>::Ok();
+            auto r = plat::Fs::write_file_atomic(path, content);
+            if (r.is_ok())
+                return IOResult<void>::Ok();
+            return IOResult<void>::Err(map_error(r.unwrap_err()));
         }
     }
 }
