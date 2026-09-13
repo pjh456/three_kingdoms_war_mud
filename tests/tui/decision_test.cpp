@@ -125,6 +125,10 @@ TEST_CASE("tui: response panel maps pairs and single cards")
     pair.card = card_of("c1", "shan");
     pair.second_instance_id = "c2";
     pair_req.legal = {pair};
+    tkw::card::Card pair_second = card_of("c2", "tao");
+    pair_second.suit = tkw::card::Suit::Heart;
+    pair_second.number = 3;
+    pair_req.view.hand = {pair.card, pair_second};
 
     const DecisionPanelView pair_panel = make_panel(pair_req);
     CHECK(pair_panel.title.find("响应") != std::string::npos);
@@ -134,6 +138,12 @@ TEST_CASE("tui: response panel maps pairs and single cards")
     CHECK(pair_panel.options[0].card_name.find("闪") != std::string::npos);
     CHECK(pair_panel.options[0].card_meta.find("♠") != std::string::npos);
     CHECK(pair_panel.options[0].card_text.find("抵消") != std::string::npos);
+    CHECK(pair_panel.options[0].second_card_name == "桃");
+    CHECK(pair_panel.options[0].second_card_meta.find("♥") !=
+          std::string::npos);
+    CHECK(pair_panel.options[0].second_card_meta.find("3") != std::string::npos);
+    CHECK(pair_panel.options[0].second_card_text.find("回复") !=
+          std::string::npos);
 
     DecisionChoice pair_choice;
     REQUIRE(make_choice(pair_panel, {0}, false, pair_choice));
@@ -150,6 +160,54 @@ TEST_CASE("tui: response panel maps pairs and single cards")
     REQUIRE(make_choice(single_panel, {0}, false, single_choice));
     REQUIRE(single_choice.instance_id.is_some());
     CHECK(single_choice.instance_id.unwrap() == "c3");
+}
+
+TEST_CASE("tui: play panel folds the pair second card from own hand")
+{
+    const auto catalog = load_catalog();
+    auto req = base_request(DecisionKind::Play, catalog);
+    tkw::game::LegalAction pair;
+    pair.card = card_of("c1", "sha");
+    pair.card.suit = tkw::card::Suit::Spade;
+    pair.card.number = 7;
+    pair.second_instance_id = "c2";
+    tkw::card::Card second = card_of("c2", "tao");
+    second.suit = tkw::card::Suit::Heart;
+    second.number = 3;
+    req.legal = {pair};
+    req.view.hand = {pair.card, second};
+
+    const DecisionPanelView panel = make_panel(req);
+    REQUIRE(panel.options.size() == 1);
+    CHECK(panel.options[0].card_name == "杀");
+    CHECK(panel.options[0].second_card_name == "桃");
+    CHECK(panel.options[0].second_card_meta.find("♥") != std::string::npos);
+    CHECK(panel.options[0].second_card_meta.find("3") != std::string::npos);
+    CHECK(panel.options[0].second_card_text.find("回复") != std::string::npos);
+
+    DecisionChoice out;
+    REQUIRE(make_choice(panel, {0}, false, out));
+    REQUIRE(out.instance_id.is_some());
+    CHECK(out.instance_id.unwrap() == "c1");
+    CHECK(out.second_instance_id == "c2");
+}
+
+TEST_CASE("tui: play panel leaves the pair second card empty when not in hand")
+{
+    const auto catalog = load_catalog();
+    auto req = base_request(DecisionKind::Play, catalog);
+    tkw::game::LegalAction pair;
+    pair.card = card_of("c1", "sha");
+    pair.second_instance_id = "c2";
+    req.legal = {pair};
+    req.view.hand = {pair.card};  // 第二张不在本手牌：不得伪造牌面
+
+    const DecisionPanelView panel = make_panel(req);
+    REQUIRE(panel.options.size() == 1);
+    CHECK(panel.options[0].card_name == "杀");
+    CHECK(panel.options[0].second_card_name.empty());
+    CHECK(panel.options[0].second_card_meta.empty());
+    CHECK(panel.options[0].second_card_text.empty());
 }
 
 TEST_CASE("tui: peach and counter panels carry rescue and trick context")

@@ -87,6 +87,27 @@ namespace
         return view;
     }
 
+    /** 带丈八蛇矛 pair 牌面的出牌面板：主牌杀（♠7）+ 第二张桃（♥3）。 */
+    DecisionPanelView pair_card_view()
+    {
+        DecisionPanelView view;
+        view.kind = tkw::game::ai::DecisionKind::Play;
+        view.actor = "P0";
+        view.title = "出牌阶段";
+        view.allow_pass = true;
+
+        PanelOption opt;
+        opt.text = "杀 c1 + c2";
+        opt.card_name = "杀";
+        opt.card_meta = "♠7";
+        opt.card_text = "出牌阶段限一次，对攻击范围内的一名其他角色使用。";
+        opt.second_card_name = "桃";
+        opt.second_card_meta = "♥3";
+        opt.second_card_text = "出牌阶段，对自己使用，回复1点体力。";
+        view.options.push_back(std::move(opt));
+        return view;
+    }
+
     /** 把面板渲染到固定尺寸 Screen，返回以 \r\n 分行的文本。 */
     std::string render_panel(const DecisionPanel &panel)
     {
@@ -285,6 +306,45 @@ TEST_CASE("tui: decision panel question mark toggles key help")
     CHECK(panel.on_event(ftxui::Event::Character('?')));
     out = render_panel(panel);
     CHECK(out.find("card <序号>") == std::string::npos);
+}
+
+TEST_CASE("tui: decision panel card command notice clears when buffer empties")
+{
+    DecisionPanel panel;
+    int submits = 0;
+    panel.set_on_submit(
+        [&](std::vector<std::size_t>, bool)
+        {
+            ++submits;
+            return true;
+        });
+    panel.show(card_view(false));
+    REQUIRE(panel.visible());
+
+    CHECK(panel.on_event(ftxui::Event::c));
+    CHECK(render_panel(panel).find("输入序号后回车看牌面") != std::string::npos);
+
+    CHECK(panel.on_event(ftxui::Event::Backspace));  // 退空退出命令输入态
+    CHECK(render_panel(panel).find("输入序号后回车看牌面") == std::string::npos);
+
+    CHECK(panel.on_event(ftxui::Event::Return));  // 回落确认语义不变
+    CHECK(submits == 1);
+    CHECK_FALSE(panel.visible());
+}
+
+TEST_CASE("tui: decision panel card command renders both pair cards")
+{
+    DecisionPanel panel;
+    panel.show(pair_card_view());
+    REQUIRE(panel.visible());
+
+    type_card(panel, "1");
+    const std::string out = render_panel(panel);
+    CHECK(out.find("牌面：杀") != std::string::npos);
+    CHECK(out.find("♠7") != std::string::npos);
+    CHECK(out.find("桃") != std::string::npos);
+    CHECK(out.find("♥3") != std::string::npos);
+    CHECK(out.find("回复") != std::string::npos);
 }
 
 TEST_CASE("tui: decision panel card command shows the selected card face")

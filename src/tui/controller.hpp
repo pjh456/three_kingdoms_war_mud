@@ -489,8 +489,9 @@ namespace tkw
                 }
 
                 post_snapshot();
-                // MaxRounds 分支已自行输出平局与统计块；置位后不得再落入下方正常
-                // 终局块，否则乱斗同归于尽且越上限时统计块会被写第二遍。
+                // MaxRounds 分支已自行输出平局与统计块；置位后不再落入下方正常终局块。
+                // 该分支只在未终局且越上限（仍有多名存活者）时到达，此局面 session_over
+                // 为假、正常终局块本不会执行，置位作为防御，避免终局判定变化时重复写统计。
                 bool drew = false;
                 while (!cancel_.load() && !tkw::game::session_over(ctx))
                 {

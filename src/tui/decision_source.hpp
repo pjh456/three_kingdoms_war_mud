@@ -37,7 +37,8 @@ namespace tkw
          * @brief 面板候选项：展示文本 + 回填 DecisionChoice 所需的纯值载荷。
          * @note text 在构造面板时由目录一次性解析成展示名，之后不再触目录。
          * @note card_* 三项是把牌面折成的展示纯值（查看牌面用）；对手手牌占位
-         *       候选 hidden 为真且三项恒空，不泄漏隐藏信息。
+         *       候选 hidden 为真且三项恒空，不泄漏隐藏信息。second_card_* 三项
+         *       是丈八蛇矛 pair 第二张牌的同类纯值，只在决策者本手牌内折出。
          */
         struct PanelOption
         {
@@ -50,6 +51,9 @@ namespace tkw
             std::string card_name;          /**< 卡牌展示名；无牌候选为空 */
             std::string card_meta;          /**< 花色点数展示串（如 ♠7）；隐藏/无牌为空 */
             std::string card_text;          /**< 卡牌效果文案；空 = 无说明 */
+            std::string second_card_name;   /**< pair 第二张牌展示名；非 pair 为空 */
+            std::string second_card_meta;   /**< pair 第二张牌花色点数串；非 pair 为空 */
+            std::string second_card_text;   /**< pair 第二张牌效果文案；空 = 无说明 */
             bool hidden = false;            /**< 对手手牌占位：card_* 三项恒空 */
         };
 
@@ -309,6 +313,34 @@ namespace tkw
             }
 
             /**
+             * @brief 把实体牌折成三串展示纯值：牌名、花色点数与效果文案。
+             * @param name 出参：展示名（目录缺失回落 def_id）。
+             * @param meta 出参：花色点数展示串（如 ♠7）。
+             * @param text 出参：效果文案；目录缺失或定义无文案时留空。
+             * @param req  决策请求；目录仅在此函数内被只读。
+             * @param c    实体牌；def_id 为空（隐藏占位槽）时三串原样不动。
+             * @note 产物为字符串，不持目录指针；效果文案缺失留空，由渲染侧回落
+             *       「（无说明）」。
+             */
+            inline void fill_card_strings(
+                std::string &name, std::string &meta, std::string &text,
+                const tkw::game::ai::DecisionRequest &req,
+                const tkw::card::Card &c)
+            {
+                if (c.def_id.empty())
+                    return;
+
+                name = tkw::card::display_name(req.catalog, c.def_id);
+                if (req.catalog)
+                {
+                    const auto def = req.catalog->find(c.def_id);
+                    if (def.is_some())
+                        text = def.unwrap()->text;
+                }
+                meta = card_meta(c);
+            }
+
+            /**
              * @brief 把实体牌折成候选的展示纯值：牌名、花色点数与效果文案。
              * @param opt 出参：就地写入 card_name/card_meta/card_text。
              * @param req 决策请求；目录缺失时只填牌名与花色点数。
@@ -320,17 +352,31 @@ namespace tkw
                 PanelOption &opt, const tkw::game::ai::DecisionRequest &req,
                 const tkw::card::Card &c)
             {
-                if (c.def_id.empty())
-                    return;
+                fill_card_strings(opt.card_name, opt.card_meta, opt.card_text, req,
+                                  c);
+            }
 
-                opt.card_name = tkw::card::display_name(req.catalog, c.def_id);
-                if (req.catalog)
-                {
-                    const auto def = req.catalog->find(c.def_id);
-                    if (def.is_some())
-                        opt.card_text = def.unwrap()->text;
-                }
-                opt.card_meta = card_meta(c);
+            /**
+             * @brief 折 pair 第二张牌的展示纯值：在本手牌内按 instance_id 查。
+             * @param opt         出参：命中时写入 second_card_* 三项。
+             * @param req         决策请求；只读 req.view.hand。
+             * @param instance_id 第二张实体牌的 instance_id。
+             * @note 只查决策者自己的手牌；未命中时三字段留空、渲染侧回落只显
+             *       主牌，不因平行数组缺口折出假牌面。pair 恒来自决策者本手牌，
+             *       不泄漏对手信息。
+             */
+            inline void fill_second_card_fields(
+                PanelOption &opt, const tkw::game::ai::DecisionRequest &req,
+                const std::string &instance_id)
+            {
+                for (const auto &c : req.view.hand)
+                    if (c.instance_id == instance_id)
+                    {
+                        fill_card_strings(opt.second_card_name,
+                                          opt.second_card_meta,
+                                          opt.second_card_text, req, c);
+                        return;
+                    }
             }
 
             /**
@@ -404,6 +450,9 @@ namespace tkw
                     opt.second_instance_id = act.second_instance_id;
                     opt.targets = act.targets;
                     detail::fill_card_fields(opt, req, act.card);
+                    if (!act.second_instance_id.empty())
+                        detail::fill_second_card_fields(opt, req,
+                                                        act.second_instance_id);
                     panel.options.push_back(std::move(opt));
                 }
                 break;
@@ -425,6 +474,8 @@ namespace tkw
                         opt.instance_id = act.card.instance_id;
                         opt.second_instance_id = act.second_instance_id;
                         detail::fill_card_fields(opt, req, act.card);
+                        detail::fill_second_card_fields(opt, req,
+                                                        act.second_instance_id);
                         panel.options.push_back(std::move(opt));
                     }
                 }

@@ -228,6 +228,8 @@ namespace tkw
             {
                 if (!compose_.empty())
                     compose_.pop_back();
+                if (compose_.empty())
+                    notice_.clear();  // 退出 card 输入态：不留「输入序号…」提示
                 return true;
             }
 
@@ -367,12 +369,28 @@ namespace tkw
                     "牌面：" + (opt.card_name.empty() ? opt.text : opt.card_name);
                 if (!opt.card_meta.empty())
                     face += "  " + opt.card_meta;
+                if (!opt.second_card_name.empty())
+                    face += "  +  " + opt.second_card_name;
+                if (!opt.second_card_meta.empty())
+                    face += "  " + opt.second_card_meta;
                 rows.push_back(ftxui::text(face) | ftxui::dim);
 
-                std::string desc = opt.hidden
-                                       ? "（未知手牌，无法查看）"
-                                       : (opt.card_text.empty() ? "（无说明）"
-                                                                : opt.card_text);
+                std::string desc;
+                if (opt.hidden)
+                    desc = "（未知手牌，无法查看）";
+                else
+                {
+                    if (!opt.card_text.empty())
+                        desc = opt.card_text;
+                    if (!opt.second_card_text.empty())
+                    {
+                        if (!desc.empty())
+                            desc += "  /  ";
+                        desc += opt.second_card_text;
+                    }
+                    if (desc.empty())
+                        desc = "（无说明）";
+                }
                 rows.push_back(ftxui::paragraph("说明：" + desc) | ftxui::dim |
                                ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, 3));
             }
