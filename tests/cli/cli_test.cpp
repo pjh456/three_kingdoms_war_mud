@@ -878,11 +878,82 @@ TEST_CASE("cli: audit/cards/simulate reject --human")
         CHECK(r.error.find("不支持 --human") != std::string::npos);
     }
 
-    // 不带 --human 时行为不变（一次性命令不继承 session.base，显式给牌表目录）
+    // 不带 --human 时行为不变（只读/批量命令继承启动牌表，显式 --deck 仍覆盖）
     const std::string deck = TKW_TEST_RESOURCE_DIR;
     CHECK(repl.run("audit --deck " + deck).ok);
     CHECK(repl.run("cards --deck " + deck).ok);
     CHECK(repl.run("simulate 1 2 --deck " + deck).ok);
+}
+
+TEST_CASE("cli: repl read-only commands inherit startup deck")
+{
+    Repl repl;
+
+    // 自建 mini 牌表：目录名区别于内置 resources，排除 cwd 恰为源码根时命中的假绿。
+    const std::filesystem::path dir = temp_dir("tkw_cli_inherit_deck");
+    const std::filesystem::path missing = temp_dir("tkw_cli_inherit_missing");
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::remove_all(missing, ec);
+    REQUIRE(std::filesystem::create_directories(dir / "cards"));
+    REQUIRE(tkw::io::write_text(
+                dir / "deck.json", R"({"name":"inherit","cards":["h0"]})")
+                .is_ok());
+    REQUIRE(tkw::io::write_text(
+                dir / "cards" / "h0.json",
+                R"({"id":"h0","name":"继承测","type":"basic",)"
+                R"("copies":[{"suit":"spade","number":7}]})")
+                .is_ok());
+
+    // 启动牌表被 cards/rules/audit 继承（改动前三者回落 resources）。
+    repl.session.base.deck = dir;
+    auto cards = repl.run("cards");
+    CHECK(cards.ok);
+    CHECK(cards.out.find("牌表: " + dir.string()) != std::string::npos);
+    CHECK(cards.out.find("继承测(h0)") != std::string::npos);
+
+    auto rules = repl.run("rules");
+    CHECK(rules.ok);
+    CHECK(rules.out.find("牌表: " + dir.string()) != std::string::npos);
+
+    auto audit = repl.run("audit");
+    CHECK(audit.ok);
+    CHECK(audit.out.find("牌表: " + dir.string()) != std::string::npos);
+
+    // 行内 --deck 仍优先于启动选项。
+    auto overridden =
+        repl.run("cards --deck " + std::string(TKW_TEST_RESOURCE_DIR));
+    CHECK(overridden.ok);
+    CHECK(overridden.out.find("牌表: " + std::string(TKW_TEST_RESOURCE_DIR)) !=
+          std::string::npos);
+    CHECK(overridden.out.find("标准版") != std::string::npos);
+
+    // 启动 --human 的座位不被只读命令继承（否则被 reject_humans 误拒）；
+    // 行内显式 --human 仍须被拒绝。
+    repl.session.base.humans = {"P0"};
+    CHECK(repl.run("cards").ok);
+    CHECK(repl.run("rules").ok);
+    CHECK(repl.run("audit").ok);
+    auto explicit_human = repl.run("cards --human P0");
+    CHECK_FALSE(explicit_human.ok);
+    CHECK(explicit_human.error.find("不支持 --human") != std::string::npos);
+
+    // deal/simulate 同样继承启动牌表：指向不存在的目录廉价钉住红→绿——改动前两者
+    // 回落 resources 会成功跑局，改动后按 base 目录加载失败。
+    repl.session.base.humans.clear();
+    repl.session.base.deck = missing;
+    auto deal = repl.run("deal 2 1");
+    CHECK_FALSE(deal.ok);
+    CHECK(deal.error.find("加载牌堆失败") != std::string::npos);
+    CHECK(deal.error.find(missing.string()) != std::string::npos);
+
+    auto simulate = repl.run("simulate 1 2");
+    CHECK_FALSE(simulate.ok);
+    CHECK(simulate.error.find("加载牌堆失败") != std::string::npos);
+    CHECK(simulate.error.find(missing.string()) != std::string::npos);
+
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::remove_all(missing, ec);
 }
 
 TEST_CASE("cli: step/run/status/save help lists common options")

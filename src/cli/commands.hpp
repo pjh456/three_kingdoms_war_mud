@@ -114,6 +114,25 @@ namespace tkw
             }
 
             /**
+             * @brief REPL 只读/批量命令的选项合并：继承启动选项，但不继承真人座位。
+             * @param ctx  本行命令的解析上下文。
+             * @param base REPL 启动选项（session.base）。
+             * @return 与 options_from(ctx, base) 同，但先清空 base.humans 再合并：行内
+             *         显式 --human 仍写入（供 reject_humans 拒绝），--no-human 仍清空。
+             * @note 只读/批量命令不运行真人局，若继承启动 --human，reject_humans 会把
+             *       `tkw --human P0 repl` 后的 cards/rules/audit 误拒；故只隔离 humans，
+             *       其余标量（deck/ai/mode/hand/players/seed/verbose…）自然继承。批量
+             *       路径 session.base 为空默认，本函数与 options_from(ctx) 逐字等价。
+             */
+            inline Options options_from_without_humans(
+                ParseContext &ctx, const Options &base)
+            {
+                Options seed = base;
+                seed.humans.clear();
+                return options_from(ctx, seed);
+            }
+
+            /**
              * @brief 解析本次命令是否打印事件日志。
              * @param ctx     本次解析上下文。
              * @param session 当前会话；携带建局命令确定的日志开关。
@@ -1085,8 +1104,11 @@ namespace tkw
             auto &audit = app.add_leaf("audit", "审计牌堆，列出引擎未实现的卡");
             detail::declare_common_options(audit, rules);
             audit.action(
-                [](ParseContext &ctx) -> CliResult<void>
-                { return detail::audit_deck(detail::options_from(ctx)); });
+                [&session](ParseContext &ctx) -> CliResult<void>
+                {
+                    return detail::audit_deck(
+                        detail::options_from_without_humans(ctx, session.base));
+                });
 
             // cards：列出牌表（只读牌堆查询，仅 --deck 生效；公共选项与 audit 同款）
             auto &cards =
@@ -1096,10 +1118,10 @@ namespace tkw
                      "--text", "在每张卡后附效果说明文案")
                 .boolean();
             cards.action(
-                [](ParseContext &ctx) -> CliResult<void>
+                [&session](ParseContext &ctx) -> CliResult<void>
                 {
                     return detail::cards_list(
-                        detail::options_from(ctx),
+                        detail::options_from_without_humans(ctx, session.base),
                         ctx.get_or<bool, fixed_string("text")>(false));
                 });
 
@@ -1110,10 +1132,10 @@ namespace tkw
             rules_cmd.arg<std::string, 0>(
                 "关键词", "按卡名/id/效果文案过滤；省略则列出全部");
             rules_cmd.action(
-                [](ParseContext &ctx) -> CliResult<void>
+                [&session](ParseContext &ctx) -> CliResult<void>
                 {
                     return detail::rules_lookup(
-                        detail::options_from(ctx),
+                        detail::options_from_without_humans(ctx, session.base),
                         ctx.get_or<std::string, 0>(""));
                 });
 
@@ -1123,9 +1145,10 @@ namespace tkw
             deal.arg<int, 0>("players", "玩家数").required();
             deal.arg<int, 1>("seed", "随机种子").required();
             deal.action(
-                [rules](ParseContext &ctx) -> CliResult<void>
+                [rules, &session](ParseContext &ctx) -> CliResult<void>
                 {
-                    Options opt = detail::options_from(ctx);
+                    Options opt =
+                        detail::options_from_without_humans(ctx, session.base);
                     opt.players = ctx.get<int, 0>();
                     opt.seed = static_cast<std::uint32_t>(ctx.get<int, 1>());
                     if (opt.players < rules.min_players ||
@@ -1142,12 +1165,13 @@ namespace tkw
             sim.arg<int, 0>("n", "局数（≥1）").required();
             sim.arg<int, 1>("players", "玩家数（可选，默认 4）");
             sim.action(
-                [rules](ParseContext &ctx) -> CliResult<void>
+                [rules, &session](ParseContext &ctx) -> CliResult<void>
                 {
                     const int n = ctx.get<int, 0>();
                     if (n < 1)
                         return CliFailure{CliError("局数须为正整数")};
-                    Options opt = detail::options_from(ctx);
+                    Options opt =
+                        detail::options_from_without_humans(ctx, session.base);
                     opt.players = ctx.get_or<int, 1>(opt.players);
                     if (opt.players < rules.min_players ||
                         opt.players > rules.max_players)

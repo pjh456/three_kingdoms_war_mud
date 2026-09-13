@@ -737,6 +737,43 @@ add_test(NAME cli_oneshot_deck_source
 set_tests_properties(cli_oneshot_deck_source PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# REPL 只读命令继承启动 --deck：启动指向自建 mini 牌表（非默认 resources）后，
+# cards/rules/audit 输出头应亮明该目录并列出其中的卡。
+add_test(NAME cli_repl_readonly_inherit_deck
+         COMMAND sh -c
+                 "d=$(mktemp -d); mkdir -p $d/cards; printf '%s' '{\"name\":\"inherit\",\"cards\":[\"h0\"]}' > $d/deck.json; printf '%s' '{\"id\":\"h0\",\"name\":\"继承测\",\"type\":\"basic\",\"copies\":[{\"suit\":\"spade\",\"number\":7}]}' > $d/cards/h0.json; \
+                  out=$(printf 'cards\\nrules\\naudit\\nquit\\n' | $<TARGET_FILE:tkw> --deck $d repl --autosave '' 2>&1); rc=$?; rm -rf $d; \
+                  printf '%s' \"$out\" | grep -Fq \"牌表: $d\" && printf '%s' \"$out\" | grep -q '继承测' && [ $rc -eq 0 ]")
+set_tests_properties(cli_repl_readonly_inherit_deck PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 负向硬约束：启动 --human 的座位不得被只读命令继承，否则 cards 会被误拒。
+add_test(NAME cli_repl_readonly_no_human_inherit
+         COMMAND sh -c
+                 "d=$(mktemp -d); mkdir -p $d/cards; printf '%s' '{\"name\":\"inherit\",\"cards\":[\"h0\"]}' > $d/deck.json; printf '%s' '{\"id\":\"h0\",\"name\":\"继承测\",\"type\":\"basic\",\"copies\":[{\"suit\":\"spade\",\"number\":7}]}' > $d/cards/h0.json; \
+                  out=$(printf 'cards\\nquit\\n' | $<TARGET_FILE:tkw> --human P0 --deck $d repl --autosave '' 2>&1); rc=$?; rm -rf $d; \
+                  printf '%s' \"$out\" | grep -Fq \"牌表: $d\" && ! printf '%s' \"$out\" | grep -q '不支持 --human' && [ $rc -eq 0 ]")
+set_tests_properties(cli_repl_readonly_no_human_inherit PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 行内 --deck 仍优先于启动选项。
+add_test(NAME cli_repl_readonly_inline_deck_override
+         COMMAND sh -c
+                 "d=$(mktemp -d); mkdir -p $d/cards; printf '%s' '{\"name\":\"inherit\",\"cards\":[\"h0\"]}' > $d/deck.json; printf '%s' '{\"id\":\"h0\",\"name\":\"继承测\",\"type\":\"basic\",\"copies\":[{\"suit\":\"spade\",\"number\":7}]}' > $d/cards/h0.json; \
+                  out=$(printf 'cards --deck resources\\nquit\\n' | $<TARGET_FILE:tkw> --deck $d repl --autosave '' 2>&1); rc=$?; rm -rf $d; \
+                  printf '%s' \"$out\" | grep -q '牌表: resources' && [ $rc -eq 0 ]")
+set_tests_properties(cli_repl_readonly_inline_deck_override PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# REPL 批量命令（deal/simulate）继承启动 --deck：不存在的目录应在 REPL 内报
+# 加载失败（REPL 错误不改变进程退出码），而非静默回落 resources 跑局。
+add_test(NAME cli_repl_batch_inherit_deck_fail
+         COMMAND sh -c
+                 "out=$(printf 'deal 2 1\\nsimulate 1 2\\nquit\\n' | $<TARGET_FILE:tkw> --deck /nonexistent-inherit repl --autosave '' 2>&1); rc=$?; \
+                  printf '%s' \"$out\" | grep -q '加载牌堆失败' && printf '%s' \"$out\" | grep -Fq '/nonexistent-inherit' && [ $rc -eq 0 ]")
+set_tests_properties(cli_repl_batch_inherit_deck_fail PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 可选 TUI 端到端：仅 TKW_ENABLE_TUI=ON 时注册。add_test 里的 $<TARGET_FILE:tkw-tui>
 # 在 generate 期求值，tui/ 虽后于 tests/ 注册也能解析；门控必须用根级 option 变量，
 # configure 到此 if(TARGET tkw-tui) 尚为假。默认 OFF 时本块整体不存在，ctest 与
