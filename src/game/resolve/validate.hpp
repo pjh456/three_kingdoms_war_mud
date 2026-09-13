@@ -83,6 +83,16 @@ namespace tkw
             switch (scope)
             {
             case card::Scope::Self:
+                // 桃：满体力时不可选自己（出牌阶段不能空放）；实体已移除时
+                // 保持旧行为。濒死救场走 combat 的独立入口，不经本合法集
+                if (eff.kind == card::CardEffectKind::Heal)
+                {
+                    const auto self = ctx.entities->find(player);
+                    if (self.is_some() &&
+                        self.unwrap()->get_hp() >=
+                            self.unwrap()->get_hp_bar().get_max())
+                        break;
+                }
                 out.push_back(player);
                 break;
             case card::Scope::All:

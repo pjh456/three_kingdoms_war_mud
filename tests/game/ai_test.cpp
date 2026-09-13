@@ -502,8 +502,8 @@ TEST_CASE("ai: human decider plays the zhangba two-card action")
     g.give("a", "wuzhong", "x#1");
     g.give("a", "tao", "x#2");
 
-    // legal 顺序：1) 无中生有 2) 桃 3) 丈八两张当杀
-    std::istringstream in("play 3\n");
+    // legal 顺序：1) 无中生有 2) 丈八两张当杀（满体力桃不列为候选）
+    std::istringstream in("play 2\n");
     std::ostringstream out;
     HumanDecider dec(in, out);
     RequestDecisionSource src(dec);
@@ -880,20 +880,21 @@ TEST_CASE("ai: human decider labels the target card zone")
 TEST_CASE("ai: routed ai sends human actor to human and falls back")
 {
     TestGame g("deck");
-    g.add_player("a", 0, 4);
+    auto *a = g.add_player("a", 0, 4);
     g.add_player("b", 1, 4);
+    a->take_damage("b", 1, false);  // 受伤：桃成为合法候选，真人可显式选杀
     g.give("a", "tao", "t#1");
     g.give("a", "sha", "s#1");
     g.give("b", "sha", "s#2");
 
-    std::istringstream in("play 1\n");
+    std::istringstream in("play 2\n");
     std::ostringstream out;
     RoutedAI routed({"a"}, in, out);
 
     const tkw::game::TurnContext ta{"a", 0, 1};
     const auto a_choice = routed.choose_play(g.ctx, ta);
     REQUIRE(a_choice.is_some());
-    CHECK(a_choice.unwrap().instance_id == "t#1");
+    CHECK(a_choice.unwrap().instance_id == "s#1");
 
     const tkw::game::TurnContext tb{"b", 0, 1};
     const auto b_choice = routed.choose_play(g.ctx, tb);

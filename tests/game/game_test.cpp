@@ -263,6 +263,116 @@ TEST_CASE("game: valid_targets by scope and range")
     CHECK(t_nm == std::vector<std::string>({"b", "c", "d"}));
 }
 
+TEST_CASE("game: full hp self heal is rejected")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "tao", "t#0");
+
+    const auto def = g.catalog.find("tao").unwrap();
+    const auto card = g.cards.hand("a")[0];
+    const TurnContext turn{"a", 0, 1};
+
+    auto r = validate_play_action(
+        g.ctx, "a", *def, card, std::vector<std::string>{"a"}, turn);
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == EffectError::InvalidTarget);
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"t#0", {"a"}}};
+    auto tr = execute_turn(g.ctx, decider, "a");
+    REQUIRE(tr.is_err());
+    CHECK(tr.unwrap_err() == TurnError::InvalidTarget);
+    CHECK(g.cards.hand_size("a") == 1);  // 拒绝不消耗
+    CHECK(g.cards.discard_size() == 0);  // 桃未进弃牌堆
+}
+
+TEST_CASE("game: full hp self heal is not enumerated")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "tao", "t#0");
+
+    CHECK(legal_actions(g.ctx, "a", TurnContext{"a", 0, 1}).empty());
+}
+
+TEST_CASE("game: wounded self heal is allowed and applied")
+{
+    TestGame g("deck");
+    auto *a = g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    a->take_damage("b", 1, false);  // a: 4 → 3
+    g.give("a", "tao", "t#0");
+
+    const auto def = g.catalog.find("tao").unwrap();
+    CHECK(valid_targets(g.ctx, "a", *def) ==
+          std::vector<std::string>({"a"}));
+
+    const auto acts = legal_actions(g.ctx, "a", TurnContext{"a", 0, 1});
+    REQUIRE(acts.size() == 1);
+    CHECK(acts[0].card.def_id == "tao");
+    CHECK(acts[0].targets == std::vector<std::string>({"a"}));
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"t#0", {"a"}}};
+    auto tr = execute_turn(g.ctx, decider, "a");
+    REQUIRE(tr.is_ok());
+    CHECK(a->get_hp() == 4);
+    CHECK(g.cards.hand_size("a") == 0);
+    CHECK(g.cards.discard_size() == 1);
+}
+
+TEST_CASE("game: dying rescue ignores the full hp self heal rule")
+{
+    TestGame g("deck");
+    auto *a = g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "tao", "t#0");
+
+    TestDecider decider;
+    decider.save = true;
+    deal_damage(g.ctx, decider, "b", "a", 4);  // a: 4 → 0
+    CHECK(a->get_hp() == 1);                   // 桃救回
+    CHECK(g.entities.find("a").is_some());
+    CHECK(g.cards.hand_size("a") == 0);        // 桃已消耗
+}
+
+TEST_CASE("game: full hp self heal rule does not filter other self or all cards")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.give("a", "wuzhong", "w#0");
+    g.give("a", "taoyuan", "ty#0");
+
+    const auto wuzhong = g.catalog.find("wuzhong").unwrap();
+    const auto taoyuan = g.catalog.find("taoyuan").unwrap();
+    CHECK(valid_targets(g.ctx, "a", *wuzhong) ==
+          std::vector<std::string>({"a"}));
+    CHECK(valid_targets(g.ctx, "a", *taoyuan) ==
+          std::vector<std::string>({"a", "b", "c"}));
+
+    bool saw_wu = false, saw_ty = false;
+    for (const auto &act : legal_actions(g.ctx, "a", TurnContext{"a", 0, 1}))
+    {
+        if (act.card.def_id == "wuzhong")
+        {
+            saw_wu = true;
+            CHECK(act.targets == std::vector<std::string>({"a"}));
+        }
+        if (act.card.def_id == "taoyuan")
+        {
+            saw_ty = true;
+            CHECK(act.targets == std::vector<std::string>({"a", "b", "c"}));
+        }
+    }
+    CHECK(saw_wu);
+    CHECK(saw_ty);
+}
+
 TEST_CASE("game: sha hits when no jink")
 {
     TestGame g("deck");
