@@ -108,6 +108,32 @@ namespace tkw
                 }
             };
 
+            /**
+             * @brief 群体效果目标重排：从使用者下家起、按座位序环绕。
+             * @return 只重排不改集合：targets 元素一个不少，顺序按座位环排列。
+             * @note 与延时锦囊移送同口径 order_from(next(player))；scope=All 含
+             *       使用者时使用者排在环绕末尾。不在存活座位环内的目标按原序追加
+             *       （校验已保证 targets ⊆ 存活合法集，兜底不可达，仅防静默丢目标）。
+             */
+            inline std::vector<std::string> aoe_order_from_next(
+                const EffectInvocation &e)
+            {
+                std::vector<std::string> ordered;
+                ordered.reserve(e.targets.size());
+                for (const auto &id :
+                     e.ctx.entities->order_from(e.ctx.entities->next(e.player)))
+                    if (std::find(e.targets.begin(), e.targets.end(), id) !=
+                        e.targets.end())
+                        ordered.push_back(id);
+
+                // 兜底：不在座位环内的目标按原序追加（不丢目标）
+                for (const auto &t : e.targets)
+                    if (std::find(ordered.begin(), ordered.end(), t) ==
+                        ordered.end())
+                        ordered.push_back(t);
+                return ordered;
+            }
+
             /** @brief 杀：逐目标按实体杀结算。 */
             inline GameResult<void> resolve_damage(const EffectInvocation &e)
             {
@@ -118,10 +144,11 @@ namespace tkw
                 return GameResult<void>::Ok();
             }
 
-            /** @brief 群体伤害：逐目标开单元素无懈窗口，未响应则受伤。 */
+            /** @brief 群体伤害：从使用者下家起逐目标开单元素无懈窗口，未响应则受伤。 */
             inline GameResult<void> resolve_aoe_damage(const EffectInvocation &e)
             {
-                for (const auto &t : e.targets)
+                const auto ordered = aoe_order_from_next(e);
+                for (const auto &t : ordered)
                 {
                     if (e.nullified({t}))
                         continue;
@@ -141,10 +168,11 @@ namespace tkw
                 return GameResult<void>::Ok();
             }
 
-            /** @brief 群体回复：逐目标开单元素无懈窗口，未被抵消则回血。 */
+            /** @brief 群体回复：从使用者下家起逐目标开单元素无懈窗口，未被抵消则回血。 */
             inline GameResult<void> resolve_heal(const EffectInvocation &e)
             {
-                for (const auto &t : e.targets)
+                const auto ordered = aoe_order_from_next(e);
+                for (const auto &t : ordered)
                 {
                     if (e.nullified({t}))
                         continue;

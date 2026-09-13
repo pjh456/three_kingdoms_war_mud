@@ -24,7 +24,7 @@ namespace
 
     // 攻击优先档自钉值（2p seed 1 / 4p seed 42，实跑钉入，见对应用例注释）
     constexpr std::size_t AGGRESSIVE_2P_LINES = 229;
-    constexpr std::uint64_t AGGRESSIVE_2P_FP = 7749661946685608400ULL;
+    constexpr std::uint64_t AGGRESSIVE_2P_FP = 3431812885667532740ULL;
     constexpr std::size_t AGGRESSIVE_4P_LINES = 391;
     constexpr std::uint64_t AGGRESSIVE_4P_FP = 5816388611200269218ULL;
 
@@ -230,13 +230,20 @@ TEST_CASE("replay: golden fingerprints pin the rule semantics")
     // 均未装备八卦阵：simple 两线的对手无八卦阵；aggressive 两线的 P1 抽到
     // 八卦阵后当回合即弃置、从未装备。装备八卦阵的一方均为万箭使用者 P0，
     // 而 AllOthers 目标不含使用者；P0 装备八卦阵也都晚于其打出万箭。
+    //
+    // AOE 从使用者下家起按座位序结算后的核对（新旧日志逐行 diff 核对过）：
+    // - 2 人 seed 1：逐字节不变——唯一的万箭目标为 P1，单目标无重排。
+    // - 4 人 seed 42：404 行不变、指纹更新。首个分叉在第 36 行：P1 南蛮的
+    //   响应顺序由 P0 → P2 → P3（创建/座位升序）变为 P2 → P3 → P0（使用者
+    //   P1 的下家 P2 起按座位环绕）。三方均以杀响应免伤、无状态级联，故仅
+    //   弃置行顺序变化，行数不变。
     const auto two = run_game(1, 2);
     CHECK(two.size() == 69);
     CHECK(fingerprint(two) == 9283070076194552029ULL);
 
     const auto four = run_game(42, 4);
     CHECK(four.size() == 404);
-    CHECK(fingerprint(four) == 8258587827075898135ULL);
+    CHECK(fingerprint(four) == 11718862908669055177ULL);
 }
 
 TEST_CASE("replay: four-player seed 42 reaches a decisive result")
@@ -315,6 +322,11 @@ TEST_CASE("replay: aggressive ai is deterministic and pins its golden fingerprin
     // 227 → 229 行。首个分叉在 P1 弃牌阶段：P1 被万箭打到 4→3，旧上限 4
     // 只弃赤兔，新上限 3 再弃青釭剑；P1 失去青釭剑后无法再装备，后续装备/
     // 伤害链级联，行数增加 2。
+    //
+    // AOE 从使用者下家起按座位序结算后的核对（新旧日志逐行 diff 核对过）：
+    // 229 行不变、指纹更新。首个分叉在 P0 的桃园：scope=All 含使用者，使用者
+    // P0 的下家 P1 先回血、P0 排最后；旧按创建/座位升序为 P0 → P1。两人各回
+    // 1 点、无状态级联，仅回血事件顺序变化。
     tkw::game::AggressiveAI aggr;
     const auto a = run_game_ai(aggr, 1, 2);
     const auto b = run_game_ai(aggr, 1, 2);

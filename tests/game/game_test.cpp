@@ -18,6 +18,7 @@
 #include "entity/hp.hpp"
 #include "entity/manager.hpp"
 #include "event/event_bus.hpp"
+#include "event_log.hpp"
 #include "game/core/card_event.hpp"
 #include "game/core/context.hpp"
 #include "game/core/decision.hpp"
@@ -52,6 +53,7 @@ namespace
     using tkw::entity::Gender;
     using tkw::entity::Hp;
 
+    using tkw::test::EventLog;
     using tkw::test::TestDecider;
     using tkw::test::TestGame;
 
@@ -583,6 +585,96 @@ TEST_CASE("game: aoe accepts exact full target set")
     CHECK(b->get_hp() == 3);
     CHECK(c->get_hp() == 3);
     CHECK(d->get_hp() == 3);
+}
+
+TEST_CASE("game: aoe damage resolves from the user's next player in seat order")
+{
+    TestGame g("deck");
+    auto *a = g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    auto *d = g.add_player("d", 3, 4);
+    g.give("c", "nanman", "n#0");
+
+    EventLog log(g.bus);
+    TestDecider decider;  // 不响应
+    const auto played = g.cards.hand("c")[0];
+    auto r = resolve_play(g.ctx, decider, "c", played, {"a", "b", "d"});
+    REQUIRE(r.is_ok());
+
+    // 使用者 c 的下家是 d，按座位环 d → a → b 结算（旧实现为传入序 a → b → d）
+    std::vector<std::string> dmg;
+    for (const auto &l : log.lines())
+        if (l.rfind("damaged ", 0) == 0)
+            dmg.push_back(l);
+    REQUIRE(dmg.size() == 3);
+    CHECK(dmg[0] == "damaged d by c 1");
+    CHECK(dmg[1] == "damaged a by c 1");
+    CHECK(dmg[2] == "damaged b by c 1");
+
+    CHECK(a->get_hp() == 3);
+    CHECK(b->get_hp() == 3);
+    CHECK(c->get_hp() == 4);  // 使用者不进入 AllOthers 目标
+    CHECK(d->get_hp() == 3);
+    CHECK(g.cards.discard_size() == 1);  // 南蛮进弃牌堆
+}
+
+TEST_CASE("game: taoyuan heals from the user's next player with the user last")
+{
+    TestGame g("deck");
+    auto *a = g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    auto *d = g.add_player("d", 3, 4);
+    a->take_damage("a", 1, false);
+    b->take_damage("a", 1, false);
+    c->take_damage("a", 1, false);
+    d->take_damage("a", 1, false);
+    g.give("c", "taoyuan", "t#0");
+
+    EventLog log(g.bus);
+    TestDecider decider;
+    const auto played = g.cards.hand("c")[0];
+    auto r = resolve_play(g.ctx, decider, "c", played, {"a", "b", "c", "d"});
+    REQUIRE(r.is_ok());
+
+    // 使用者 c 的下家是 d，座位环绕 d → a → b → c（scope=All 使用者排最后）
+    std::vector<std::string> healed;
+    for (const auto &l : log.lines())
+        if (l.rfind("healed ", 0) == 0)
+            healed.push_back(l);
+    REQUIRE(healed.size() == 4);
+    CHECK(healed[0] == "healed d 1");
+    CHECK(healed[1] == "healed a 1");
+    CHECK(healed[2] == "healed b 1");
+    CHECK(healed[3] == "healed c 1");
+}
+
+TEST_CASE("game: aoe order follows the seat ring not creation order")
+{
+    // 创建序 a,b,c,d；座位 a=0、c=1、b=2、d=3（座位环 a → c → b → d）。
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 2, 4);
+    g.add_player("c", 1, 4);
+    g.add_player("d", 3, 4);
+    g.give("c", "nanman", "n#0");
+
+    EventLog log(g.bus);
+    TestDecider decider;
+    const auto played = g.cards.hand("c")[0];
+    auto r = resolve_play(g.ctx, decider, "c", played, {"a", "b", "d"});
+    REQUIRE(r.is_ok());
+
+    // 使用者 c 的下家是 b：b → d → a（创建序 a → b → d 不生效）
+    std::vector<std::string> dmg;
+    for (const auto &l : log.lines())
+        if (l.rfind("damaged ", 0) == 0)
+            dmg.push_back(l);
+    REQUIRE(dmg.size() == 3);
+    CHECK(dmg[0] == "damaged b by c 1");
+    CHECK(dmg[1] == "damaged d by c 1");
+    CHECK(dmg[2] == "damaged a by c 1");
 }
 
 TEST_CASE("game: card not in hand is rejected without effect")
