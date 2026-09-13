@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <sstream>
@@ -90,6 +91,16 @@ namespace
     std::filesystem::path temp_dir(const std::string &name)
     {
         return std::filesystem::temp_directory_path() / name;
+    }
+
+    /** 子串出现次数：用于断言角色标签的可见/占位数量。 */
+    std::size_t count_substr(const std::string &hay, const std::string &needle)
+    {
+        std::size_t n = 0;
+        for (std::size_t p = hay.find(needle); p != std::string::npos;
+             p = hay.find(needle, p + needle.size()))
+            ++n;
+        return n;
     }
 }
 
@@ -841,6 +852,40 @@ TEST_CASE("cli: identity status shows mode and roles")
     CHECK(created.out.find("角色 忠臣") != std::string::npos);
     CHECK(created.out.find("角色 反贼") != std::string::npos);
     CHECK(created.out.find("角色 内奸") != std::string::npos);
+}
+
+TEST_CASE("cli: identity human status hides non-lord non-self roles")
+{
+    Repl repl;
+    // 真人为 P1（非主公）：P0 主公与 P1 自身可见，其余两座应收敛为「未知」。
+    REQUIRE(repl.run("new --mode identity --players 4 --seed 1 --human P1").ok);
+
+    auto status = repl.run("status");
+    REQUIRE(status.ok);
+    CHECK(status.out.find("模式: 身份局") != std::string::npos);
+    CHECK(count_substr(status.out, "角色 ") == 4);      // 每座一个角色字段
+    CHECK(count_substr(status.out, "角色 未知") == 2);  // P2/P3 隐藏
+    CHECK(count_substr(status.out, "角色 主公") == 1);  // P0 主公公开
+    // P1 自身角色可见：4 人配比下恰为忠臣/反贼/内奸之一
+    CHECK(count_substr(status.out, "角色 忠臣") +
+              count_substr(status.out, "角色 反贼") +
+              count_substr(status.out, "角色 内奸") ==
+          1);
+    CHECK(status.out.find("P1 体力 4/4 手牌 4 装备 0 判定 0 角色 未知") ==
+          std::string::npos);
+}
+
+TEST_CASE("cli: identity human status reveals roles once the game is over")
+{
+    Repl repl;
+    REQUIRE(repl.run("new --mode identity --players 4 --seed 1 --human P1").ok);
+    auto ctx = repl.session.game->context();
+    tkw::game::declare_death(ctx, "P0");
+    REQUIRE(tkw::game::session_over(ctx));
+
+    auto status = repl.run("status");
+    REQUIRE(status.ok);
+    CHECK(status.out.find("角色 未知") == std::string::npos);
 }
 
 TEST_CASE("cli: identity new rejects too few players")

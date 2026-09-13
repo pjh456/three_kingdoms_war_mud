@@ -142,8 +142,10 @@ tkw repl
   `run` 跑到结束 → `status` 看状态 → `save s.json` 存档 / `load s.json` 续玩 →
   `quit` 退出；
 - 身份局：`new --mode identity --players 5 --seed 1`（4–8 人）开身份局，`status`
-  显示「模式: 身份局」与逐座角色（主公/忠臣/反贼/内奸），终局按阵营给出
-  「主公阵营胜/反贼阵营胜/内奸胜」；`run`/`deal`/`simulate` 同样支持 `--mode identity`；
+  显示「模式: 身份局」与逐座角色（主公/忠臣/反贼/内奸）；有真人参与（`--human`）
+  且未终局时只显主公与真人座位角色，其余占位「未知」，终局揭示全部；终局按阵营
+  给出「主公阵营胜/反贼阵营胜/内奸胜」；`run`/`deal`/`simulate` 同样支持
+  `--mode identity`；
 - 事件日志：真人参与的对局（`--human`）**默认开启**，全 AI 局默认关闭；用
   `--verbose`/`--no-verbose` 可显式覆盖。REPL 启动带 `--verbose` 时 `new`/`load`
   建局继承该开关；在 `step`/`run` 上行内加 `--no-verbose` 可只关本次输出的日志，

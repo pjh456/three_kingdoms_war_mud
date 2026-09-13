@@ -757,6 +757,16 @@ add_test(NAME cli_identity_save_load_roundtrip
 set_tests_properties(cli_identity_save_load_roundtrip PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# 身份局真人局 status 角色收敛：只显主公（P0）与真人座位，其余「未知」。
+add_test(NAME cli_identity_human_status_hides_roles
+         COMMAND sh -c
+                 "out=$(printf 'new --mode identity --players 4 --seed 1 --human P0\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> --no-verbose repl --autosave '' 2>&1); rc=$?; \
+                  printf '%s' \"$out\" | grep -q '角色 主公' && \
+                  printf '%s' \"$out\" | grep -q '角色 未知' && \
+                  ! printf '%s' \"$out\" | grep -qE '角色 (忠臣|反贼|内奸)' && [ $rc -eq 0 ]")
+set_tests_properties(cli_identity_human_status_hides_roles PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # status 展示本会话牌表来源（默认 resources；REPL 启动选项被行内建局继承）。
 add_test(NAME cli_status_deck_source
          COMMAND sh -c

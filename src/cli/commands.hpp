@@ -553,9 +553,10 @@ namespace tkw
              *       敌对尽灭）判定，胜者经 game_end_label（乱斗 winner_label，
              *       身份局阵营标签）；仅进行中打印「下一回合」与牌表来源，已达
              *       回合上限但未终结时追加一行提示。身份局额外打印模式行与逐座
-             *       角色，乱斗分支不新增任何行。局面段中 `s.humans` 命中的座位
-             *       手牌字段经与决策窗口同一边界展开为己方牌名，其余座位仍只给
-             *       数量。
+             *       角色，乱斗分支不新增任何行；有真人参与且未终局时角色收敛为
+             *       主公与真人座位可见、其余占位「未知」，全 AI 局与终局公开
+             *       全部角色。局面段中 `s.humans` 命中的座位手牌字段经与决策窗口
+             *       同一边界展开为己方牌名，其余座位仍只给数量。
              */
             inline void print_status(const Session &s)
             {
@@ -603,6 +604,10 @@ namespace tkw
                 std::cout << "  局面:\n";
                 const std::set<std::string> human_seats(s.humans.begin(),
                                                         s.humans.end());
+                // 真人参与且未终局时收敛身份展示：仅主公与真人座位可见，其余以
+                // 「未知」占位；全 AI 对局与终局一律公开，保持既有输出与身份局
+                // 终局亮身份的惯例。
+                const bool reveal_all_roles = s.humans.empty() || over;
                 for (const auto &e : *ctx.entities)
                 {
                     const std::string &id = e->get_id();
@@ -616,9 +621,17 @@ namespace tkw
                     std::cout << " 装备 " << ctx.cards->equip_size(id)
                               << " 判定 " << ctx.cards->judge_size(id);
                     if (tkw::game::mode_of(ctx) == tkw::game::GameMode::Identity)
+                    {
+                        const tkw::game::Role role =
+                            tkw::game::role_of(ctx, e->get_id());
+                        const bool visible =
+                            reveal_all_roles ||
+                            role == tkw::game::Role::Lord ||
+                            human_seats.count(id) != 0;
                         std::cout << " 角色 "
                                   << role_label_zh(
-                                         tkw::game::role_of(ctx, e->get_id()));
+                                         visible ? role : tkw::game::Role::None);
+                    }
                     std::cout << "\n";
                 }
             }

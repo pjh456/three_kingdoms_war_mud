@@ -175,7 +175,11 @@ namespace tkw
                 return winner.empty() ? "平局（同归于尽）" : winner;
             }
 
-            /** 身份局角色 → 中文展示；Role::None 回落「未知」。 */
+            /**
+             * @brief 身份局角色 → 中文展示。
+             * @note Role::None 回落「未知」；该文案亦作真人局未公开座位的隐藏
+             *       占位（身份局运行中不存在真实无角色）。
+             */
             inline const char *role_label_zh(tkw::game::Role r)
             {
                 switch (r)
