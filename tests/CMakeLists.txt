@@ -439,6 +439,35 @@ add_test(NAME cli_repl_banner
 set_tests_properties(cli_repl_banner PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# REPL 入口引导补「第一局」起手：保留命令列表与退出提示，并给出一条可照抄的建局命令。
+add_test(NAME cli_repl_first_game_banner
+         COMMAND sh -c
+                 "out=$(printf 'quit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); printf '%s' \"$out\" | grep -q '输入 ? 查看命令' && printf '%s' \"$out\" | grep -q 'quit 退出' && printf '%s' \"$out\" | grep -q '第一局' && printf '%s' \"$out\" | grep -q 'new --players 2 --seed 1'")
+set_tests_properties(cli_repl_first_game_banner PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 裸 tkw banner 指向真人第一局：保留「无子命令」，并提示先 new 开局。
+add_test(NAME cli_bare_root_first_game_hint
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> 2>&1); printf '%s' \"$out\" | grep -q '无子命令' && printf '%s' \"$out\" | grep -q 'new 开局'")
+set_tests_properties(cli_bare_root_first_game_hint PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 根帮助示例前置「第一局」三步并指向 rules/card；仍禁带 tkw 前缀的会话流命令。
+add_test(NAME cli_help_root_first_game
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> --help); printf '%s' \"$out\" | grep -q '第一局' && printf '%s' \"$out\" | grep -q 'rules' && ! printf '%s' \"$out\" | grep -q 'tkw new' && ! printf '%s' \"$out\" | grep -q 'tkw save' && printf '%s' \"$out\" | grep -q 'REPL 会话'")
+set_tests_properties(cli_help_root_first_game PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 第一局脚本「说的能做」：seed 1 二人局 P0 首回合手牌 6 > 体力 4 必触发弃牌，
+# pass 结束出牌后 discard 1 2 通过；不钉决策窗口提示原文，与窗口文案解耦。
+add_test(NAME cli_repl_first_game_script_runs
+         COMMAND sh -c
+                 "out=$(printf 'new --players 2 --seed 1\\nstep\\npass\\ndiscard 1 2\\nquit\\n' | $<TARGET_FILE:tkw> --human P0 --no-verbose repl --autosave '' 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '新对局已开始' && printf '%s' \"$out\" | grep -q '出牌阶段' && printf '%s' \"$out\" | grep -q '弃牌' && printf '%s' \"$out\" | grep -q '会话: 进行中' && [ $rc -eq 0 ]")
+set_tests_properties(cli_repl_first_game_script_runs PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # raw 提示符层冒烟（依赖 util-linux script 提供 pty；configure 时缺失则整条不注册）：
 # statux\\x7fs 退格后应派发 status（会话: 无），证明手动回显与退格可用；
 # ne\\x03 在 raw 态被行编辑器接管（echo ^C、清缓冲、重绘提示符、REPL 存活），

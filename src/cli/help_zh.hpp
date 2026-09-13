@@ -165,8 +165,8 @@ namespace tkw
          *       对齐仍由框架负责，避免自造排版。段标题在渲染后再替换，使框架仍按
          *       英文段名选择列宽上限（选项段 32 字节）。选项标注（如 (repeatable)）
          *       保持框架原文。program_name 用完整命令路径，子命令帮助也带 tkw 前缀。
-         *       根帮助示例按「批量一次性」与「REPL 会话」分组：会话流命令只能在
-         *       `tkw repl` 内逐条输入，不带 tkw 前缀。叶子示例只覆盖高频命令，见
+         *       根帮助示例按「第一局」「批量一次性」与「REPL 会话」分组：会话流命令只能
+         *       在 `tkw repl` 内逐条输入，不带 tkw 前缀。叶子示例只覆盖高频命令，见
          *       detail::leaf_help_examples。
          */
         inline std::string render_help_zh(const pjh::cli::BaseCommand &cmd)
@@ -196,6 +196,10 @@ namespace tkw
             if (cmd.parent() == nullptr)
                 text +=
                     "示例:\n"
+                    "  第一局（真人参与，先 tkw --human P0 repl，再逐条输入）:\n"
+                    "    new --players 2 --seed 1 开新局\n"
+                    "    step                     推进一个回合；轮到你按 play/pass/discard 提示操作\n"
+                    "    rules                    查卡牌效果说明；窗口内 card <序号> 看该候选牌\n"
                     "  批量一次性:\n"
                     "    tkw                      跑一局 AI 对局\n"
                     "    tkw deal 2 1             按位置参数跑一局（2 人，种子 1）\n"
@@ -210,10 +214,7 @@ namespace tkw
                     "    step                     执行一个回合\n"
                     "    status                   查看会话状态\n"
                     "    save s.json              保存当前对局\n"
-                    "    load s.json              载入存档到会话，再 step 继续\n"
-                    "  真人参与（先 tkw --human P0 repl，再逐条输入）:\n"
-                    "    new --players 2 --seed 1 开新局\n"
-                    "    step                     轮到 P0 时按提示输入（play/pass/discard）\n";
+                    "    load s.json              载入存档到会话，再 step 继续\n";
             else
                 text += detail::leaf_help_examples(cmd.name());
             return text;

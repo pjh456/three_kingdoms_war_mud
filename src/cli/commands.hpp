@@ -1131,7 +1131,7 @@ namespace tkw
                 {
                     std::cout
                         << "（无子命令：跑一局 AI 对局；--help 查看命令，repl 进入交互，"
-                           "--human P0 真人参与）\n";
+                           "--human P0 真人参与；想自己玩：tkw --human P0 repl 后先 new 开局）\n";
                     return detail::run_game(detail::options_from(ctx));
                 });
 
@@ -1291,8 +1291,10 @@ namespace tkw
                 {
                     session.base = detail::options_from(ctx);
                     const Options &opt = session.base;
-                    // 进入 REPL 前打印引导：命令列表与退出方式在提示符处不可见。
-                    std::cout << "输入 ? 查看命令，help <命令> 看用法，quit 退出\n";
+                    // 进入 REPL 前打印引导：命令列表、退出方式与第一局起手在提示符处不可见。
+                    std::cout << "输入 ? 查看命令，help <命令> 看用法，quit 退出\n"
+                              << "第一局：new --players 2 --seed 1 开局，再 step；轮到你按 "
+                                 "play/pass/discard 提示操作（--verbose 可看每步事件）\n";
                     InteractiveConsole console(
                         app, "tkw> ", std::cin, std::cout, std::cerr,
                         [&app](const pjh::cli::QueryResult &r)
