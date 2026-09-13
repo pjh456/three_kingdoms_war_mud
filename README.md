@@ -58,6 +58,7 @@ discard 1 2                # 弃牌阶段手牌超上限，按提示弃够张数
 cmake -B build-tui -G Ninja -DTKW_ENABLE_TUI=ON   # 首次配置需联网拉取 FTXUI v7.0.3
 cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 ./build-tui/tui/tkw-tui
+./build-tui/tui/tkw-tui --human P0 --players 2 --seed 1   # 真人局：P0 由你操作
 ```
 
 - 开关 `-DTKW_ENABLE_TUI=ON|OFF`（默认 OFF）；OFF 时不探测、不拉取 FTXUI，对
@@ -66,10 +67,19 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
   （标准输入与标准输出均为 TTY）。任一非 TTY 时打印「需要交互式终端」并以 1 退出，
   请改用 `tkw repl`。
 - 四面板展示棋盘/手牌/日志/状态，底部命令栏：`new [--players N] [--seed S]
-  [--mode brawl|identity] [--ai simple|aggressive] [--deck P] [--hand N]`、
-  `deal <players> <seed>`、`step`、`run`/`r`、`status`/`st`、`save <file>`、
-  `load <file>`、`quit`/`q`、`help`/`?`；`Esc`/`Ctrl-C` 退出。目前仅支持 AI 对局，
-  暂不支持 `--human`（真人参与请用 `tkw repl`）。
+  [--mode brawl|identity] [--ai simple|aggressive] [--deck P] [--hand N]
+  [--human <座位>] [--no-human]`、`deal <players> <seed>`、`step`、`run`/`r`、
+  `status`/`st`、`save <file>`、`load <file>`、`quit`/`q`、`help`/`?`；`Esc`/`Ctrl-C`
+  退出。
+- 真人参与：启动即真人局 `./build-tui/tui/tkw-tui --human P0 --players 2 --seed 1`
+  （`--human` 可重复，`--no-human` 清空），也可在命令栏 `new --human P0 ...` 开局。
+  轮到你时底部命令栏替换为决策面板，按键：`↑`/`↓` 选择候选，`Enter` 确认，`p`
+  放弃（仅允许放弃的窗口），弃牌窗口用 `空格` 多选、选够张数后 `Enter`，数字键
+  1–9 直选（多选时切换勾选）；待决期 `q` 退出，`Esc`/`Ctrl-C` 仍全局退出。
+- 隐藏信息：真人局中非真人座位的摸牌/击杀奖励只显占位「未知牌」；身份局未终局
+  只显示主公与真人座位的角色，其余座位不显示角色（终局揭示全部）；手牌面板只展开
+  **首个**真人座位（多真人同时展开属后续里程碑），其余只给数量；选择对手区域的牌时
+  手牌出「未知手牌」占位，装备/判定区明置。
 - 卡牌查询（`tkw rules`/`tkw cards`/`tkw audit`）目前只在命令行/REPL 提供；
   TUI 命令栏暂不支持，输入会提示改用 `tkw`。
 - 退出时若有进行中的会话，自动存档到当前目录的 `tkw-autosave.json`（与 REPL 同口径），
@@ -78,7 +88,8 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
   `v7.0.3`；离线可用 `-DFETCHCONTENT_SOURCE_DIR_FTXUI=<ftxui-src>` 指向预置源码，
   或用 `-DFETCHCONTENT_FULLY_DISCONNECTED=ON` 配合已 populate 的 `_deps`。
 - 同时开启测试（默认 ON）时会注册 TUI 端到端测试：非 TTY 守卫直接运行；PTY 冒烟需
-  util-linux `script`（缺失则该条不注册）。
+  util-linux `script`（缺失则该条不注册），除退出冒烟外还覆盖真人决策面板
+  （`tui_pty_human_smoke` 钉面板出现，`tui_pty_human_quit_pending` 钉待决中退出无 hang）。
 - Windows/MSVC 未验证。
 
 ## 命令速查

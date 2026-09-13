@@ -844,6 +844,15 @@ set_tests_properties(cli_repl_batch_inherit_deck_fail PROPERTIES
 # configure 到此 if(TARGET tkw-tui) 尚为假。默认 OFF 时本块整体不存在，ctest 与
 # FTXUI 探测均零变化。
 if(TKW_ENABLE_TUI)
+  # 面板键位状态机单测：只驱动 DecisionPanel 的选择/提交回调，不启屏幕事件循环。
+  # 源含 tui/decision_panel.cpp；FTXUI 目标在根级后于本目录定义，链接名在 generate
+  # 期解析。仅在 ON 构建注册，OFF 时不引入 FTXUI 依赖。
+  add_executable(tui_panel_tests test_main.cpp tui/decision_panel_test.cpp
+                                 ${CMAKE_SOURCE_DIR}/tui/decision_panel.cpp)
+  target_include_directories(tui_panel_tests PRIVATE ${CMAKE_SOURCE_DIR}/tui)
+  target_link_libraries(tui_panel_tests PRIVATE ftxui::ftxui tkw_tui doctest)
+  doctest_discover_tests(tui_panel_tests)
+
   # 非 TTY 守卫：ctest 的输出本就是管道，直接运行即触发 stdin/stdout 双 fd 守卫；
   # 包装 sh -c 只为把子进程 rc=1 转成断言结果，不需 script。
   add_test(NAME tui_non_tty_guard
@@ -864,6 +873,31 @@ if(TKW_ENABLE_TUI)
                       out=$(cd $d && { sleep 0.5; printf 'quit\\n'; sleep 0.5; } | script -qec 'stty rows 40 cols 120; $<TARGET_FILE:tkw-tui>' /dev/null 2>&1); rc=$?; rm -rf $d; \
                       printf '%s' \"$out\" | grep -aq '棋盘' && [ $rc -eq 0 ]")
     set_tests_properties(tui_pty_smoke PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        TIMEOUT 30)
+
+    # 真人决策面板冒烟：命令栏开真人局 → step 弹出决策面板（钉「出牌阶段」，仅
+    # 真人面板出现）→ Enter 数次于面板 → quit。只钉关键词与 rc，不赌牌局走向；
+    # 每个输入前留 ≥0.6s 让 FTXUI 消费前一帧，TIMEOUT 30 把 hang 转成失败。
+    add_test(NAME tui_pty_human_smoke
+             COMMAND sh -c
+                     "d=$(mktemp -d); ln -s '${CMAKE_SOURCE_DIR}/resources' $d/resources; \
+                      out=$(cd $d && { sleep 1; printf 'new --human P0 --players 2 --seed 1\\n'; sleep 0.8; \
+                      printf 'step\\n'; sleep 1.2; printf '\\n'; sleep 0.6; printf '\\n'; sleep 0.6; \
+                      printf 'quit\\n'; sleep 0.8; } | script -qec 'stty rows 40 cols 120; $<TARGET_FILE:tkw-tui>' /dev/null 2>&1); rc=$?; rm -rf $d; \
+                      printf '%s' \"$out\" | grep -aq '出牌阶段' && [ $rc -eq 0 ]")
+    set_tests_properties(tui_pty_human_smoke PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        TIMEOUT 30)
+
+    # 待决中退出：面板阻塞 worker 时 quit 必须唤醒并干净结束（钉无 hang）。
+    add_test(NAME tui_pty_human_quit_pending
+             COMMAND sh -c
+                     "d=$(mktemp -d); ln -s '${CMAKE_SOURCE_DIR}/resources' $d/resources; \
+                      out=$(cd $d && { sleep 1; printf 'new --human P0 --players 2 --seed 1\\n'; sleep 0.8; \
+                      printf 'step\\n'; sleep 1.2; printf 'quit\\n'; sleep 0.8; } | script -qec 'stty rows 40 cols 120; $<TARGET_FILE:tkw-tui>' /dev/null 2>&1); rc=$?; rm -rf $d; \
+                      [ $rc -eq 0 ]")
+    set_tests_properties(tui_pty_human_quit_pending PROPERTIES
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         TIMEOUT 30)
   endif()
