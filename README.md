@@ -70,16 +70,18 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
   空区显示「无」），底部命令栏：`new [--players N] [--seed S]
   [--mode brawl|identity] [--ai simple|aggressive] [--deck P] [--hand N]
   [--human <座位>] [--no-human]`、`deal <players> <seed>`、`step`、`run`/`r`、
-  `status`/`st`、`save`/`w <file>`、`load`/`l <file>`、`cards [--text]`、
-  `rules [关键词]`、`audit`、`quit`/`q`、`help`/`?`；`Esc`/`Ctrl-C` 退出。
+  `status`/`st`、`save`/`w <file>`、`load`/`l <file>`、`cards [--text] [--deck 路径]`、
+  `rules [关键词] [--deck 路径]`、`audit [--deck 路径]`、`quit`/`q`、`help`/`?`；
+  `Esc`/`Ctrl-C` 退出。
 - 反馈对齐 CLI：`step`/`run` 每回合在日志写「—— 回合 N：P ——」回合头，终局追加
   「对局统计:」块（回合数/胜者/体力/击杀/伤害/治疗），状态面板显示「存活: N」；
   `new`/`load` 对未实现卡写警告进日志（只提示、不阻断）。`tkw-tui --help`/`-h`
   打印命令与用法（纯文本，非 TTY 亦可，退出码 0）。
 - 事件日志恒开：日志面板持续显示打出/弃置/判定/摸牌/伤害等事件；TUI 不提供
   `--verbose`/`--no-verbose` 开关。
-- 日志面板支持翻阅：`PgUp`/`PgDn` 上下翻页、`End` 回到最新（贴尾）、命令栏为空时
-  `Home` 回到最早；日志溢出时右侧显示滚动条。终端过小时自动隐藏次要面板（先棋盘/
+- 日志面板支持翻阅：`PgUp`/`PgDn` 上下翻页（始终可用）、`End` 回到最新（贴尾）、
+  `Home` 回到最早；后两者仅命令栏为空时接管，输入非空时 `Home`/`End` 留给命令编辑
+  光标。日志溢出时右侧显示滚动条。终端过小时自动隐藏次要面板（先棋盘/
   手牌，再状态）并保留底部命令输入行，同时提示被隐藏的面板。
 - 真人参与：启动即真人局 `./build-tui/tui/tkw-tui --human P0 --players 2 --seed 1`
   （`--human` 可重复，`--no-human` 清空），也可在命令栏 `new --human P0 ...` 开局。
@@ -91,8 +93,9 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
   只展开**首个**真人座位（多真人同时展开属后续里程碑），其余只给数量；选择对手区域
   的牌时手牌出「未知手牌」占位，装备/判定区明置。
 - 卡牌查询：命令栏 `cards [--text]`、`rules [关键词]`、`audit` 就地出结果，逐行
-  写入日志面板（长列表用日志翻阅）；牌表来源与 REPL 只读命令同口径（活动会话优先，
-  无会话回落启动 `--deck`）。`simulate` 仍在 CLI 执行，命令栏输入会提示改用 `tkw`。
+  写入日志面板（长列表用日志翻阅）；牌表来源优先序为行内 `--deck` > 活动会话 >
+  启动 `--deck`（与 REPL 只读命令同口径），行内坏路径写一行「加载牌堆失败」提示、
+  不阻断会话。`simulate` 仍在 CLI 执行，命令栏输入会提示改用 `tkw`。
 - 退出时若有进行中的会话，自动存档到当前目录的 `tkw-autosave.json`（与 REPL 同口径），
   退出信息写 stderr。
 - FTXUI 获取：优先 `find_package(ftxui CONFIG QUIET)`，未安装则 `FetchContent` 钉

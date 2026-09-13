@@ -370,6 +370,83 @@ TEST_CASE("tui: query uses active session deck over startup")
     std::filesystem::remove_all(root, ec);
 }
 
+TEST_CASE("tui: query inline deck overrides active session")
+{
+    const std::filesystem::path root =
+        std::filesystem::temp_directory_path() / "tkw-tui-query-inline-deck";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    const std::filesystem::path deck_a = root / "a";
+    const std::filesystem::path deck_b = root / "b";
+    const std::filesystem::path deck_c = root / "c";
+    for (const auto &dir : {deck_a, deck_b, deck_c})
+        std::filesystem::create_directories(dir / "cards", ec);
+    const auto write_deck = [](const std::filesystem::path &dir,
+                               const std::string &name,
+                               const std::string &card_name)
+    {
+        std::ofstream(dir / "deck.json")
+            << "{\"name\":\"" + name + "\",\"cards\":[\"h0\"]}";
+        std::ofstream(dir / "cards" / "h0.json")
+            << "{\"id\":\"h0\",\"name\":\"" + card_name +
+                   "\",\"type\":\"basic\","
+                   "\"copies\":[{\"suit\":\"spade\",\"number\":7}]}";
+    };
+    write_deck(deck_a, "甲", "甲卡");
+    write_deck(deck_b, "乙", "乙卡");
+    write_deck(deck_c, "丙", "丙卡");
+
+    auto opt = test_options();
+    opt.deck = deck_a;
+    tkw::tui::Controller c;
+    c.set_base_options(opt);
+    c.bootstrap();
+
+    c.execute_line("new --players 2 --seed 1 --hand 0 --deck " +
+                   deck_b.string());
+    const std::size_t before = c.log_lines().size();
+
+    // 行内 --deck 应同时压过活动会话（B）与启动（A）。
+    c.execute_line("cards --deck " + deck_c.string());
+    c.execute_line("rules --deck " + deck_c.string());
+    c.execute_line("audit --deck " + deck_c.string());
+
+    std::vector<std::string> inline_lines(c.log_lines().begin() +
+                                              static_cast<std::ptrdiff_t>(before),
+                                          c.log_lines().end());
+    CHECK(log_contains(inline_lines, "牌表: " + deck_c.string()));
+    CHECK(log_contains(inline_lines, "丙卡"));
+    CHECK_FALSE(log_contains(inline_lines, "牌表: " + deck_b.string()));
+    CHECK_FALSE(log_contains(inline_lines, "牌表: " + deck_a.string()));
+
+    // 行内 deck 只影响当行：随后不带 --deck 的查询仍读活动会话 B。
+    const std::size_t after_inline = c.log_lines().size();
+    c.execute_line("cards");
+    std::vector<std::string> plain_lines(
+        c.log_lines().begin() + static_cast<std::ptrdiff_t>(after_inline),
+        c.log_lines().end());
+    CHECK(log_contains(plain_lines, "牌表: " + deck_b.string()));
+    CHECK_FALSE(log_contains(plain_lines, "牌表: " + deck_c.string()));
+
+    std::filesystem::remove_all(root, ec);
+}
+
+TEST_CASE("tui: query bad inline deck reports one error line")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+    REQUIRE(c.snapshot().active);
+
+    const std::size_t before = c.log_lines().size();
+    c.execute_line("cards --deck /nonexistent-deck");
+
+    CHECK(c.snapshot().active);
+    CHECK_FALSE(c.running());
+    CHECK(c.log_lines().size() == before + 1);
+    CHECK(log_has_prefix(c.log_lines(), "加载牌堆失败"));
+}
+
 TEST_CASE("tui: query during run is rejected")
 {
     tkw::tui::Controller c;

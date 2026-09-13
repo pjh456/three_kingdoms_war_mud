@@ -6,7 +6,6 @@
  *       闭包只捕获模型 shared_ptr 与值，不捕获 App。
  */
 
-#include <algorithm>
 #include <cstddef>
 #include <string>
 #include <utility>
@@ -18,9 +17,6 @@
 
 namespace
 {
-    /** 日志翻页步长。 */
-    constexpr int kLogScrollPage = 10;
-
     /** 终端尺寸不可用时的回退行列，保证布局分级有确定输入。 */
     constexpr int kFallbackCols = 80;
     constexpr int kFallbackRows = 24;
@@ -73,28 +69,7 @@ namespace tkw
 
         float App::log_ratio() const
         {
-            const std::size_t total = controller_.log_lines().size();
-            if (total <= 1 || log_follow_)
-                return 1.0f;
-
-            const std::size_t anchor = std::min(log_anchor_, total - 1);
-            return static_cast<float>(anchor) /
-                   static_cast<float>(total - 1);
-        }
-
-        void App::scroll_log(int delta)
-        {
-            const std::size_t total = controller_.log_lines().size();
-            if (total == 0)
-                return;
-
-            // 跟随末尾时以最后一行为起点，非跟随时以锚定行为起点；
-            // 正数向尾部、负数向顶部，两端钳位，到尾部恢复跟随。
-            const int last = static_cast<int>(total - 1);
-            int anchor = log_follow_ ? last : static_cast<int>(log_anchor_);
-            anchor = std::clamp(anchor + delta, 0, last);
-            log_anchor_ = static_cast<std::size_t>(anchor);
-            log_follow_ = anchor >= last;
+            return log_scroll_.ratio(controller_.log_lines().size());
         }
 
         ftxui::Component App::component(ftxui::ScreenInteractive &screen)
@@ -159,31 +134,21 @@ namespace tkw
                                return true;
                            }
 
-                            // 无待决：日志滚动键优先于命令输入；Home 仅在输入缓冲
-                            // 为空时接管，避免抢占命令编辑的光标键。
+                            // 无待决：日志滚动键优先于命令输入。按键映射为纯语义
+                            // LogKey 后交纯状态机判定，Home/End 仅在输入缓冲为空时
+                            // 接管，避免抢占命令编辑的光标键；PgUp/PgDn 无条件。
+                            LogKey key = LogKey::None;
                             if (event == ftxui::Event::PageUp)
-                            {
-                                scroll_log(-kLogScrollPage);
-                                return true;
-                            }
-                            if (event == ftxui::Event::PageDown)
-                            {
-                                scroll_log(kLogScrollPage);
-                                return true;
-                            }
-                            if (event == ftxui::Event::End)
-                            {
-                                log_follow_ = true;
-                                return true;
-                            }
-                            if (event == ftxui::Event::Home &&
-                                command_input_.empty())
-                            {
-                                log_follow_ = false;
-                                log_anchor_ = 0;
-                                return true;
-                            }
-                            return false;
+                                key = LogKey::PageUp;
+                            else if (event == ftxui::Event::PageDown)
+                                key = LogKey::PageDown;
+                            else if (event == ftxui::Event::Home)
+                                key = LogKey::Home;
+                            else if (event == ftxui::Event::End)
+                                key = LogKey::End;
+                            return handle_log_key(
+                                key, command_input_.empty(), log_scroll_,
+                                controller_.log_lines().size());
                         });
         }
     }  // namespace tui

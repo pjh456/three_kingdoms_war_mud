@@ -171,15 +171,15 @@ namespace tkw
                     break;
                 case CommandKind::Cards:
                     if (require_idle())
-                        do_cards(cmd.with_text);
+                        do_cards(cmd);
                     break;
                 case CommandKind::Rules:
                     if (require_idle())
-                        do_rules(cmd.keyword);
+                        do_rules(cmd);
                     break;
                 case CommandKind::Audit:
                     if (require_idle())
-                        do_audit();
+                        do_audit(cmd);
                     break;
                 }
             }
@@ -582,18 +582,23 @@ namespace tkw
             }
 
             /**
-             * @brief 只读牌表查询的选项：活动会话牌表优先，无会话回落启动基准。
-             * @return 以 base_ 为基准的选项副本；活动会话存在时 deck 取会话牌表，
-             *         否则保持启动 deck；humans 一律清空。
+             * @brief 只读牌表查询的选项合并：行内覆盖优先，否则活动会话优先。
+             * @param cmd 本行命令；`deck_provided` 为真时以其 deck 压过其它来源。
+             * @return 以 base_ 为基准的选项副本：活动会话存在时 deck 取会话牌表，
+             *         再被行内 `--deck` 覆盖；humans 一律清空。
              * @note 只读命令不运行对局，继承启动 --human 会被 reject_humans 误拒，
-             *       故构造时清空；deck 口径与 CLI 只读命令的活动会话优先一致。
+             *       故构造时清空；deck 优先序为 行内 > 活动会话 > 启动 base，与
+             *       CLI 只读命令的 options_from_for_query 逐条一致；查询不写回
+             *       session_.deck，不影响 load 的存档指纹匹配口径。
              */
-            tkw::cli::Options query_options() const
+            tkw::cli::Options query_options(const Command &cmd) const
             {
                 tkw::cli::Options opt = base_;
                 opt.humans.clear();
                 if (session_.active && session_.game)
                     opt.deck = session_.deck;
+                if (cmd.deck_provided)
+                    opt.deck = cmd.options.deck;
                 return opt;
             }
 
@@ -610,23 +615,24 @@ namespace tkw
             }
 
             /** @brief cards 结果就地写日志（Idle 主线程，不触引擎）。 */
-            void do_cards(bool show_text)
+            void do_cards(const Command &cmd)
             {
-                append_query_lines(
-                    tkw::cli::detail::cards_lines(query_options(), show_text));
+                append_query_lines(tkw::cli::detail::cards_lines(
+                    query_options(cmd), cmd.with_text));
             }
 
             /** @brief rules 结果就地写日志（keyword 空 = 全部）。 */
-            void do_rules(const std::string &keyword)
+            void do_rules(const Command &cmd)
             {
-                append_query_lines(
-                    tkw::cli::detail::rules_lines(query_options(), keyword));
+                append_query_lines(tkw::cli::detail::rules_lines(
+                    query_options(cmd), cmd.keyword));
             }
 
             /** @brief audit 结果就地写日志。 */
-            void do_audit()
+            void do_audit(const Command &cmd)
             {
-                append_query_lines(tkw::cli::detail::audit_lines(query_options()));
+                append_query_lines(
+                    tkw::cli::detail::audit_lines(query_options(cmd)));
             }
 
             /** @brief 显式存档：写 AI 档与统计元数据，失败给中文根因。 */

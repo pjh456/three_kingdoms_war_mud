@@ -49,6 +49,7 @@ namespace tkw
             bool run_to_end = false;                /**< deal/run 建局或起跑后跑到底 */
             std::string keyword;                    /**< rules：过滤关键词；空 = 全部 */
             bool with_text = false;                 /**< cards：附 CardDef.text 效果文案 */
+            bool deck_provided = false;             /**< cards/rules/audit：行内 --deck 是否显式给出 */
         };
 
         /** 解析结果：Ok(Command) 或 Err(中文提示)。 */
@@ -177,6 +178,28 @@ namespace tkw
             inline std::string unknown_option_error(const std::string &option)
             {
                 return "未知选项: '" + option + "'（help 查看用法）";
+            }
+
+            /**
+             * @brief 只读查询命令识别并消费行内 --deck。
+             * @param tokens 全 token 列表。
+             * @param i      token 下标引用；命中时前移到值 token 并消费。
+             * @param cmd    目标命令；命中时写入 options.deck 并置 deck_provided。
+             * @return 非 --deck token 返回 Ok(false)；命中且取值成功返回 Ok(true)；
+             *         命中但缺值返回 Err（「需要一个值」，与 new/CLI 同文案）。
+             */
+            inline tkw::Result<bool, std::string> take_query_deck(
+                const std::vector<std::string> &tokens, std::size_t &i,
+                Command &cmd)
+            {
+                if (tokens[i] != "--deck")
+                    return tkw::Result<bool, std::string>::Ok(false);
+                if (i + 1 >= tokens.size())
+                    return tkw::Result<bool, std::string>::Err(
+                        missing_value_error("--deck"));
+                cmd.options.deck = tokens[++i];
+                cmd.deck_provided = true;
+                return tkw::Result<bool, std::string>::Ok(true);
             }
 
             /** 解析 new 的行内选项到 cmd.options；失败返回中文文案。 */
@@ -329,7 +352,7 @@ namespace tkw
                 return CommandParseResult::Ok(std::move(cmd));
             }
 
-            /** 解析 cards 的可选 --text；其余 token 报错。 */
+            /** 解析 cards 的可选 --text 与行内 --deck；其余 token 报错。 */
             inline CommandParseResult parse_cards(
                 const std::vector<std::string> &tokens)
             {
@@ -338,25 +361,65 @@ namespace tkw
                 for (std::size_t i = 1; i < tokens.size(); ++i)
                 {
                     if (tokens[i] == "--text")
+                    {
                         cmd.with_text = true;
-                    else
-                        return CommandParseResult::Err(
-                            "cards 只接受 --text 选项: '" + tokens[i] + "'");
+                        continue;
+                    }
+                    auto deck = take_query_deck(tokens, i, cmd);
+                    if (deck.is_err())
+                        return CommandParseResult::Err(deck.unwrap_err());
+                    if (deck.unwrap())
+                        continue;
+                    return CommandParseResult::Err(
+                        "cards 只接受 --text 或 --deck <路径> 选项: '" +
+                        tokens[i] + "'");
                 }
                 return CommandParseResult::Ok(std::move(cmd));
             }
 
-            /** 解析 rules 的 0/1 个位置关键词。 */
+            /**
+             * @brief 解析 rules 的可选关键词（至多一个）与行内 --deck。
+             * @note 选项与关键词可任意顺序混写；重复关键词与未知选项报错。
+             */
             inline CommandParseResult parse_rules(
                 const std::vector<std::string> &tokens)
             {
-                if (tokens.size() > 2)
-                    return CommandParseResult::Err(
-                        "rules 只接受一个 <关键词> 参数");
                 Command cmd;
                 cmd.kind = CommandKind::Rules;
-                if (tokens.size() == 2)
-                    cmd.keyword = tokens[1];
+                for (std::size_t i = 1; i < tokens.size(); ++i)
+                {
+                    auto deck = take_query_deck(tokens, i, cmd);
+                    if (deck.is_err())
+                        return CommandParseResult::Err(deck.unwrap_err());
+                    if (deck.unwrap())
+                        continue;
+                    if (tokens[i].rfind("--", 0) == 0)
+                        return CommandParseResult::Err(
+                            unknown_option_error(tokens[i]));
+                    if (!cmd.keyword.empty())
+                        return CommandParseResult::Err(
+                            "rules 只接受一个 <关键词> 参数");
+                    cmd.keyword = tokens[i];
+                }
+                return CommandParseResult::Ok(std::move(cmd));
+            }
+
+            /** 解析 audit 的可选行内 --deck；其余 token 报错。 */
+            inline CommandParseResult parse_audit(
+                const std::vector<std::string> &tokens)
+            {
+                Command cmd;
+                cmd.kind = CommandKind::Audit;
+                for (std::size_t i = 1; i < tokens.size(); ++i)
+                {
+                    auto deck = take_query_deck(tokens, i, cmd);
+                    if (deck.is_err())
+                        return CommandParseResult::Err(deck.unwrap_err());
+                    if (deck.unwrap())
+                        continue;
+                    return CommandParseResult::Err(
+                        "audit 不接受参数: '" + tokens[i] + "'");
+                }
                 return CommandParseResult::Ok(std::move(cmd));
             }
 
@@ -405,8 +468,9 @@ namespace tkw
                     "[--ai simple|aggressive] [--deck P] [--human <座位>] [--no-human]",
                     "  deal <players> <seed>；step；run/r；status/st；save/w <file>；"
                     "load/l <file>；quit/q；help/?",
-                    "  cards [--text]；rules [关键词]；audit（只读牌表查询，"
-                    "结果写入本面板）",
+                    "  cards [--text] [--deck 路径]；rules [关键词] [--deck 路径]；"
+                    "audit [--deck 路径]（只读牌表查询，结果写入本面板）",
+                    "  只读查询牌表优先序: 行内 --deck > 活动会话 > 启动 --deck",
                     "  simulate: 请退出后运行 tkw simulate（TUI 暂不支持）",
                     "  默认: --players " +
                         std::to_string(tkw::cli::Options{}.players) + "、--seed " +
@@ -414,7 +478,8 @@ namespace tkw
                         std::to_string(rules.initial_hand) + "、--mode brawl、--ai simple",
                     "  启动选项: --human/--no-human/--players/--seed/--hand/--ai/"
                     "--mode/--deck/--autosave",
-                    "  键位: Esc/Ctrl-C 退出；PgUp/PgDn 翻日志；End 回最新",
+                    "  键位: Esc/Ctrl-C 退出；PgUp/PgDn 翻日志；命令栏为空时 "
+                    "End 回最新、Home 到最早",
                     "  事件日志恒开；TUI 不提供 --verbose/--no-verbose",
                 };
             }
@@ -428,8 +493,9 @@ namespace tkw
          *         越界/未知选项），不抛异常。
          * @note 命令名与别名：run/r、status/st、save/w、load/l、quit/q、help/?。
          *       save/load 只取一个文件位置参数；new 只接受行内长选项与
-         *       --human/--no-human，不接受位置参数；cards 只接受可选 --text，
-         *       rules 只接受至多一个关键词，audit 不接受参数；simulate 仍指路回 CLI。
+         *       --human/--no-human，不接受位置参数；cards 接受可选 --text 与
+         *       --deck <路径>，rules 接受至多一个关键词与 --deck <路径>，audit
+         *       接受 --deck <路径> 且无其它参数；simulate 仍指路回 CLI。
          */
         inline CommandParseResult parse_command(
             std::string_view line, const tkw::cli::Options &base)
@@ -488,11 +554,7 @@ namespace tkw
             if (name == "rules")
                 return detail::parse_rules(tokens);
             if (name == "audit")
-            {
-                Command cmd;
-                cmd.kind = CommandKind::Audit;
-                return detail::no_args<Command>("audit", tokens, std::move(cmd));
-            }
+                return detail::parse_audit(tokens);
 
             // 批量模拟会长时间占用主线程且无 TUI 结果面：明确指路而非报“未知命令”。
             if (name == "simulate")

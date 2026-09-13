@@ -8,6 +8,7 @@
 #include <ftxui/ftxui.hpp>
 
 #include "render.hpp"
+#include "tui/log_scroll.hpp"
 
 namespace
 {
@@ -160,6 +161,30 @@ TEST_CASE("tui render: log viewport clamps at top and tail")
     CHECK((tail.find("┃") != std::string::npos ||
            tail.find("╻") != std::string::npos ||
            tail.find("╹") != std::string::npos));
+}
+
+TEST_CASE("tui render: log scroll state maps to viewport position")
+{
+    UiSnapshot snap = base_snapshot();
+    std::vector<std::string> lines;
+    for (int i = 1; i <= 100; ++i)
+    {
+        const std::string digits = std::to_string(i);
+        lines.push_back("L" + std::string(3 - digits.size(), '0') + digits);
+    }
+    std::string notice = "提示";
+
+    // 状态机把视口锚到第 90 行附近；不赌精确顶行（FTXUI 居中夹取），
+    // 只钉「不再显示最早行、落到中后段」。
+    tkw::tui::LogScroll scroll;
+    scroll.scroll(-10, lines.size());
+    const std::string out =
+        render_text(snap, lines, notice, ftxui::text("__INPUT__"), 100, 30,
+                    scroll.ratio(lines.size()));
+
+    CHECK(out.find("L001") == std::string::npos);
+    CHECK((out.find("L08") != std::string::npos ||
+           out.find("L09") != std::string::npos));
 }
 
 TEST_CASE("tui render: expanded bottom forces compact layout")

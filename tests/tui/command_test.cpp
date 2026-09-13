@@ -164,6 +164,68 @@ TEST_CASE("tui: cards/rules/audit parse into query commands")
     CHECK(audit_arg.unwrap_err().find("不接受参数") != std::string::npos);
 }
 
+TEST_CASE("tui: query commands accept inline deck override")
+{
+    const auto base = base_options();
+
+    auto cards = parse_command("cards --deck /tmp/d", base);
+    REQUIRE(cards.is_ok());
+    CHECK(cards.unwrap().kind == CommandKind::Cards);
+    CHECK(cards.unwrap().deck_provided);
+    CHECK(cards.unwrap().options.deck == "/tmp/d");
+    CHECK_FALSE(cards.unwrap().with_text);
+
+    auto cards_both = parse_command("cards --text --deck /tmp/d", base);
+    REQUIRE(cards_both.is_ok());
+    CHECK(cards_both.unwrap().with_text);
+    CHECK(cards_both.unwrap().deck_provided);
+    CHECK(cards_both.unwrap().options.deck == "/tmp/d");
+
+    auto cards_missing = parse_command("cards --deck", base);
+    REQUIRE(cards_missing.is_err());
+    CHECK(cards_missing.unwrap_err().find("需要一个值") != std::string::npos);
+
+    auto rules_before = parse_command("rules --deck /tmp/d 杀", base);
+    REQUIRE(rules_before.is_ok());
+    CHECK(rules_before.unwrap().keyword == "杀");
+    CHECK(rules_before.unwrap().deck_provided);
+    CHECK(rules_before.unwrap().options.deck == "/tmp/d");
+
+    auto rules_after = parse_command("rules 杀 --deck /tmp/d", base);
+    REQUIRE(rules_after.is_ok());
+    CHECK(rules_after.unwrap().keyword == "杀");
+    CHECK(rules_after.unwrap().deck_provided);
+    CHECK(rules_after.unwrap().options.deck == "/tmp/d");
+
+    auto rules_deck_only = parse_command("rules --deck /tmp/d", base);
+    REQUIRE(rules_deck_only.is_ok());
+    CHECK(rules_deck_only.unwrap().keyword.empty());
+    CHECK(rules_deck_only.unwrap().deck_provided);
+
+    auto rules_unknown = parse_command("rules --bogus", base);
+    REQUIRE(rules_unknown.is_err());
+    CHECK(rules_unknown.unwrap_err().find("未知选项") != std::string::npos);
+
+    auto rules_missing = parse_command("rules --deck", base);
+    REQUIRE(rules_missing.is_err());
+    CHECK(rules_missing.unwrap_err().find("需要一个值") != std::string::npos);
+
+    auto audit = parse_command("audit --deck /tmp/d", base);
+    REQUIRE(audit.is_ok());
+    CHECK(audit.unwrap().kind == CommandKind::Audit);
+    CHECK(audit.unwrap().deck_provided);
+    CHECK(audit.unwrap().options.deck == "/tmp/d");
+
+    auto audit_missing = parse_command("audit --deck", base);
+    REQUIRE(audit_missing.is_err());
+    CHECK(audit_missing.unwrap_err().find("需要一个值") != std::string::npos);
+
+    // 不显式给 --deck 时不得置位，控制器才会沿用会话/启动来源。
+    auto cards_plain = parse_command("cards", base);
+    REQUIRE(cards_plain.is_ok());
+    CHECK_FALSE(cards_plain.unwrap().deck_provided);
+}
+
 TEST_CASE("tui: deal takes positional players and seed")
 {
     auto r = parse_command("deal 3 11", base_options());
