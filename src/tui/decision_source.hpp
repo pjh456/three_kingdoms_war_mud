@@ -581,8 +581,8 @@ namespace tkw
             /**
              * @brief 决策入口：真人座位阻塞等待 UI 提交，其余回落 fallback。
              * @return 真人座位：UI 提交的选择；取消时返回默认选择。
-             * @note 面板在取得锁后、阻塞前折成纯值，随后释放锁再通知 UI，
-             *       避免 UI 回调持锁重入。
+             * @note 面板在取得锁后、阻塞前折成纯值，随后释放锁再通知 UI 并调用
+             *       即将阻塞回调，避免回调持锁重入。
              */
             tkw::game::ai::DecisionChoice decide(
                 const tkw::game::ai::DecisionRequest &req) override
@@ -598,9 +598,12 @@ namespace tkw
                 taken_ = false;
                 submitted_ = false;
                 std::function<void()> notify = notify_;
+                std::function<void()> on_wait = on_wait_;
                 lock.unlock();
                 if (notify)
                     notify();
+                if (on_wait)
+                    on_wait();
                 lock.lock();
                 cv_.wait(lock, [this]
                          { return submitted_ || cancelled_.load(); });
@@ -684,12 +687,24 @@ namespace tkw
                 notify_ = std::move(notify);
             }
 
+            /**
+             * @brief 设置「即将阻塞」回调；真人决策释放锁后、阻塞等待前调用一次。
+             * @note 回调在 m_ 释放后调用，可安全回送最新快照；不得在其中回调本对象的
+             *       阻塞 API。
+             */
+            void set_on_wait(std::function<void()> on_wait)
+            {
+                std::lock_guard<std::mutex> lock(m_);
+                on_wait_ = std::move(on_wait);
+            }
+
         private:
             mutable std::mutex m_;
             std::condition_variable cv_;
             std::set<std::string> humans_;
             std::unique_ptr<tkw::game::ai::Decider> fallback_;
             std::function<void()> notify_;
+            std::function<void()> on_wait_;
             std::optional<DecisionPanelView> panel_;
             bool has_pending_ = false;
             bool taken_ = false;

@@ -1,8 +1,11 @@
 #include <doctest/doctest.h>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -273,6 +276,105 @@ TEST_CASE("tui: human step blocks until decision submitted")
 
     CHECK_FALSE(c.running());
     CHECK(c.snapshot().turns == 1);
+}
+
+TEST_CASE("tui: pending human decision exposes post-draw hand")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+
+    // 用队列式 Post 把模型写回主线程，读取快照与 worker 入队不竞争。
+    std::mutex tasks_mutex;
+    std::vector<std::function<void()>> tasks;
+    c.set_post(
+        [&](std::function<void()> task)
+        {
+            std::lock_guard<std::mutex> lock(tasks_mutex);
+            tasks.push_back(std::move(task));
+        });
+    const auto drain = [&]
+    {
+        std::vector<std::function<void()>> pending;
+        {
+            std::lock_guard<std::mutex> lock(tasks_mutex);
+            pending.swap(tasks);
+        }
+        for (auto &task : pending)
+            task();
+    };
+    const auto find_hand = [](const tkw::tui::UiSnapshot &snap,
+                              const std::string &id) -> const tkw::tui::ZoneView *
+    {
+        for (const auto &row : snap.players)
+            if (row.id == id)
+                return &row.hand;
+        return nullptr;
+    };
+
+    c.bootstrap();
+    c.execute_line("new --human P0 --players 2 --seed 1");
+    REQUIRE_FALSE(c.running());
+
+    const auto *before = find_hand(c.snapshot(), "P0");
+    REQUIRE(before != nullptr);
+    const std::size_t expected =
+        before->count + static_cast<std::size_t>(
+                            tkw::game::RulesConfig{}.draw_per_turn);
+
+    c.execute_line("step");
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    std::size_t observed = 0;
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        drain();
+        if (c.has_pending_decision())
+        {
+            const auto *row = find_hand(c.snapshot(), "P0");
+            observed = row ? row->count : 0;
+            if (observed == expected)
+                break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    // 阻塞等待出牌决策时，摸牌阶段已结束，快照应已是摸牌后的手牌。
+    CHECK(observed == expected);
+    CHECK(c.running());
+    CHECK(c.has_pending_decision());
+    const auto *row = find_hand(c.snapshot(), "P0");
+    REQUIRE(row != nullptr);
+    CHECK(row->revealed);
+    CHECK(row->cards.size() == expected);
+
+    // 排空待决让 worker 收尾，避免析构时残留阻塞。
+    while (c.running() && std::chrono::steady_clock::now() < deadline)
+    {
+        drain();
+        tkw::tui::DecisionPanelView panel;
+        if (!c.fetch_new_decision(panel))
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            continue;
+        }
+        std::vector<std::size_t> selected;
+        if (panel.options.empty())
+        {
+            c.submit_decision(selected, panel.allow_pass);
+            continue;
+        }
+        if (panel.kind == tkw::game::ai::DecisionKind::Discard)
+            for (int i = 0; i < panel.need_count &&
+                            static_cast<std::size_t>(i) < panel.options.size();
+                 ++i)
+                selected.push_back(static_cast<std::size_t>(i));
+        else
+            selected.push_back(0);
+        c.submit_decision(selected, false);
+    }
+    drain();
+    c.request_quit();
+    c.wait_idle();
 }
 
 TEST_CASE("tui: quit during pending human decision joins promptly")

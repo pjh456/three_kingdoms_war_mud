@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -306,6 +307,35 @@ TEST_CASE("tui: human actor waits for submit then returns choice")
     CHECK(result.option_index.unwrap() == 0);
     CHECK_FALSE(source.has_pending());
     CHECK_FALSE(source.fetch_new(panel));
+}
+
+TEST_CASE("tui: on_wait hook fires once before blocking")
+{
+    const auto catalog = load_catalog();
+    TuiDecisionSource source({"P0"},
+                             std::make_unique<tkw::game::ai::SimpleDecider>());
+    std::atomic<int> waits{0};
+    source.set_on_wait([&waits] { waits.fetch_add(1); });
+    auto req = base_request(DecisionKind::PickRevealed, catalog);
+    req.options = {card_of("c1", "sha")};
+
+    DecisionChoice result;
+    std::jthread worker([&] { result = source.decide(req); });
+
+    DecisionPanelView panel;
+    REQUIRE(wait_pending(source, panel));
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (waits.load() == 0 && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    CHECK(waits.load() == 1);
+
+    REQUIRE(source.submit({0}, false));
+    worker.join();
+
+    CHECK(waits.load() == 1);
+    REQUIRE(result.option_index.is_some());
+    CHECK(result.option_index.unwrap() == 0);
 }
 
 TEST_CASE("tui: invalid submit keeps the decision pending")

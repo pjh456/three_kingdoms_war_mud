@@ -330,7 +330,8 @@ namespace tkw
              * @brief 按真人座位重建决策源与适配器（仅在 Idle 调用）。
              * @param humans 本会话真人座位；空表示全 AI，清空决策源。
              * @param ai     非真人座位的回落难度档。
-             * @note 先析构适配器再析构决策源；唤醒回调只投递一次空事件以触发重绘。
+             * @note 先析构适配器再析构决策源；唤醒回调投递空事件触发重绘，即将阻塞
+             *       回调在真人决策阻塞前回送最新快照，使刚摸的牌即时可见。
              */
             void rebuild_decision_source(const std::vector<std::string> &humans,
                                          tkw::cli::AiLevel ai)
@@ -342,6 +343,7 @@ namespace tkw
                 auto source = std::make_shared<TuiDecisionSource>(
                     humans, make_fallback_decider(ai));
                 source->set_notify([this] { post_([] {}); });
+                source->set_on_wait([this] { post_snapshot(); });
                 decision_ = std::move(source);
                 adapter_ = std::make_unique<tkw::game::ai::RequestDecisionSource>(
                     *decision_);
