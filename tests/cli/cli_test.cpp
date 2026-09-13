@@ -115,10 +115,36 @@ TEST_CASE("cli: new/step/status/run advance the session")
     CHECK(status.ok);
     CHECK(status.out.find("下一回合") != std::string::npos);
     CHECK(status.out.find("真人座位: 无") != std::string::npos);
+    CHECK(status.out.find("P0 体力 4/4 手牌 4 装备") != std::string::npos);
 
     auto ran = repl.run("run");
     CHECK(ran.ok);
     CHECK(repl.session.state.turns >= 2);
+}
+
+TEST_CASE("cli: status shows human own hand but keeps opponents as counts")
+{
+    Repl repl;
+    REQUIRE(repl.run("new --players 2 --seed 1 --human P0").ok);
+
+    auto status = repl.run("status");
+    REQUIRE(status.ok);
+    CHECK(status.out.find("真人座位: P0") != std::string::npos);
+    CHECK(status.out.find("P0 体力 4/4 手牌 无懈可击/五谷丰登/无中生有/闪 装备 0 "
+                          "判定 0") != std::string::npos);
+    CHECK(status.out.find("P1 体力 4/4 手牌 4 装备 0 判定 0") != std::string::npos);
+    CHECK(status.out.find("P1 体力 4/4 手牌 无懈") == std::string::npos);
+}
+
+TEST_CASE("cli: status shows each human seat own hand")
+{
+    Repl repl;
+    REQUIRE(repl.run("new --players 2 --seed 1 --human P0 --human P1").ok);
+
+    auto status = repl.run("status");
+    REQUIRE(status.ok);
+    CHECK(status.out.find("P0 体力 4/4 手牌 无懈可击") != std::string::npos);
+    CHECK(status.out.find("P1 体力 4/4 手牌 4") == std::string::npos);
 }
 
 TEST_CASE("cli: repl history option wires FileHistory and warns on missing dir")

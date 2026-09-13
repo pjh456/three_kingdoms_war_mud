@@ -25,6 +25,7 @@
 #include <pjh_cli/console/help_navigator.hpp>
 #include <pjh_cli/console/query_result.hpp>
 
+#include "card/card.hpp"
 #include "card/catalog.hpp"
 #include "cli/error_zh.hpp"
 #include "cli/help_zh.hpp"
@@ -39,6 +40,7 @@
 #include "game/ai/aggressive.hpp"
 #include "game/ai/human.hpp"
 #include "game/ai/simple.hpp"
+#include "game/ai/view.hpp"
 #include "game/core/card_event.hpp"
 #include "game/flow/factory.hpp"
 #include "game/flow/loop.hpp"
@@ -521,13 +523,39 @@ namespace tkw
             }
 
             /**
+             * @brief 把一手牌渲染为「卡名/卡名」；空手牌回落「无」。
+             * @param ctx  只读上下文，经目录解析展示名（目录可空则回落 def_id）。
+             * @param hand 待渲染的手牌副本。
+             * @return 斜杠分隔的中文展示名；hand 为空返回「无」。
+             * @note 纯展示，不读对手手牌；调用方只对己方座位传入手牌。
+             */
+            inline std::string hand_names(
+                const tkw::game::ReadOnlyContext &ctx,
+                const std::vector<tkw::card::Card> &hand)
+            {
+                if (hand.empty())
+                    return "无";
+
+                std::string out;
+                for (std::size_t i = 0; i < hand.size(); ++i)
+                {
+                    if (i > 0)
+                        out += "/";
+                    out += tkw::card::display_name(ctx.catalog, hand[i].def_id);
+                }
+                return out;
+            }
+
+            /**
              * @brief 打印会话状态：无会话 / 进行中 / 已结束三态。
              * @param s 当前会话；active 为假或 game 为空时只打印「会话: 无」。
              * @note 结束态以引擎 session_over（乱斗存活 ≤ 1；身份局主公阵亡或
              *       敌对尽灭）判定，胜者经 game_end_label（乱斗 winner_label，
              *       身份局阵营标签）；仅进行中打印「下一回合」与牌表来源，已达
              *       回合上限但未终结时追加一行提示。身份局额外打印模式行与逐座
-             *       角色，乱斗分支不新增任何行。
+             *       角色，乱斗分支不新增任何行。局面段中 `s.humans` 命中的座位
+             *       手牌字段经与决策窗口同一边界展开为己方牌名，其余座位仍只给
+             *       数量。
              */
             inline void print_status(const Session &s)
             {
@@ -573,13 +601,20 @@ namespace tkw
                         std::cout << (i == 0 ? "" : ",") << s.humans[i];
                 std::cout << "\n";
                 std::cout << "  局面:\n";
+                const std::set<std::string> human_seats(s.humans.begin(),
+                                                        s.humans.end());
                 for (const auto &e : *ctx.entities)
                 {
-                    std::cout << "    " << e->get_id() << " 体力 " << e->get_hp() << "/"
-                              << e->get_hp_bar().get_max() << " 手牌 "
-                              << ctx.cards->hand_size(e->get_id()) << " 装备 "
-                              << ctx.cards->equip_size(e->get_id()) << " 判定 "
-                              << ctx.cards->judge_size(e->get_id());
+                    const std::string &id = e->get_id();
+                    std::cout << "    " << id << " 体力 " << e->get_hp() << "/"
+                              << e->get_hp_bar().get_max() << " 手牌 ";
+                    if (human_seats.count(id) != 0)
+                        std::cout << hand_names(
+                            ctx, tkw::game::ai::make_view(ctx, id).hand);
+                    else
+                        std::cout << ctx.cards->hand_size(id);
+                    std::cout << " 装备 " << ctx.cards->equip_size(id)
+                              << " 判定 " << ctx.cards->judge_size(id);
                     if (tkw::game::mode_of(ctx) == tkw::game::GameMode::Identity)
                         std::cout << " 角色 "
                                   << role_label_zh(

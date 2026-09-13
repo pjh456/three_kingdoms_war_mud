@@ -714,6 +714,16 @@ add_test(NAME cli_status_finished
 set_tests_properties(cli_status_finished PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# status 展示真人座位己方手牌牌名；对手行仍只给数量且不泄漏牌名。
+add_test(NAME cli_status_human_hand
+         COMMAND sh -c
+                 "out=$(printf 'new --players 2 --seed 1\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> --human P0 repl --autosave '' 2>&1); rc=$?; \
+                  printf '%s' \"$out\" | grep -q 'P0 体力 4/4 手牌 无懈可击/五谷丰登/无中生有/闪 装备 0 判定 0' && \
+                  printf '%s' \"$out\" | grep -q 'P1 体力 4/4 手牌 4 装备 0 判定 0' && \
+                  ! printf '%s' \"$out\" | grep -q 'P1 体力 4/4 手牌 无懈' && [ $rc -eq 0 ]")
+set_tests_properties(cli_status_human_hand PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 身份局人数不足：建局期可操作文案（含人数）并退出 1。
 add_test(NAME cli_identity_too_few_players
          COMMAND sh -c
