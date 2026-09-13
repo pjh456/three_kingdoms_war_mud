@@ -46,6 +46,7 @@ namespace tkw
                 return {true, true, false, true};
             case E::RevealPick:
             case E::BorrowedSword:
+            case E::Analeptic:
                 return {true, true, false, false};
             }
             return {};
@@ -133,6 +134,23 @@ namespace tkw
         inline bool is_rescue_def(const card::CardDef &def)
         {
             return def.rescue;
+        }
+
+        /** @brief 该定义是否仅能救自己（数据标记 self_rescue，如酒）。 */
+        inline bool is_self_rescue_def(const card::CardDef &def)
+        {
+            return def.self_rescue;
+        }
+
+        /**
+         * @brief 该定义能否作为一次濒死救场牌。
+         * @param is_self saver 是否为濒死者本人。
+         * @return rescue 牌（桃）对任意 saver 成立；self_rescue 牌（酒）仅对
+         *         濒死者本人成立。
+         */
+        inline bool can_rescue_def(const card::CardDef &def, bool is_self)
+        {
+            return is_rescue_def(def) || (is_self && is_self_rescue_def(def));
         }
 
         /** @brief 该定义是否可作无懈响应牌（数据标记 counter，不再认 id）。 */

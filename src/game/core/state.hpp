@@ -123,6 +123,22 @@ namespace tkw
         }
 
         /**
+         * @brief 消费酒对本回合下一张「杀」的伤害加成：归属匹配才生效且只生效一次。
+         * @param attacker 本次使用「杀」的玩家 id。
+         * @return 应叠加的伤害基数（+1）；无待生效加成或归属不符时返回 0。
+         * @note 只清归属不碰「本回合已用酒」标记：该标记由回合入口清零。
+         *       消费点放在「使用杀」的入口，响应/打出的杀不消费也不享受。
+         */
+        inline int consume_jiu_sha_bonus(
+            GameContext &ctx, const std::string &attacker)
+        {
+            if (ctx.jiu_damage_owner != attacker)
+                return 0;
+            ctx.jiu_damage_owner.clear();
+            return 1;
+        }
+
+        /**
          * @brief 从摸牌堆取一张；牌堆空且弃牌堆非空时经 rng 洗回后重试。
          * @return None 表示摸牌堆与弃牌堆皆空（或无 rng 且摸牌堆空）。
          * @note 依赖 ctx.rng 洗回；随机源为 null 时牌堆空则直接 None。

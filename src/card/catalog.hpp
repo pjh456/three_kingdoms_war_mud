@@ -66,7 +66,8 @@ namespace tkw
                                       {"aoe_damage", CardEffectKind::AoeDamage},
                                       {"duel", CardEffectKind::Duel},
                                       {"reveal_pick", CardEffectKind::RevealPick},
-                                      {"borrowed_sword", CardEffectKind::BorrowedSword}};
+                                      {"borrowed_sword", CardEffectKind::BorrowedSword},
+                                      {"analeptic", CardEffectKind::Analeptic}};
 
             /** abilities 封闭名表：严格解析与名称查询共用的单一表源。 */
             inline constexpr
@@ -483,6 +484,11 @@ namespace tkw
                 if (counter.is_err())
                     return cfg::ConfigResult<CardDef>::Err(counter.unwrap_err());
                 def.counter = counter.unwrap();
+
+                auto self_rescue = cfg::opt_bool(root, "self_rescue", false, path);
+                if (self_rescue.is_err())
+                    return cfg::ConfigResult<CardDef>::Err(self_rescue.unwrap_err());
+                def.self_rescue = self_rescue.unwrap();
 
                 return cfg::ConfigResult<CardDef>::Ok(std::move(def));
             }

@@ -138,14 +138,29 @@ namespace tkw
                 return ordered;
             }
 
-            /** @brief 杀：逐目标按实体杀结算（伤害属性来自效果数据）。 */
+            /** @brief 杀：逐目标按实体杀结算（伤害属性来自效果数据，共享一次酒加成）。 */
             inline GameResult<void> resolve_damage(const EffectInvocation &e)
             {
+                // 使用「杀」即消费本回合的酒加成：被闪/被防具无效也已使用，不再保留；
+                // 方天多目标共享同一次消费（每个目标都 +1）
+                const int jiu = consume_jiu_sha_bonus(e.ctx, e.player);
                 for (const auto &t : e.targets)
                     resolve_sha(
                         e.ctx, e.ai, e.player, e.played, t, e.eff.amount,
                         static_cast<int>(e.targets.size()), false,
-                        e.eff.damage_type);
+                        e.eff.damage_type, jiu);
+                return GameResult<void>::Ok();
+            }
+
+            /**
+             * @brief 酒（使用方法 I）：令本回合下一张使用的「杀」伤害 +1。
+             * @note 使用限制（每回合一次）由 validate_play_action 闸门与回合流程
+             *       保证；本函数只落回合内运行时状态，不持久化、不触碰存档。
+             */
+            inline GameResult<void> resolve_analeptic(const EffectInvocation &e)
+            {
+                e.ctx.jiu_used = true;
+                e.ctx.jiu_damage_owner = e.player;
                 return GameResult<void>::Ok();
             }
 
@@ -394,6 +409,8 @@ namespace tkw
                     return resolve_reveal_pick(e);
                 case card::CardEffectKind::BorrowedSword:
                     return resolve_borrowed_sword(e);
+                case card::CardEffectKind::Analeptic:
+                    return resolve_analeptic(e);
                 default:
                     return GameResult<void>::Err(EffectError::UnsupportedKind);
                 }
@@ -472,6 +489,8 @@ namespace tkw
          * @param validate_targets 是否复验目标（最终闸门，含方天画戟放宽）；
          *        结算目标由引擎固定时（杀响应窗口）传 false 跳过——目标在
          *        打出时已以同一距离谓词校验，与真杀响应路径一致。
+         * @param damage_bonus 命中伤害修正初值（主动使用丈八虚拟杀时由回合入口
+         *        消费酒加成传入；响应/打出路径取默认 0）。
          * @note 目标校验（最终闸门，含方天画戟放宽）与两牌在手检查先于消费，
          *       失败不消耗牌；消费后两张各进弃牌堆并各发打出事件（防结算中
          *       被再选），再逐目标按虚拟杀结算。虚拟杀无花色：仁王盾黑杀
@@ -480,7 +499,8 @@ namespace tkw
         inline GameResult<void> resolve_virtual_sha(
             GameContext &ctx, DecisionSource &ai, const std::string &player,
             const std::string &first_id, const std::string &second_id,
-            const std::vector<std::string> &targets, bool validate_targets = true)
+            const std::vector<std::string> &targets, bool validate_targets = true,
+            int damage_bonus = 0)
         {
             const auto sha_def = find_sha_def(ctx);
             if (sha_def.is_none())
@@ -527,7 +547,8 @@ namespace tkw
             const card::Card virtual_sha;
             for (const auto &t : targets)
                 resolve_sha(ctx, ai, player, virtual_sha, t, eff.amount,
-                            static_cast<int>(targets.size()), true);
+                            static_cast<int>(targets.size()), true,
+                            card::DamageType::Normal, damage_bonus);
             return GameResult<void>::Ok();
         }
 

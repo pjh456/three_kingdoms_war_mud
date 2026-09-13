@@ -54,6 +54,8 @@ namespace tkw
             const GameMode *mode = nullptr;      /**< 对局模式（由对局持有） */
             const RoleTable *roles = nullptr;    /**< 身份局角色表（由对局持有） */
             std::string turn_player;             /**< 当前回合角色 id；空 = 无回合上下文 */
+            std::string jiu_damage_owner;       /**< 本回合下一张使用的「杀」享有酒加成的玩家 id；空 = 无加成 */
+            bool jiu_used = false;               /**< 本回合出牌阶段是否已使用过酒（限一次） */
 
             /** @brief 隐式转出只读视图（值拷贝六个 const 指针），供决策接缝使用。 */
             operator ReadOnlyContext() const

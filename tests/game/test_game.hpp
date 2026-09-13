@@ -20,6 +20,7 @@
 #include "config/resource.hpp"
 #include "entity/hp.hpp"
 #include "game/core/decision.hpp"
+#include "game/core/effect.hpp"
 #include "game/flow/table.hpp"
 #include "game/query/equip.hpp"
 #include "util/rng.hpp"
@@ -151,14 +152,15 @@ namespace tkw
 
             Option<std::string> play_peach(
                 const ReadOnlyContext &ctx, const std::string &saver,
-                const std::string &) override
+                const std::string &dying) override
             {
                 if (!save)
                     return Option<std::string>::None();
+                const bool is_self = (saver == dying);
                 for (const auto &c : ctx.cards->hand(saver))
                 {
                     const auto def = ctx.catalog->find(c.def_id);
-                    if (def.is_some() && def.unwrap()->rescue)
+                    if (def.is_some() && can_rescue_def(*def.unwrap(), is_self))
                         return Option<std::string>::Some(c.instance_id);
                 }
                 return Option<std::string>::None();

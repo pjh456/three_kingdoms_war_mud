@@ -156,8 +156,9 @@ namespace tkw
                     DecisionRequest req = base_request(ctx, saver);
                     req.kind = DecisionKind::Peach;
                     req.dying = dying;
+                    const bool is_self = (saver == dying);
                     for (const auto &c : ctx.cards->hand(saver))
-                        if (is_rescue_card(ctx, c))
+                        if (is_rescue_card(ctx, c, is_self))
                             req.options.push_back(c);
                     return decider_->decide(req).instance_id;
                 }
@@ -297,11 +298,13 @@ namespace tkw
                         { return is_response_def(def, kind); });
                 }
 
-                static bool is_rescue_card(const ReadOnlyContext &ctx, const card::Card &c)
+                static bool is_rescue_card(
+                    const ReadOnlyContext &ctx, const card::Card &c, bool is_self)
                 {
                     return hand_card_matching(
                         ctx, c,
-                        [](const card::CardDef &def) { return is_rescue_def(def); });
+                        [is_self](const card::CardDef &def)
+                        { return can_rescue_def(def, is_self); });
                 }
 
                 static bool is_counter_card(

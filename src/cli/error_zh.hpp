@@ -318,7 +318,7 @@ namespace tkw
         /**
          * @brief 回合根因 → 中文标签。
          * @param e 回合流程返回的失败类别。
-         * @return 十个枚举值各自的中文标签；未命中回落「未知错误」。
+         * @return 十一个枚举值各自的中文标签；未命中回落「未知错误」。
          * @note 穷举 `TurnError`，新增枚举值时编译器以 `-Wswitch` 提示补充。
          *       仅用于 step/run 经根因出参透出的失败，一次性跑局不消费。
          */
@@ -336,6 +336,8 @@ namespace tkw
                 return "目标非法";
             case game::TurnError::ShaLimitExceeded:
                 return "本回合杀已达上限";
+            case game::TurnError::AnalepticLimitExceeded:
+                return "本回合已使用过酒";
             case game::TurnError::NotEquipment:
                 return "该牌不是装备";
             case game::TurnError::DelayedDuplicate:

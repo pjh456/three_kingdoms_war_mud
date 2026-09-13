@@ -49,6 +49,9 @@ namespace tkw
                 detail::hash_bytes(h, "|");
                 detail::hash_int(h, def.rescue ? 1 : 0);
                 detail::hash_int(h, def.counter ? 1 : 0);
+                // 仅显式属性参与哈希：标准牌表全为 false，指纹逐位不变
+                if (def.self_rescue)
+                    detail::hash_int(h, 1);
                 for (const auto &c : def.copies)
                 {
                     detail::hash_int(h, static_cast<int>(c.suit));

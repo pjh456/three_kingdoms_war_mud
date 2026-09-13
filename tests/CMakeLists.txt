@@ -185,7 +185,7 @@ set_tests_properties(cli_cards_list PROPERTIES
 # 属性杀、防具与武器及其权威张数；默认牌表不动。
 add_test(NAME cli_junzheng_cards
          COMMAND sh -c
-                 "out=$($<TARGET_FILE:tkw> cards --deck resources/junzheng 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '军争篇' && printf '%s' \"$out\" | grep -q '杀(sha) 基本 30' && printf '%s' \"$out\" | grep -q '火杀(huosha) 基本 5' && printf '%s' \"$out\" | grep -q '雷杀(leisha) 基本 9' && printf '%s' \"$out\" | grep -q '藤甲(tengjia) 装备 2' && [ $rc -eq 0 ]")
+                 "out=$($<TARGET_FILE:tkw> cards --deck resources/junzheng 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '军争篇' && printf '%s' \"$out\" | grep -q '杀(sha) 基本 30' && printf '%s' \"$out\" | grep -q '火杀(huosha) 基本 5' && printf '%s' \"$out\" | grep -q '雷杀(leisha) 基本 9' && printf '%s' \"$out\" | grep -q '藤甲(tengjia) 装备 2' && printf '%s' \"$out\" | grep -q '酒(jiu) 基本 5' && [ $rc -eq 0 ]")
 set_tests_properties(cli_junzheng_cards PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 

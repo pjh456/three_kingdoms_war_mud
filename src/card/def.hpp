@@ -66,6 +66,7 @@ namespace tkw
             Duel,          /**< 决斗：轮流出杀 */
             RevealPick,    /**< 亮出等同存活人数的牌，按座位序各选一张（五谷丰登） */
             BorrowedSword, /**< 持武器者对攻击范围内角色出杀，否则使用者得其武器（借刀杀人） */
+            Analeptic,     /**< 出牌阶段限一次的杀伤害加成，或濒死时自救（酒） */
         };
 
         /**
@@ -217,6 +218,7 @@ namespace tkw
             std::vector<Ability> abilities;
             bool rescue = false;  /**< 可作濒死救场牌（桃） */
             bool counter = false; /**< 可作无懈响应牌（无懈可击） */
+            bool self_rescue = false; /**< 仅可作自己濒死时的救场牌（酒） */
 
             bool operator==(const CardDef &) const = default;
         };

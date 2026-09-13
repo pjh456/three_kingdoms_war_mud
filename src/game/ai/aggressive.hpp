@@ -46,6 +46,7 @@ namespace tkw
 
             private:
                 // 卡类出牌优先级（小者先打；同分取 legal 序靠前者）；-1 = 跳过该组。
+                static constexpr int kPlayPriorityAnaleptic = 0;     /**< 酒（先饮酒再出杀） */
                 static constexpr int kPlayPriorityDamage = 1;        /**< 伤害/丈八两张当杀 */
                 static constexpr int kPlayPriorityAoe = 2;           /**< 群体伤害 */
                 static constexpr int kPlayPriorityDelayed = 3;       /**< 延时锦囊 */
@@ -198,6 +199,8 @@ namespace tkw
                     const card::CardEffect &eff = def.effect.unwrap();
                     switch (eff.kind)
                     {
+                    case card::CardEffectKind::Analeptic:
+                        return kPlayPriorityAnaleptic;
                     case card::CardEffectKind::Damage:
                         return kPlayPriorityDamage;
                     case card::CardEffectKind::AoeDamage:

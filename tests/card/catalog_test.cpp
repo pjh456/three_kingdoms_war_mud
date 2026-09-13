@@ -219,6 +219,17 @@ TEST_CASE("card: rescue/counter flags parse with false default")
     REQUIRE(r.is_ok());
     CHECK(r.unwrap().rescue);
     CHECK_FALSE(r.unwrap().counter);
+    CHECK_FALSE(r.unwrap().self_rescue);
+
+    auto jiu = parse_card_def(
+        doc(R"({"id": "jiu", "name": "酒", "type": "basic", "subtype": "heal",
+                 "copies": [ {"suit": "diamond", "number": 9} ],
+                 "effect": {"kind": "analeptic", "scope": "self"},
+                 "self_rescue": true})").root(),
+        "jiu");
+    REQUIRE(jiu.is_ok());
+    CHECK(jiu.unwrap().self_rescue);
+    CHECK_FALSE(jiu.unwrap().rescue);
 
     auto c = parse_card_def(
         doc(R"({"id": "wuxie", "name": "无懈可击", "type": "trick", "subtype": "instant",
@@ -501,9 +512,9 @@ TEST_CASE("card: junzheng skeleton deck loads elemental slashes")
     auto r = CardDefCatalog::load(store, "deck");
     REQUIRE(r.is_ok());
     const auto &cat = r.unwrap();
-    CHECK(cat.size() == 10);
-    // 杀 30 + 火杀 5 + 雷杀 9 + 藤甲 2 + 丈八 1 + 青釭 1 + 南蛮 3 + 万箭 1 + 无中 4 + 桃 8
-    CHECK(cat.total_copies() == 64);
+    CHECK(cat.size() == 11);
+    // 杀 30 + 火杀 5 + 雷杀 9 + 藤甲 2 + 丈八 1 + 青釭 1 + 南蛮 3 + 万箭 1 + 无中 4 + 桃 8 + 酒 5
+    CHECK(cat.total_copies() == 69);
 
     auto huosha = cat.find("huosha");
     REQUIRE(huosha.is_some());
@@ -529,10 +540,23 @@ TEST_CASE("card: junzheng skeleton deck loads elemental slashes")
     REQUIRE(tengjia.unwrap()->abilities.size() == 1);
     CHECK(tengjia.unwrap()->abilities[0] == Ability::VineArmor);
 
-    // 容错扫描与严格加载同源：十卡均为已知机制名
+    // 酒：出牌阶段主动增伤 + 仅自救标记；花色点数与权威牌表一致
+    auto jiu = cat.find("jiu");
+    REQUIRE(jiu.is_some());
+    CHECK(jiu.unwrap()->name == "酒");
+    CHECK(jiu.unwrap()->type == CardType::Basic);
+    REQUIRE(jiu.unwrap()->effect.is_some());
+    CHECK(jiu.unwrap()->effect.unwrap().kind == CardEffectKind::Analeptic);
+    CHECK(jiu.unwrap()->effect.unwrap().scope.contains(Scope::Self));
+    CHECK(jiu.unwrap()->self_rescue);
+    CHECK_FALSE(jiu.unwrap()->rescue);
+    REQUIRE(jiu.unwrap()->copies.size() == 5);
+    CHECK(jiu.unwrap()->copies[0] == CardCopy{Suit::Diamond, 9});
+
+    // 容错扫描与严格加载同源：十一卡均为已知机制名
     auto raws = scan_mechanisms(store, "deck");
     REQUIRE(raws.is_ok());
-    CHECK(raws.unwrap().size() == 10);
+    CHECK(raws.unwrap().size() == 11);
 }
 
 TEST_CASE("card: scan_mechanisms reads raw names and shares the name table")

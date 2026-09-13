@@ -45,6 +45,7 @@ namespace tkw
             std::string player;  /**< 当前回合角色 id */
             int sha_played = 0;  /**< 本回合已使用的「杀」数 */
             int sha_limit = 1;   /**< 本回合「杀」上限（连弩为 INT_MAX） */
+            bool analeptic_used = false; /**< 本回合出牌阶段是否已使用过酒 */
         };
 
         /** @brief 响应窗口的来源与后果（只读事实；来源未知时字段留空）。 */

@@ -1,0 +1,16 @@
+{
+    "id": "jiu",
+    "name": "酒",
+    "type": "basic",
+    "subtype": "heal",
+    "copies": [
+        { "suit": "diamond", "number": 9 },
+        { "suit": "spade", "number": 3 },
+        { "suit": "spade", "number": 9 },
+        { "suit": "club", "number": 3 },
+        { "suit": "club", "number": 9 }
+    ],
+    "text": "出牌阶段限一次，对自己使用，令你本回合使用的下一张「杀」造成的伤害+1。当你处于濒死状态时，对自己使用，回复1点体力。",
+    "effect": { "kind": "analeptic", "scope": "self" },
+    "self_rescue": true
+}

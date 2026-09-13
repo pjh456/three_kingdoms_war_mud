@@ -3814,6 +3814,181 @@ TEST_CASE("game: vine armor does not affect duel")
     CHECK(b->get_hp() == 3);  // 决斗非杀/南蛮/万箭：藤甲不豁免
 }
 
+TEST_CASE("game: jiu boosts the next sha by one")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.give("a", "jiu", "j#0");
+    g.give("a", "sha", "s#0");
+
+    TestDecider decider;
+    const Card jiu = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", jiu, {"a"}).is_ok());
+    CHECK(g.ctx.jiu_damage_owner == "a");
+    CHECK(g.ctx.jiu_used);
+
+    const Card sha = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", sha, {"b"}).is_ok());
+    CHECK(b->get_hp() == 2);              // 基数 1 + 酒 1
+    CHECK(g.ctx.jiu_damage_owner.empty()); // 加成只作用于第一张杀
+    CHECK(g.cards.discard_size() == 2);   // 酒与杀均已入弃牌堆
+}
+
+TEST_CASE("game: jiu stacks with tengjia fire bonus")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    equip_tengjia(g, "b", "e#0");
+    g.give("a", "jiu", "j#0");
+    g.give("a", "huosha", "h#0");
+
+    TestDecider decider;
+    const Card jiu = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", jiu, {"a"}).is_ok());
+    const Card huosha = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", huosha, {"b"}).is_ok());
+    CHECK(b->get_hp() == 1);  // 1 火焰 + 藤甲 1 + 酒 1
+}
+
+TEST_CASE("game: jiu does not boost an aoe trick")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    g.give("a", "jiu", "j#0");
+    g.give("a", "nanman", "n#0");
+
+    TestDecider decider;  // 无人响应杀：南蛮目标受伤
+    const Card jiu = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", jiu, {"a"}).is_ok());
+    const Card nanman = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", nanman, {"b", "c"}).is_ok());
+    CHECK(b->get_hp() == 3);  // 群体锦囊不经杀结算，不受酒影响
+    CHECK(c->get_hp() == 3);
+    CHECK(g.ctx.jiu_damage_owner == "a");  // 加成保留到真正使用的杀
+}
+
+TEST_CASE("game: jiu is limited to once per turn")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "jiu", "j#0");
+    g.give("a", "jiu", "j#1");
+
+    const auto &def = *g.catalog.find("jiu").unwrap();
+    const Card jiu = g.cards.hand("a")[0];
+
+    // 未使用过酒：校验通过；已使用过：拒绝
+    CHECK(validate_play_action(
+              g.ctx, "a", def, jiu, {"a"}, TurnContext{"a", 0, 1, false})
+              .is_ok());
+    const auto dup = validate_play_action(
+        g.ctx, "a", def, jiu, {"a"}, TurnContext{"a", 0, 1, true});
+    REQUIRE(dup.is_err());
+    CHECK(dup.unwrap_err() == EffectError::AnalepticLimitExceeded);
+
+    // 合法动作枚举：已用酒后不再产出第二张酒
+    const auto t0 = TurnContext{"a", 0, 1, false};
+    const auto t1 = TurnContext{"a", 0, 1, true};
+    CHECK(legal_actions(g.ctx, "a", t0).size() == 2);
+    CHECK(legal_actions(g.ctx, "a", t1).empty());
+
+    // 回合流程内连出两张酒：第二次被闸门拒绝并映射为回合错误
+    TestDecider decider;
+    decider.plays = {PlayAction{"j#0", {"a"}}, PlayAction{"j#1", {"a"}}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == TurnError::AnalepticLimitExceeded);
+}
+
+TEST_CASE("game: jiu bonus is consumed even when the sha is blocked")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    auto *c = g.add_player("c", 2, 4);
+    equip_tengjia(g, "b", "e#0");  // 普通杀对 b 无效
+    g.give("a", "jiu", "j#0");
+    g.give("a", "sha", "s#0");
+    g.give("a", "sha", "s#1");
+
+    TestDecider decider;
+    const Card jiu = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", jiu, {"a"}).is_ok());
+
+    // 第一张杀被防具无效：仍已使用，加成随之消费不残留
+    const Card blocked = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", blocked, {"b"}).is_ok());
+    CHECK(b->get_hp() == 4);
+    CHECK(g.ctx.jiu_damage_owner.empty());
+
+    // 第二张杀不再 +1：命中只造成基数 1 点伤害
+    const Card second = g.cards.hand("a")[0];
+    REQUIRE(resolve_play(g.ctx, decider, "a", second, {"c"}).is_ok());
+    CHECK(c->get_hp() == 3);
+}
+
+TEST_CASE("game: jiu state resets at turn boundaries")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+
+    TestDecider decider;
+    g.ctx.jiu_damage_owner = "a";
+    g.ctx.jiu_used = true;
+    REQUIRE(execute_turn(g.ctx, decider, "a").is_ok());
+    CHECK(g.ctx.jiu_damage_owner.empty());
+    CHECK_FALSE(g.ctx.jiu_used);
+
+    // 跨玩家复用同一 GameContext：状态不泄漏到下一角色
+    g.ctx.jiu_damage_owner = "a";
+    g.ctx.jiu_used = true;
+    REQUIRE(execute_turn(g.ctx, decider, "b").is_ok());
+    CHECK(g.ctx.jiu_damage_owner.empty());
+    CHECK_FALSE(g.ctx.jiu_used);
+}
+
+TEST_CASE("game: jiu rescues its owner from dying")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    b->take_damage("a", 3, false);  // b: 4 → 1
+    g.give("b", "jiu", "j#0");
+
+    TestDecider decider;
+    decider.save = true;
+    deal_damage(g.ctx, decider, "a", "b", 1);  // b 濒死 → 酒自救
+
+    CHECK(g.entities.find("b").is_some());
+    CHECK(b->get_hp() == 1);
+    CHECK(g.cards.hand_size("b") == 0);       // 酒已消耗
+    CHECK(g.ctx.jiu_damage_owner.empty());     // 自救不授予伤害加成
+    CHECK_FALSE(g.ctx.jiu_used);               // 自救不占每回合一次
+}
+
+TEST_CASE("game: jiu cannot rescue another player")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    auto *b = g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    b->take_damage("a", 3, false);  // b: 4 → 1
+    g.give("c", "jiu", "j#0");      // c 有酒但 b 无救场牌
+
+    TestDecider decider;
+    decider.save = true;
+    deal_damage(g.ctx, decider, "a", "b", 1);  // b 濒死，c 的酒不可用
+
+    CHECK(g.entities.find("b").is_none());     // 无人可救 → 阵亡
+    CHECK(g.cards.hand_size("c") == 1);        // c 的酒未被消耗
+}
+
 TEST_CASE("game: guanshi discards two cards to force the sha")
 {
     TestGame g("deck");

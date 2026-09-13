@@ -66,7 +66,8 @@ namespace tkw
             GameContext &ctx, DecisionSource &ai, const std::string &attacker,
             const card::Card &sha, const std::string &target, int amount,
             int target_count = 1, bool virtual_sha = false,
-            card::DamageType damage_type = card::DamageType::Normal);
+            card::DamageType damage_type = card::DamageType::Normal,
+            int damage_bonus = 0);
 
         // ── 装备效果（钩子实现）────────────────────────────────────────
 
@@ -455,17 +456,22 @@ namespace tkw
          * @param virtual_sha 是否虚拟杀（丈八两张当杀）：真无花色，仁王盾
          *        黑杀判定短路；此时 sha 参数可为占位对象。
          * @param damage_type 伤害属性（默认普通；火杀/雷杀由 effect 透传）。
+         * @param damage_bonus 命中伤害修正初值（酒等调用方传入；目标侧藤甲钩子
+         *        在其上继续累加）。
          */
         inline void resolve_sha(
             GameContext &ctx, DecisionSource &ai, const std::string &attacker,
             const card::Card &sha, const std::string &target, int amount,
-            int target_count, bool virtual_sha, card::DamageType damage_type)
+            int target_count, bool virtual_sha, card::DamageType damage_type,
+            int damage_bonus)
         {
             ShaContext sc{ctx, ai, sha, attacker, target, amount};
             sc.ignore_armor = has_ability(ctx, attacker, card::Ability::IgnoreArmor);
             sc.target_count = target_count;
             sc.virtual_sha = virtual_sha;
             sc.damage_type = damage_type;
+            // 加成初值先落位，钩子（藤甲火焰脆弱等）在 Armor 阶段累加
+            sc.damage_bonus = damage_bonus;
 
             run_sha_phase(sc, ShaPhase::OnTarget);
 

@@ -151,6 +151,28 @@ TEST_CASE("ai: simple choose_play only returns legal_actions")
     CHECK(found);
 }
 
+TEST_CASE("ai: jiu is legal until used and only offered as self rescue")
+{
+    TestGame g("deck", 1, TKW_TEST_RESOURCE_DIR "/junzheng");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "jiu", "j#0");
+
+    // 合法动作：本回合未用酒时产出，已用后不再产出
+    CHECK(tkw::game::legal_actions(g.ctx, "a", tkw::game::TurnContext{"a", 0, 1, false})
+              .size() == 1);
+    CHECK(tkw::game::legal_actions(g.ctx, "a", tkw::game::TurnContext{"a", 0, 1, true})
+              .empty());
+
+    tkw::game::SimpleAI ai;
+    // 濒死者本人持酒：进入救场候选（乱斗 AI 恒救）
+    const auto self = ai.play_peach(g.ctx, "a", "a");
+    REQUIRE(self.is_some());
+    CHECK(self.unwrap() == "j#0");
+    // 非本人 saver 持酒：酒不进入候选，无法救他人
+    CHECK(ai.play_peach(g.ctx, "a", "b").is_none());
+}
+
 TEST_CASE("ai: simple borrowed sword targets the lowest-hp victim")
 {
     TestGame g("deck");

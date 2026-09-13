@@ -7,7 +7,8 @@
  *       - 一轮无人可救/不救 → 死亡：区域牌弃置、发布 EntityDiedEvent、移除实体；
  *       - 击杀奖惩：乱斗按通用规则给击杀者发奖励，身份局按死者角色与击杀者
  *         身份结算（击杀反贼发奖励；主公击杀忠臣弃光其手牌与装备；其余无奖）。
- * @note 无武将技能：能作濒死救场牌的只有资源标记 rescue 的牌。
+ * @note 无武将技能：能作濒死救场牌的只有资源标记 rescue（救任意人）或
+ *       self_rescue（仅濒死者本人，如酒）的牌。
  */
 
 #ifndef INCLUDE_TKW_GAME_COMBAT_HPP
@@ -34,22 +35,28 @@ namespace tkw
 {
     namespace game
     {
-        /** @brief 玩家手牌中是否有桃。 */
-        inline bool has_peach(const GameContext &ctx, const std::string &player)
+        /**
+         * @brief 玩家手牌中是否有可作濒死救场的牌。
+         * @param is_self 该玩家是否为濒死者本人：救自己时酒（self_rescue）也可用。
+         */
+        inline bool has_rescue(
+            const GameContext &ctx, const std::string &player, bool is_self)
         {
             return any_hand_card_matching(
                 ctx, player,
-                [](const card::CardDef &def) { return is_rescue_def(def); });
+                [is_self](const card::CardDef &def)
+                { return can_rescue_def(def, is_self); });
         }
 
-        /** @brief 消耗玩家指定的救场牌（校验确为救场牌）；失败返回 false。 */
-        inline bool consume_peach(
+        /** @brief 消耗玩家指定的救场牌（按救者身份校验）；失败返回 false。 */
+        inline bool consume_rescue(
             GameContext &ctx, const std::string &player,
-            const std::string &instance_id)
+            const std::string &instance_id, bool is_self)
         {
             return consume_hand_card_matching(
                        ctx, player, instance_id,
-                       [](const card::CardDef &def) { return is_rescue_def(def); },
+                       [is_self](const card::CardDef &def)
+                       { return can_rescue_def(def, is_self); },
                        DiscardKind::Response)
                 .is_some();
         }
@@ -102,12 +109,14 @@ namespace tkw
                 bool progress = false;
                 for (const auto &saver : order)
                 {
-                    if (!has_peach(ctx, saver))
+                    // 酒只能自救：非濒死者本人时 self_rescue 牌不进入候选
+                    const bool is_self = (saver == dying);
+                    if (!has_rescue(ctx, saver, is_self))
                         continue;
                     const auto chosen = ai.play_peach(ctx, saver, dying);
                     if (chosen.is_none())
                         continue;
-                    if (!consume_peach(ctx, saver, chosen.unwrap()))
+                    if (!consume_rescue(ctx, saver, chosen.unwrap(), is_self))
                         continue;
                     apply_heal(ctx, dying, rules_of(ctx).rescue_heal);
                     progress = true;

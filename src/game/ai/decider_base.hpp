@@ -652,6 +652,7 @@ namespace tkw
                     case card::CardEffectKind::AoeDamage:
                     case card::CardEffectKind::RevealPick:
                     case card::CardEffectKind::BorrowedSword:
+                    case card::CardEffectKind::Analeptic:
                         return false;
                     }
                     return false;

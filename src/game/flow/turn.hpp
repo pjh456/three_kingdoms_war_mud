@@ -45,6 +45,7 @@ namespace tkw
             CardNotInHand,       /**< 要打出的牌不在手牌中 */
             InvalidTarget,       /**< 目标不在合法目标集合内 */
             ShaLimitExceeded,    /**< 本回合杀次数已达上限 */
+            AnalepticLimitExceeded, /**< 本回合已使用过酒（出牌阶段限一次） */
             NotEquipment,        /**< 装备动作目标不是装备牌 */
             DelayedDuplicate,    /**< 判定区已有同名的延时锦囊 */
             PlayRejected,        /**< 结算器拒绝该效果 */
@@ -261,6 +262,8 @@ namespace tkw
                 return TurnError::CardNotInHand;
             case EffectError::ShaLimitExceeded:
                 return TurnError::ShaLimitExceeded;
+            case EffectError::AnalepticLimitExceeded:
+                return TurnError::AnalepticLimitExceeded;
             case EffectError::DelayedDuplicate:
                 return TurnError::DelayedDuplicate;
             default:
@@ -317,7 +320,8 @@ namespace tkw
                 if (!is_alive(ctx, player))
                     return TurnResult<void>::Ok();
                 // 每轮重采样杀上限：回合中途装连弩要当轮生效，与引擎侧强制检查一致
-                const TurnContext turn{player, sha_played, sha_limit(ctx, player)};
+                const TurnContext turn{
+                    player, sha_played, sha_limit(ctx, player), ctx.jiu_used};
                 auto action = ai.choose_play(ctx, turn);
                 if (action.is_none())
                     break;
@@ -331,9 +335,12 @@ namespace tkw
                         action.unwrap().targets, turn);
                     if (vr.is_err())
                         return TurnResult<void>::Err(to_turn_error(vr.unwrap_err()));
+                    // 主动使用虚拟杀：消费本回合的酒加成（响应/打出路径不消费）
+                    const int jiu = consume_jiu_sha_bonus(ctx, player);
                     auto rr = resolve_virtual_sha(
                         ctx, ai, player, action.unwrap().instance_id,
-                        action.unwrap().second_instance_id, action.unwrap().targets);
+                        action.unwrap().second_instance_id, action.unwrap().targets,
+                        true, jiu);
                     if (rr.is_err())
                         return TurnResult<void>::Err(to_turn_error(rr.unwrap_err()));
                     ++sha_played;
@@ -421,6 +428,8 @@ namespace tkw
          *       已被移除，阶段函数内均重新 find 以免悬垂指针）。
          * @note 入口把 player 置入 ctx.turn_player 并在返回时还原（覆盖全部早退），
          *       供濒死询问等结算读取当前回合角色；离开本函数即回到「无回合上下文」。
+         * @note 酒的伤害加成与「本回合已用酒」标记在入口清空、出口清空：二者是
+         *       回合内运行时状态，不持久化，也不跨回合/跨玩家泄漏。
          * @note 失败时不会回滚已落子的部分（判定/摸牌/出牌可能已结算），调用方
          *       须消费该回合（推进行程），不得以同一角色重入。
          */
@@ -432,14 +441,23 @@ namespace tkw
             if (ctx.entities->find(player).is_none())
                 return TurnResult<void>::Err(TurnError::UnknownPlayer);
 
-            // 回合上下文：置位当前回合角色，所有返回路径经守卫还原
+            // 回合上下文：置位当前回合角色；酒加成与限一次标记随回合清空/清出，
+            // 所有返回路径经守卫覆盖，避免同一 GameContext 跨回合残留
             struct TurnPlayerScope
             {
                 GameContext &context;
                 std::string prev;
-                ~TurnPlayerScope() { context.turn_player = std::move(prev); }
+                ~TurnPlayerScope()
+                {
+                    context.turn_player = std::move(prev);
+                    // 酒状态是回合内运行时状态：出回合即失效，不跨回合/跨玩家泄漏
+                    context.jiu_damage_owner.clear();
+                    context.jiu_used = false;
+                }
             } turn_scope{ctx, std::move(ctx.turn_player)};
             ctx.turn_player = player;
+            ctx.jiu_damage_owner.clear();
+            ctx.jiu_used = false;
 
             // 1. 判定阶段
             auto jr = run_judgement_phase(ctx, ai, player);

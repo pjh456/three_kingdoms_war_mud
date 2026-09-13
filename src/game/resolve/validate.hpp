@@ -42,6 +42,7 @@ namespace tkw
             InvalidChoice,   /**< 决策源选中的牌不存在于目标区域 */
             ShaLimitExceeded, /**< 本回合杀次数已达上限 */
             DelayedDuplicate, /**< 判定区已有同名的延时锦囊 */
+            AnalepticLimitExceeded, /**< 本回合已使用过酒（出牌阶段限一次） */
         };
 
         template <typename T>
@@ -245,6 +246,7 @@ namespace tkw
          *         - InvalidTarget：延时锦囊目标数不为 1 或出 scope；
          *         - DelayedDuplicate：延时锦囊目标判定区已有同名延时锦囊；
          *         - ShaLimitExceeded：杀且本回合杀次数已达上限（turn）；
+         *         - AnalepticLimitExceeded：酒且本回合已使用过酒（turn）；
          *         - NoTarget/OutOfRange/InvalidTarget：主动效果目标校验失败；
          *         - UnsupportedKind：无主动效果，或效果未实现。
          * @note 检查顺序固定：手牌存在 → 按分类分派（装备直接合法、忽略目标；
@@ -286,6 +288,10 @@ namespace tkw
                 if (is_sha_kind(def.effect.unwrap().kind) &&
                     turn.sha_played >= turn.sha_limit)
                     return GameResult<void>::Err(EffectError::ShaLimitExceeded);
+                if (def.effect.unwrap().kind == card::CardEffectKind::Analeptic &&
+                    turn.analeptic_used)
+                    return GameResult<void>::Err(
+                        EffectError::AnalepticLimitExceeded);
                 break;
 
             case PlayClass::None:
