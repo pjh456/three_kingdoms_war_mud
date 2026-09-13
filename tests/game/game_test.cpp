@@ -20,10 +20,12 @@
 #include "game/core/card_event.hpp"
 #include "game/core/context.hpp"
 #include "game/core/decision.hpp"
+#include "game/core/roles.hpp"
 #include "game/query/distance.hpp"
 #include "game/query/judge.hpp"
 #include "game/ai/legal.hpp"
 #include "game/flow/loop.hpp"
+#include "game/resolve/combat.hpp"
 #include "game/resolve/resolver.hpp"
 #include "game/flow/table.hpp"
 #include "game/flow/turn.hpp"
@@ -51,6 +53,13 @@ namespace
 
     using tkw::test::TestDecider;
     using tkw::test::TestGame;
+
+    /** 把测试对局切到身份局并写入角色表。 */
+    void make_identity(TestGame &g, RoleTable roles)
+    {
+        g.mode = GameMode::Identity;
+        g.roles = roles;
+    }
 }
 
 TEST_CASE("game: seat distance on a circle")
@@ -2120,6 +2129,216 @@ TEST_CASE("game: session starts, steps and reports over/winner")
     CHECK(session.turns == 1);
     CHECK(session_over(g.ctx));
     CHECK(session_winner(g.ctx) == "a");
+}
+
+TEST_CASE("game: identity lord death with survivors ends as rebel camp")
+{
+    TestGame g("deck");
+    g.add_player("P0", 0, 4);
+    g.add_player("P1", 1, 4);
+    g.add_player("P2", 2, 4);
+    g.add_player("P3", 3, 4);
+    make_identity(g, {{"P0", Role::Lord},
+                      {"P1", Role::Loyalist},
+                      {"P2", Role::Rebel},
+                      {"P3", Role::Traitor}});
+
+    declare_death(g.ctx, "P0");
+
+    CHECK(g.entities.size() == 3);
+    CHECK(session_over(g.ctx));
+    CHECK(session_camp(g.ctx) == WinCamp::RebelCamp);
+    CHECK(session_winner(g.ctx) == "P2");  // 首个反贼
+}
+
+TEST_CASE("game: identity lord camp wins when hostiles are dead")
+{
+    TestGame g("deck");
+    g.add_player("P0", 0, 4);
+    g.add_player("P1", 1, 4);
+    g.add_player("P2", 2, 4);
+    g.add_player("P3", 3, 4);
+    make_identity(g, {{"P0", Role::Lord},
+                      {"P1", Role::Loyalist},
+                      {"P2", Role::Rebel},
+                      {"P3", Role::Traitor}});
+
+    declare_death(g.ctx, "P2");
+    declare_death(g.ctx, "P3");
+
+    CHECK(session_over(g.ctx));
+    CHECK(session_camp(g.ctx) == WinCamp::LordCamp);
+    CHECK(session_winner(g.ctx) == "P0");
+}
+
+TEST_CASE("game: identity traitor wins only as sole survivor")
+{
+    TestGame g("deck");
+    g.add_player("P0", 0, 4);
+    g.add_player("P1", 1, 4);
+    g.add_player("P2", 2, 4);
+    make_identity(g, {{"P0", Role::Lord},
+                      {"P1", Role::Rebel},
+                      {"P2", Role::Traitor}});
+
+    declare_death(g.ctx, "P0");  // 内奸非唯一存活 → 反贼胜
+    CHECK(session_camp(g.ctx) == WinCamp::RebelCamp);
+    CHECK(session_winner(g.ctx) == "P1");
+
+    declare_death(g.ctx, "P1");  // 内奸唯一存活 → 内奸胜
+    CHECK(session_camp(g.ctx) == WinCamp::TraitorCamp);
+    CHECK(session_winner(g.ctx) == "P2");
+}
+
+TEST_CASE("game: identity empty board is a draw")
+{
+    TestGame g("deck");
+    g.add_player("P0", 0, 4);
+    g.add_player("P1", 1, 4);
+    g.add_player("P2", 2, 4);
+    g.add_player("P3", 3, 4);
+    make_identity(g, {{"P0", Role::Lord},
+                      {"P1", Role::Loyalist},
+                      {"P2", Role::Rebel},
+                      {"P3", Role::Traitor}});
+
+    for (const std::string id : {"P0", "P1", "P2", "P3"})
+        declare_death(g.ctx, id);
+
+    CHECK(g.entities.empty());
+    CHECK(session_over(g.ctx));
+    CHECK(session_camp(g.ctx) == WinCamp::Draw);
+    CHECK(session_camp(g.ctx) != WinCamp::RebelCamp);
+    CHECK(session_winner(g.ctx).empty());
+}
+
+TEST_CASE("game: identity cap with hostiles alive is MaxRounds")
+{
+    TestGame g("deck");
+    g.add_player("P0", 0, 4);
+    g.add_player("P1", 1, 4);
+    make_identity(g, {{"P0", Role::Lord}, {"P1", Role::Rebel}});
+    g.rules.max_turns = 1;
+
+    TestDecider decider;  // 无人出牌，敌对存活到顶
+    GameSession session;
+    REQUIRE(start_session(g.ctx, session, "P0").is_ok());
+
+    CHECK(step_session(g.ctx, decider, session).is_ok());
+    CHECK(session.turns == 1);
+
+    auto r = step_session(g.ctx, decider, session);
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == LoopError::MaxRounds);
+    CHECK(!session_over(g.ctx));
+    CHECK(g.entities.find("P0").is_some());
+    CHECK(g.entities.find("P1").is_some());
+}
+
+TEST_CASE("game: identity lord killed on the cap turn ends Ok")
+{
+    TestGame g("deck");
+    g.add_player("P0", 0, 2);
+    g.add_player("P1", 1, 10);
+    g.add_player("P2", 2, 10);
+    g.add_player("P3", 3, 10);
+    // P1/P3 与主公相邻（座位 1/3 到 0 距离 1），两刀跨两个回合
+    make_identity(g, {{"P0", Role::Lord},
+                      {"P1", Role::Rebel},
+                      {"P2", Role::Traitor},
+                      {"P3", Role::Rebel}});
+    g.rules.max_turns = 2;  // 第 3 回合是首个超上限回合
+    g.give("P1", "sha", "s#1");
+    g.give("P3", "sha", "s#3");
+
+    struct ScriptedDecider : TestDecider
+    {
+        std::map<std::string, std::vector<PlayAction>> script;
+        std::map<std::string, std::size_t> cursor;
+
+        Option<PlayAction> choose_play(
+            const ReadOnlyContext &, const TurnContext &turn) override
+        {
+            // 每回合至多出一张杀：已出杀即停（脚本全为杀）
+            if (turn.sha_played > 0)
+                return Option<PlayAction>::None();
+            const auto &plays = script[turn.player];
+            auto &i = cursor[turn.player];
+            if (i >= plays.size())
+                return Option<PlayAction>::None();
+            return Option<PlayAction>::Some(plays[i++]);
+        }
+    };
+    ScriptedDecider decider;
+    decider.script["P1"] = {PlayAction{"s#1", {"P0"}}};
+    decider.script["P3"] = {PlayAction{"s#3", {"P0"}}};
+
+    auto r = play_game(g.ctx, decider, "P1");
+    REQUIRE(r.is_ok());
+    CHECK(r.unwrap().turns == 3);  // 致死击落在首个超上限回合
+    CHECK(r.unwrap().camp == WinCamp::RebelCamp);
+    CHECK(r.unwrap().winner == "P1");
+    CHECK(g.entities.find("P0").is_none());
+    CHECK(session_over(g.ctx));
+}
+
+TEST_CASE("game: brawl session_camp is None and over is size<=1")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+
+    CHECK(mode_of(g.ctx) == GameMode::Brawl);
+    CHECK(g.roles.empty());
+    CHECK(!session_over(g.ctx));
+    CHECK(session_camp(g.ctx) == WinCamp::None);
+
+    declare_death(g.ctx, "a");
+    CHECK(session_over(g.ctx));
+    CHECK(session_camp(g.ctx) == WinCamp::None);
+    CHECK(session_winner(g.ctx) == "b");
+
+    declare_death(g.ctx, "b");
+    CHECK(session_winner(g.ctx).empty());
+    CHECK(session_camp(g.ctx) == WinCamp::None);
+}
+
+TEST_CASE("game: identity rebel representative stays stable after the rebel dies")
+{
+    TestGame g("deck");
+    g.add_player("P0", 0, 4);
+    g.add_player("P1", 1, 4);
+    g.add_player("P2", 2, 4);
+    g.add_player("P3", 3, 4);
+    make_identity(g, {{"P0", Role::Lord},
+                      {"P1", Role::Loyalist},
+                      {"P2", Role::Rebel},
+                      {"P3", Role::Traitor}});
+
+    declare_death(g.ctx, "P2");  // 反贼先阵亡
+    declare_death(g.ctx, "P0");  // 主公随后阵亡
+
+    CHECK(session_over(g.ctx));
+    CHECK(session_camp(g.ctx) == WinCamp::RebelCamp);
+    CHECK(g.entities.find("P2").is_none());
+    CHECK(session_winner(g.ctx) == "P2");  // 已阵亡仍作稳定代表
+}
+
+TEST_CASE("game: identity camp is None until the session ends")
+{
+    TestGame g("deck");
+    g.add_player("P0", 0, 4);
+    g.add_player("P1", 1, 4);
+    g.add_player("P2", 2, 4);
+    g.add_player("P3", 3, 4);
+    make_identity(g, {{"P0", Role::Lord},
+                      {"P1", Role::Loyalist},
+                      {"P2", Role::Rebel},
+                      {"P3", Role::Traitor}});
+
+    CHECK(!session_over(g.ctx));
+    CHECK(session_camp(g.ctx) == WinCamp::None);
+    CHECK(session_winner(g.ctx).empty());
 }
 
 TEST_CASE("game: player killed by lightning stops acting that turn")

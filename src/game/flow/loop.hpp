@@ -1,7 +1,7 @@
 /**
  * @file loop.hpp
  * @brief 对局主循环：开局准备（建牌堆/洗牌/发初始手牌）→ 回合轮转 →
- *        结束判定（只剩一名存活玩家）。
+ *        结束判定（乱斗=只剩一名存活玩家；身份局=主公阵亡或敌对尽灭）。
  * @note 玩家实体由调用方先行创建（含座位与体力）；本模块只负责发牌与轮转。
  *       死亡者被 EntityManager 移除后自动跳过（next_player 按存活实体环绕）。
  */
@@ -18,6 +18,7 @@
 #include "entity/manager.hpp"
 #include "game/core/context.hpp"
 #include "game/core/decision.hpp"
+#include "game/core/roles.hpp"
 #include "game/core/state.hpp"
 #include "game/flow/turn.hpp"
 #include "util/types.hpp"
@@ -40,8 +41,9 @@ namespace tkw
         /** @brief 对局结果。 */
         struct GameOutcome
         {
-            std::string winner; /**< 最后存活玩家 id；空串 = 无存活者（同归于尽） */
+            std::string winner; /**< 胜者/阵营代表 id；空串 = 无存活者或未标定 */
             int turns = 0;      /**< 实际进行的回合数（每执行一个玩家回合 +1） */
+            WinCamp camp = WinCamp::None; /**< 胜利阵营；乱斗恒 None */
         };
 
         /**
@@ -62,18 +64,120 @@ namespace tkw
             return ctx.entities->size();
         }
 
-        /** @brief 会话是否已结束（存活 ≤ 1）。 */
-        inline bool session_over(const GameContext &ctx)
+        /**
+         * @brief 身份局是否终局：主公阵亡 或 反贼与内奸尽灭（空场亦终局）。
+         * @return 空场或无可判定的存活主公/敌对时返回 true。
+         * @note 只在 mode==Identity 时由 session_over 调用；角色表缺失或角色为
+         *       None 时视为无主无敌对（立即终局），属非法建局态，由建局分配与
+         *       存档交叉校验兜底。
+         */
+        inline bool identity_over(const GameContext &ctx)
         {
-            return ctx.entities->size() <= 1;
+            if (ctx.entities->empty())
+                return true;
+
+            bool lord_alive = false;
+            bool hostile_alive = false;
+            for (const auto *e : ctx.entities->const_view())
+            {
+                switch (role_of(ctx, e->get_id()))
+                {
+                case Role::Lord:
+                    lord_alive = true;
+                    break;
+                case Role::Rebel:
+                case Role::Traitor:
+                    hostile_alive = true;
+                    break;
+                default:
+                    break;
+                }
+            }
+
+            return !lord_alive || !hostile_alive;
         }
 
-        /** @brief 会话胜者；空串 = 未结束或同归于尽。 */
+        /** @brief 会话是否已结束：乱斗=存活 ≤ 1；身份局=主公阵亡或敌对尽灭。 */
+        inline bool session_over(const GameContext &ctx)
+        {
+            if (mode_of(ctx) == GameMode::Brawl)
+                return ctx.entities->size() <= 1;  // 乱斗口径逐字不变
+            return identity_over(ctx);
+        }
+
+        /**
+         * @brief 会话胜利阵营：未结束或乱斗 → None；身份局按阵营终局口径。
+         * @return 未结束/乱斗 None；0 存活 Draw；主公存活 LordCamp；主公阵亡且
+         *         内奸为唯一存活者 TraitorCamp；其余主公阵亡情形 RebelCamp。
+         * @note 0 存活优先于任何「主公阵亡」判定。
+         */
+        inline WinCamp session_camp(const GameContext &ctx)
+        {
+            if (!session_over(ctx) || mode_of(ctx) == GameMode::Brawl)
+                return WinCamp::None;
+            if (ctx.entities->empty())
+                return WinCamp::Draw;
+
+            bool lord_alive = false;
+            bool traitor_alive = false;
+            for (const auto *e : ctx.entities->const_view())
+            {
+                switch (role_of(ctx, e->get_id()))
+                {
+                case Role::Lord:
+                    lord_alive = true;
+                    break;
+                case Role::Traitor:
+                    traitor_alive = true;
+                    break;
+                default:
+                    break;
+                }
+            }
+
+            if (lord_alive)
+                return WinCamp::LordCamp;
+            if (ctx.entities->size() == 1 && traitor_alive)
+                return WinCamp::TraitorCamp;
+            return WinCamp::RebelCamp;
+        }
+
+        /**
+         * @brief 会话胜者/阵营代表 id；乱斗口径逐字不变。
+         * @return 乱斗=唯一存活者 id，否则空串；身份局 LordCamp=存活主公、
+         *         TraitorCamp=存活内奸、RebelCamp=角色表首个反贼（按 id 序，
+         *         允许已阵亡，稳定展示）、Draw/None=空串。
+         */
         inline std::string session_winner(const GameContext &ctx)
         {
-            if (ctx.entities->size() == 1)
-                return (*ctx.entities->begin())->get_id();
-            return {};
+            if (mode_of(ctx) == GameMode::Brawl)
+            {
+                if (ctx.entities->size() == 1)
+                    return (*ctx.entities->begin())->get_id();
+                return {};
+            }
+
+            switch (session_camp(ctx))
+            {
+            case WinCamp::LordCamp:
+                for (const auto *e : ctx.entities->const_view())
+                    if (role_of(ctx, e->get_id()) == Role::Lord)
+                        return e->get_id();
+                return {};
+            case WinCamp::TraitorCamp:
+                for (const auto *e : ctx.entities->const_view())
+                    if (role_of(ctx, e->get_id()) == Role::Traitor)
+                        return e->get_id();
+                return {};
+            case WinCamp::RebelCamp:
+                if (ctx.roles)
+                    for (const auto &entry : *ctx.roles)
+                        if (entry.second == Role::Rebel)
+                            return entry.first;
+                return {};
+            default:
+                return {};
+            }
         }
 
         /** @brief 座位严格大于 seat 的第一个存活者（环绕到最小座位）。 */
@@ -155,15 +259,19 @@ namespace tkw
 
             ++session.turns;
 
-            // 唯一存活判定先于回合上限：本回合已出现唯一存活者时会话即结束，
-            // 回合上限不再适用（平局要求不存在唯一存活者）
-            if (ctx.entities->size() != 1 && session.turns > rules_of(ctx).max_turns)
+            // 终局判定先于回合上限：本回合已终局则上限不再适用。乱斗逐字保留
+            // 「唯一存活」表达式（0 存活且越上限仍报 MaxRounds）；身份局用
+            // !over 容纳 >1 存活者的终局。
+            const bool over = session_over(ctx);
+            const bool at_cap_without_winner =
+                mode_of(ctx) == GameMode::Brawl ? (ctx.entities->size() != 1) : !over;
+            if (at_cap_without_winner && session.turns > rules_of(ctx).max_turns)
                 return LoopResult<void>::Err(LoopError::MaxRounds);
             return LoopResult<void>::Ok();
         }
 
         /**
-         * @brief 主循环：从 first_player 起轮转执行回合，直到只剩一名存活玩家。
+         * @brief 主循环：从 first_player 起轮转执行回合，直到会话终局。
          * @param hand 每名玩家初始手牌数；< 0 时取规则配置的 initial_hand。
          * @return Ok(GameOutcome) 或 Err(LoopError)。
          */
@@ -186,6 +294,7 @@ namespace tkw
             GameOutcome gr;
             gr.turns = session.turns;
             gr.winner = session_winner(ctx);
+            gr.camp = session_camp(ctx);
             return LoopResult<GameOutcome>::Ok(std::move(gr));
         }
     }
