@@ -152,7 +152,7 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 | `--history <path>` | REPL 命令历史文件（默认不持久化，仅本次会话；父目录须已存在） |
 | `--human <seat>` | 真人座位（可重复：`--human P0 --human P2`；存档不保存，读档后需重新指定） |
 | `--no-human` | 清空真人座位（REPL 内覆盖启动/会话带入的 `--human`；与 `--human` 同给时清空优先） |
-| `--hero <seat=id>` | 武将选择（可重复：`--hero P0=zhangfei --hero P2=guanyu`；武将数据随 `--deck` 目录的 `heroes.json`） |
+| `--hero <seat=id>` | 武将选择（可重复：`--hero P0=zhangfei --hero P2=guanyu`；武将数据随 `--deck` 目录的 `heroes.json`；`load` 行内给出会被拒绝） |
 | `--ai <simple\|aggressive>` | AI 难度（默认 `simple` 贪心；`aggressive` 伤害/多目标先行） |
 | `--mode <brawl\|identity>` | 对局模式（默认 `brawl` 乱斗；`identity` 身份局需 4–8 人，`load` 以存档为准） |
 
@@ -161,7 +161,9 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 `rules` 只读 `--deck`；`step`/`run`/`status`/`save` 只读取其中的 `--verbose`（`step`/`run`）
 或全不读取（`status`/`save`）。`--human` 只在运行真人参与对局的命令生效，`audit`/`cards`/
 `rules`/`heroes`/`simulate` 会明确拒绝；`--autosave`/`--history` 只在 `repl` 生效。**`--mode` 在 `load` 上
-不生效**：载入的模式与角色以存档为准，避免用命令行强行改写存档模式。
+不生效**：载入的模式与角色以存档为准，避免用命令行强行改写存档模式。**`--hero` 在 `load` 行内会被拒绝**
+（rc=1 并提示替代命令）：武将随存档恢复，没有读档换将，要改选请用 `new --hero <座位>=<武将>`；REPL 启动
+`--hero` 只作会话默认，不会让后续 `load` 误判。
 
 REPL 内只读/批量命令（`cards`/`rules`/`audit`/`deal`/`simulate`）的默认牌表来源：有活动会话
 时读该会话牌表（与 `status` 展示一致），无活动会话时回落启动 `--deck`；行内 `--deck` 始终
@@ -240,7 +242,9 @@ TUI 命令栏同样支持 `decks [--deck 路径]` 就地列出，结果写入日
 ## 武将
 
 武将数据与牌表同根（`<deck>/heroes.json` + `<deck>/heroes/<id>.json`），独立于
-牌表、不参与牌表指纹，故换/改武将不会让旧存档报牌表不符。`tkw heroes` 一览：
+牌表、不参与牌表指纹，故换/改武将不会让旧存档报牌表不符；因此改动同名武将的
+`skills`/`hp`/`gender` 也不会触发读档的牌表不符，技能行为由引擎代码按 `hero` id
+重定位，改数据前请确认与代码支持的技能集一致。`tkw heroes` 一览：
 
 ```sh
 tkw heroes
@@ -255,7 +259,8 @@ tkw heroes
 #   甄姬(zhenji) 3体力 女 技能: 倾国
 ```
 
-用 `--hero <座位>=<武将>` 指定（可重复）；`status` 逐座展示武将，存档保留选择：
+用 `--hero <座位>=<武将>` 指定（可重复）；`status` 逐座展示武将，存档保留选择；
+`load` 恢复存档内的武将选择，行内给 `--hero` 会被拒绝，要改选请在 `new` 上重新指定：
 
 ```sh
 tkw --hero P0=zhangfei deal 2 1     # P0 张飞：咆哮锁定技，使用【杀】无次数限制

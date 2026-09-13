@@ -437,3 +437,77 @@ TEST_CASE("tui: save and load require exactly one file")
     REQUIRE(too_many.is_err());
     CHECK(too_many.unwrap_err().find("只接受一个") != std::string::npos);
 }
+
+TEST_CASE("tui: new parses repeatable hero seats with replace semantics")
+{
+    auto base = base_options();
+
+    auto single = parse_command("new --hero P0=zhangfei", base);
+    REQUIRE(single.is_ok());
+    CHECK(single.unwrap().kind == CommandKind::New);
+    CHECK(single.unwrap().options.heroes ==
+          std::vector<std::string>({"P0=zhangfei"}));
+
+    auto repeated =
+        parse_command("new --hero P0=zhangfei --hero P1=guanyu", base);
+    REQUIRE(repeated.is_ok());
+    CHECK(repeated.unwrap().options.heroes ==
+          std::vector<std::string>({"P0=zhangfei", "P1=guanyu"}));
+
+    // 行内 --hero 替换启动继承值（与 CLI 同语义），不与启动值累积。
+    base.heroes = {"P2=zhouyu"};
+    auto replaced = parse_command("new --hero P0=zhangfei", base);
+    REQUIRE(replaced.is_ok());
+    CHECK(replaced.unwrap().options.heroes ==
+          std::vector<std::string>({"P0=zhangfei"}));
+
+    // 未提供时保持启动继承值。
+    auto inherited = parse_command("new", base);
+    REQUIRE(inherited.is_ok());
+    CHECK(inherited.unwrap().options.heroes ==
+          std::vector<std::string>({"P2=zhouyu"}));
+
+    auto missing = parse_command("new --hero", base);
+    REQUIRE(missing.is_err());
+    CHECK(missing.unwrap_err().find("需要一个值") != std::string::npos);
+}
+
+TEST_CASE("tui: heroes parses into a query command")
+{
+    const auto base = base_options();
+
+    auto plain = parse_command("heroes", base);
+    REQUIRE(plain.is_ok());
+    CHECK(plain.unwrap().kind == CommandKind::Heroes);
+    CHECK_FALSE(plain.unwrap().deck_provided);
+
+    auto with_deck = parse_command("heroes --deck /tmp/d", base);
+    REQUIRE(with_deck.is_ok());
+    CHECK(with_deck.unwrap().kind == CommandKind::Heroes);
+    CHECK(with_deck.unwrap().deck_provided);
+    CHECK(with_deck.unwrap().options.deck == "/tmp/d");
+
+    auto missing = parse_command("heroes --deck", base);
+    REQUIRE(missing.is_err());
+    CHECK(missing.unwrap_err().find("需要一个值") != std::string::npos);
+
+    auto bad = parse_command("heroes x", base);
+    REQUIRE(bad.is_err());
+    CHECK(bad.unwrap_err().find("只接受") != std::string::npos);
+}
+
+TEST_CASE("tui: help lists hero selection and the heroes query")
+{
+    const auto all = tkw::tui::detail::help_lines();
+    std::string joined;
+    for (const auto &line : all)
+        joined += line + "\n";
+    CHECK(joined.find("--hero") != std::string::npos);
+    CHECK(joined.find("heroes") != std::string::npos);
+
+    // 关键词过滤只挑选既有行：武将帮助命中且不重写全量表。
+    const auto by_keyword = tkw::tui::detail::query_help_lines("武将");
+    CHECK_FALSE(by_keyword.empty());
+    for (const auto &line : by_keyword)
+        CHECK(line.find("武将") != std::string::npos);
+}

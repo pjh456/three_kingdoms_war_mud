@@ -164,7 +164,9 @@ namespace tkw
                     return "示例:\n"
                            "    load s.json                      在 REPL 内载入存档续玩（别名 l）\n"
                            "    tkw load s.json --ai aggressive  命令行载入并覆盖 AI 档\n"
-                           "    注: load 的模式与角色以存档为准，--mode 不生效\n";
+                           "    注: load 的模式与角色以存档为准，--mode 不生效\n"
+                           "    注: load 不支持 --hero，武将随存档恢复；要改选请用 "
+                           "new --hero <座位>=<武将>\n";
                 return {};
             }
         }  // namespace detail

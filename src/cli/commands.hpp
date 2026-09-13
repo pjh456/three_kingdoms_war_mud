@@ -316,7 +316,8 @@ namespace tkw
              * @param cmd 目标命令；只应传根命令，理由同 declare_human_option。
              * @note 取值形如 `P0=zhangfei`，可重复；不是 negatable，也不提供
              *       --no-hero（武将选择以最近一次显式提供为准）。值补全只列座位
-             *       前缀，武将 id 需运行时命中目录，故不做候选静态枚举。
+             *       前缀，武将 id 需运行时命中目录，故不做候选静态枚举。仅建局类
+             *       命令生效；`load` 行内显式给出会被拒绝（武将随存档恢复）。
              */
             inline void declare_hero_option(pjh::cli::BaseCommand &cmd)
             {
@@ -1071,16 +1072,26 @@ namespace tkw
 
             /**
              * @brief 读档并落子到会话：恢复存档 AI 档与统计，verbose 不持久化。
-             * @param ai_explicit 命令行是否显式给了 --ai；显式值覆盖存档 AI 档。
-             * @return Err 读文件 / 存档解析 / 真人座位校验失败；成功返回 Ok。
+             * @param ai_explicit   命令行是否显式给了 --ai；显式值覆盖存档 AI 档。
+             * @param hero_explicit 本行是否显式给了 --hero；显式给出时拒绝（武将
+             *                      随存档恢复，无读档换将语义）。
+             * @return Err 显式 --hero / 读文件 / 存档解析 / 真人座位校验失败；成功
+             *         返回 Ok。
              * @note 旧档无元数据时 AI 档回落命令行取值、统计为空；未知 AI 文本
              *       亦回落命令行，不拒绝存档。模式与角色以存档为准，占位建局固定
-             *       Brawl，--mode 在本命令上不生效。
+             *       Brawl，--mode 在本命令上不生效；武将同样以存档为准，本行
+             *       显式 --hero 无换将语义故 fail fast 拒绝（早于读文件，文案给出
+             *       替代命令）；REPL 启动 --hero 只是会话默认，不进后续行上下文，
+             *       不会触发拒绝。
              */
             inline CliResult<void> cmd_load(
                 const Options &opt, const std::filesystem::path &file, Session &s,
-                bool ai_explicit)
+                bool ai_explicit, bool hero_explicit)
             {
+                if (hero_explicit)
+                    return CliFailure{CliError(
+                        "load 不支持 --hero（武将随存档恢复）；如需选将请用 "
+                        "new --hero <座位>=<武将>")};
                 auto text = tkw::io::read_text(file);
                 if (text.is_err())
                     return CliFailure{
@@ -1675,7 +1686,8 @@ namespace tkw
                     return detail::cmd_load(
                         detail::options_from(ctx, session.base),
                         ctx.get<std::string, 0>(), session,
-                        ctx.has<fixed_string("ai")>());
+                        ctx.has<fixed_string("ai")>(),
+                        ctx.has<fixed_string("hero")>());
                 });
 
             // repl：交互模式（对局即 MUD 方向）

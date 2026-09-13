@@ -44,7 +44,7 @@ namespace
      * @brief 解析 tkw-tui 的 argv 到启动选项。
      * @param argc/argv 原始命令行。
      * @return 解析成功时 error 为空；否则 error 为中文提示，options 不可用。
-     * @note 支持 --human/--no-human/--players/--seed/--ai/--deck/--autosave/
+     * @note 支持 --human/--no-human/--hero/--players/--seed/--ai/--deck/--autosave/
      *       --hand/--mode；选项值域复用命令栏同一解析器，保证两入口同语义。
      *       --help/-h 由 main 在调用本函数前短路，不进入此处。
      */
@@ -78,6 +78,15 @@ namespace
             else if (arg == "--no-human")
             {
                 parsed.options.humans.clear();
+            }
+            else if (arg == "--hero")
+            {
+                if (!need_value(i, value))
+                {
+                    parsed.error = "选项 '--hero' 需要一个值";
+                    return parsed;
+                }
+                parsed.options.heroes.push_back(value);
             }
             else if (arg == "--players")
             {
@@ -184,7 +193,7 @@ namespace
             else if (!arg.empty() && arg[0] == '-')
             {
                 parsed.error = "未知选项: '" + arg +
-                               "'（支持 --human/--no-human/--players/--seed/"
+                               "'（支持 --human/--no-human/--hero/--players/--seed/"
                                "--hand/--ai/--mode/--deck/--autosave/--help；"
                                "查看 tkw-tui --help）";
                 return parsed;

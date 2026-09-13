@@ -43,6 +43,7 @@ namespace tkw
             Rules,  /**< 查询卡牌说明（结果写日志面板） */
             Audit,  /**< 审计牌堆（结果写日志面板） */
             Decks,  /**< 列出可用牌表（结果写日志面板） */
+            Heroes, /**< 列出可用武将（结果写日志面板） */
             Simulate, /**< 批量模拟全 AI 对局（结果写日志面板，worker 执行） */
         };
 
@@ -217,6 +218,9 @@ namespace tkw
                 Command cmd;
                 cmd.kind = CommandKind::New;
                 cmd.options = base;
+                // 行内首个 --hero 先清空启动继承值，采用 CLI 的替换语义：
+                // 「启动给 P0、行内给 P1」应只留 P1，而非累积成两个座位。
+                bool hero_provided = false;
 
                 for (std::size_t i = 1; i < tokens.size(); ++i)
                 {
@@ -241,6 +245,19 @@ namespace tkw
                     else if (t == "--no-human")
                     {
                         cmd.options.humans.clear();
+                    }
+                    else if (t == "--hero")
+                    {
+                        // 可重复；首次出现替换启动继承值，后续继续累积
+                        if (!value_of(value))
+                            return CommandParseResult::Err(
+                                missing_value_error(t));
+                        if (!hero_provided)
+                        {
+                            cmd.options.heroes.clear();
+                            hero_provided = true;
+                        }
+                        cmd.options.heroes.push_back(value);
                     }
                     else if (t == "--players")
                     {
@@ -454,6 +471,30 @@ namespace tkw
             }
 
             /**
+             * @brief 解析 heroes 的可选行内 --deck（武将数据根目录）；其余 token 报错。
+             * @note 武将数据与牌表同根，缺省目录与 cards/rules/audit/decks 同源
+             *       （行内 --deck > 活动会话 > 启动），故 heroes 无参数即列出当前
+             *       牌表目录的 heroes.json。
+             */
+            inline CommandParseResult parse_heroes(
+                const std::vector<std::string> &tokens)
+            {
+                Command cmd;
+                cmd.kind = CommandKind::Heroes;
+                for (std::size_t i = 1; i < tokens.size(); ++i)
+                {
+                    auto deck = take_query_deck(tokens, i, cmd);
+                    if (deck.is_err())
+                        return CommandParseResult::Err(deck.unwrap_err());
+                    if (deck.unwrap())
+                        continue;
+                    return CommandParseResult::Err(
+                        "heroes 只接受 --deck <路径> 选项: '" + tokens[i] + "'");
+                }
+                return CommandParseResult::Ok(std::move(cmd));
+            }
+
+            /**
              * @brief 解析 simulate <局数> [玩家数] 与行内 --seed/--ai/--mode/--hand/--deck。
              * @param tokens 全 token 列表（tokens[0] == "simulate"）。
              * @param base   启动选项；未显式给出的项沿用 base，但 seed 基值固定为 1。
@@ -641,10 +682,10 @@ namespace tkw
             inline const std::vector<std::string> &command_names()
             {
                 static const std::vector<std::string> names = {
-                    "new",    "deal", "step", "run",    "r",    "status",
-                    "st",     "save", "w",    "load",   "l",    "quit",
+                    "new",    "deal", "step", "run",    "r",     "status",
+                    "st",     "save", "w",    "load",   "l",     "quit",
                     "q",      "help", "?",    "cards",  "rules", "audit",
-                    "decks",  "simulate"};
+                    "decks",  "heroes", "simulate"};
                 return names;
             }
 
@@ -728,23 +769,24 @@ namespace tkw
                 return {
                     "TUI 命令与用法（help/? 或启动 --help/-h）：",
                     "  new [--players N] [--seed S] [--hand N] [--mode brawl|identity] "
-                    "[--ai simple|aggressive] [--deck P] [--human <座位>] [--no-human]",
+                    "[--ai simple|aggressive] [--deck P] [--human <座位>] [--no-human] "
+                    "[--hero 座位=武将]",
                     "  deal <players> <seed>；step；run/r；status/st；save/w <file>；"
                     "load/l <file>；quit/q；help/?",
                     "  simulate <局数> [玩家数] [--seed S] [--ai simple|aggressive] "
                     "[--hand N] [--mode brawl|identity] [--deck 路径]"
                     "（全 AI 批量，基种子缺省 1，结果写入本面板；q 可取消）",
                     "  cards [--text] [--deck 路径]；rules [关键词] [--deck 路径]；"
-                    "audit [--deck 路径]；decks [--deck 路径]"
-                    "（只读牌表查询，结果写入本面板）",
+                    "audit [--deck 路径]；decks [--deck 路径]；heroes [--deck 路径]"
+                    "（只读牌表/武将查询，结果写入本面板）",
                     "  牌表优先序（只读查询与 simulate）: 行内 --deck > 活动会话 > 启动 --deck",
                     "  极大批量（数百局以上）建议退出后用 tkw simulate 跑（脚本化、无 UI 线程）",
                     "  默认: --players " +
                         std::to_string(tkw::cli::Options{}.players) + "、--seed " +
                         std::to_string(tkw::cli::Options{}.seed) + "、--hand " +
                         std::to_string(rules.initial_hand) + "、--mode brawl、--ai simple",
-                    "  启动选项: --human/--no-human/--players/--seed/--hand/--ai/"
-                    "--mode/--deck/--autosave",
+                    "  启动选项: --human/--no-human/--hero/--players/--seed/--hand/"
+                    "--ai/--mode/--deck/--autosave",
                     "  键位: Esc/Ctrl-C 退出；PgUp/PgDn 翻日志；命令栏为空时 "
                     "End 回最新、Home 到最早",
                     "  事件日志恒开；TUI 不提供 --verbose/--no-verbose",
@@ -787,12 +829,13 @@ namespace tkw
          *         越界/未知选项），不抛异常。
          * @note 命令名与别名：run/r、status/st、save/w、load/l、quit/q、help/?。
          *       save/load 只取一个文件位置参数；new 只接受行内长选项与
-         *       --human/--no-human，不接受位置参数；cards 接受可选 --text 与
+         *       --human/--no-human/--hero（座位=武将，可重复，行内覆盖启动值），
+         *       不接受位置参数；cards 接受可选 --text 与
          *       --deck <路径>，rules 接受至多一个关键词与 --deck <路径>，audit
-         *       接受 --deck <路径> 且无其它参数，decks 只接受 --deck <路径>；help/?
-         *       接受至多一个关键词用于过滤命令表；simulate 接受 <局数> [玩家数] 与
-         *       行内 --seed/--ai/--mode/--hand/--deck，基种子缺省 1。未知命令名附
-         *       邻近拼写建议。
+         *       接受 --deck <路径> 且无其它参数，decks/heroes 只接受 --deck <路径>；
+         *       help/? 接受至多一个关键词用于过滤命令表；simulate 接受 <局数>
+         *       [玩家数] 与行内 --seed/--ai/--mode/--hand/--deck，基种子缺省 1。
+         *       未知命令名附邻近拼写建议。
          */
         inline CommandParseResult parse_command(
             std::string_view line, const tkw::cli::Options &base)
@@ -850,6 +893,8 @@ namespace tkw
                 return detail::parse_audit(tokens);
             if (name == "decks")
                 return detail::parse_decks(tokens);
+            if (name == "heroes")
+                return detail::parse_heroes(tokens);
             if (name == "simulate")
                 return detail::parse_simulate(tokens, base);
 

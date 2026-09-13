@@ -266,6 +266,34 @@ add_test(NAME cli_hero_leading_zero
 set_tests_properties(cli_hero_leading_zero PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# load 行内显式 --hero：中文拒绝（rc=1，含替代命令），且早于读文件不报不存在。
+add_test(NAME cli_hero_load_rejected
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> load /nonexistent-tkw-save.json --hero P0=zhangfei 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '不支持 --hero' && printf '%s' \"$out\" | grep -q 'new --hero' && ! printf '%s' \"$out\" | grep -q '文件不存在' && [ $rc -eq 1 ]")
+set_tests_properties(cli_hero_load_rejected PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# load 帮助面同步拒绝口径，便于在 --help 处直接发现。
+add_test(NAME cli_hero_load_help_hint
+         COMMAND sh -c
+                 "out=$($<TARGET_FILE:tkw> load --help); printf '%s' \"$out\" | grep -q '不支持 --hero' && printf '%s' \"$out\" | grep -q 'new --hero'")
+set_tests_properties(cli_hero_load_help_hint PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 同局多座不同武将：status 逐座展示各自的武将名，rc=0。
+add_test(NAME cli_hero_multi_seat_status
+         COMMAND sh -c
+                 "out=$(printf 'new --hero P0=zhangfei --hero P1=guanyu --players 2 --seed 1\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '武将 张飞' && printf '%s' \"$out\" | grep -q '武将 关羽' && [ $rc -eq 0 ]")
+set_tests_properties(cli_hero_multi_seat_status PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# identity + --hero：角色列与武将列同显且互不覆盖，rc=0。
+add_test(NAME cli_hero_identity_status
+         COMMAND sh -c
+                 "out=$(printf 'new --mode identity --players 4 --seed 1 --hero P0=zhangfei --hero P1=guanyu\\nstatus\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '模式: 身份局' && printf '%s' \"$out\" | grep -q '角色 主公' && printf '%s' \"$out\" | grep -q '武将 张飞' && printf '%s' \"$out\" | grep -q '武将 关羽' && [ $rc -eq 0 ]")
+set_tests_properties(cli_hero_identity_status PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 扩展牌表骨架经既有 --deck 目录选择可发现：头行显示牌堆名，逐卡行显示基础杀、
 # 属性杀、防具与武器及其权威张数；默认牌表不动。
 add_test(NAME cli_junzheng_cards

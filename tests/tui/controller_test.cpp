@@ -273,7 +273,7 @@ TEST_CASE("tui: help keyword filters the command table")
 
     c.execute_line("? 牌");
 
-    CHECK(log_contains(c.log_lines(), "只读牌表查询"));
+    CHECK(log_contains(c.log_lines(), "只读牌表/武将查询"));
     CHECK_FALSE(log_contains(c.log_lines(), "tkw simulate"));
 }
 
@@ -944,4 +944,47 @@ TEST_CASE("tui: repeated new and destruction release subscriptions safely")
         CHECK(c.snapshot().players.size() == 4);
     }
     CHECK(true);  // 析构未崩溃即通过（句柄先于 Game 退订）
+}
+
+TEST_CASE("tui: new --hero selects heroes for the seats")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+
+    c.execute_line(
+        "new --hero P0=zhangfei --hero P1=guanyu --players 2 --seed 1");
+    REQUIRE(c.snapshot().active);
+    REQUIRE(c.snapshot().players.size() == 2);
+    CHECK(c.snapshot().players[0].hero == "张飞");
+    CHECK(c.snapshot().players[1].hero == "关羽");
+    // 标准目录武将技能全部已实现：不产生未实现技能警告。
+    CHECK_FALSE(log_contains(c.log_lines(), "未实现的技能"));
+}
+
+TEST_CASE("tui: new --hero invalid seat keeps the old session")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+    c.execute_line("new --hero P0=zhangfei --players 2 --seed 1");
+    REQUIRE(c.snapshot().players.size() == 2);
+    const std::string hero0 = c.snapshot().players[0].hero;
+
+    c.execute_line("new --hero P9=guanyu --players 2 --seed 1");
+    CHECK(log_contains(c.log_lines(), "超出玩家数"));
+    CHECK(c.snapshot().players.size() == 2);
+    CHECK(c.snapshot().players[0].hero == hero0);
+}
+
+TEST_CASE("tui: heroes query lists available heroes to log")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+
+    c.execute_line("heroes");
+
+    CHECK(log_contains(c.log_lines(), "可用武将"));
+    CHECK(log_contains(c.log_lines(), "张飞(zhangfei)"));
 }

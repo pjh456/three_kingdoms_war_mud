@@ -2096,3 +2096,78 @@ TEST_CASE("cli: --hero normalizes non-canonical seat keys")
     CHECK(oob.error.find("超出玩家数") != std::string::npos);
     CHECK(oob.error.find("可用座位") != std::string::npos);
 }
+
+TEST_CASE("cli: load rejects an explicit --hero before reading the file")
+{
+    Repl repl;
+    repl.session.base.deck = TKW_TEST_RESOURCE_DIR;
+
+    // 显式 --hero：中文拒绝并给出替代命令；拒绝早于读文件（不报文件不存在）。
+    auto rejected = repl.run(
+        "load /tmp/tkw-cli-definitely-missing.json --hero P0=zhangfei");
+    CHECK_FALSE(rejected.ok);
+    CHECK(rejected.error.find("不支持 --hero") != std::string::npos);
+    CHECK(rejected.error.find("new --hero") != std::string::npos);
+    CHECK(rejected.error.find("文件不存在") == std::string::npos);
+}
+
+TEST_CASE("cli: load ignores startup --hero when the line omits it")
+{
+    Repl repl;
+    repl.session.base.deck = TKW_TEST_RESOURCE_DIR;
+
+    const std::filesystem::path file =
+        temp_save("tkw-cli-startup-hero-load.json");
+    std::error_code ec;
+    std::filesystem::remove(file, ec);
+
+    // 启动 --hero 只是会话默认：new 选中后存档，无 --hero 的 load 仍走存档武将。
+    repl.session.base.heroes = {"P0=zhangfei"};
+    REQUIRE(repl.run("new --players 2 --seed 1").ok);
+    REQUIRE(repl.run("save " + file.string()).ok);
+
+    auto loaded = repl.run("load " + file.string());
+    CHECK(loaded.ok);
+    REQUIRE(repl.session.game != nullptr);
+    CHECK(repl.session.game->entities.find("P0").unwrap()->get_hero() ==
+          "zhangfei");
+
+    std::filesystem::remove(file, ec);
+}
+
+TEST_CASE("cli: --hero selects different heroes on multiple seats")
+{
+    Repl repl;
+    repl.session.base.deck = TKW_TEST_RESOURCE_DIR;
+
+    auto created = repl.run(
+        "new --hero P0=zhangfei --hero P1=guanyu --players 2 --seed 1");
+    REQUIRE(created.ok);
+    CHECK(created.out.find("武将 张飞") != std::string::npos);
+    CHECK(created.out.find("武将 关羽") != std::string::npos);
+    REQUIRE(repl.session.game != nullptr);
+    CHECK(repl.session.game->entities.find("P0").unwrap()->get_hero() ==
+          "zhangfei");
+    CHECK(repl.session.game->entities.find("P1").unwrap()->get_hero() ==
+          "guanyu");
+}
+
+TEST_CASE("cli: --hero coexists with identity roles")
+{
+    Repl repl;
+    repl.session.base.deck = TKW_TEST_RESOURCE_DIR;
+
+    // 引擎先分配武将再做身份角色洗牌：同一实体可同时有角色与武将，互不覆盖。
+    auto created = repl.run(
+        "new --mode identity --players 4 --seed 1 "
+        "--hero P0=zhangfei --hero P1=guanyu");
+    REQUIRE(created.ok);
+    CHECK(created.out.find("模式: 身份局") != std::string::npos);
+    CHECK(created.out.find("角色 主公") != std::string::npos);
+    CHECK(created.out.find("武将 张飞") != std::string::npos);
+    CHECK(created.out.find("武将 关羽") != std::string::npos);
+    REQUIRE(repl.session.game != nullptr);
+    CHECK(repl.session.game->roles.at("P0") == tkw::game::Role::Lord);
+    CHECK(repl.session.game->entities.find("P0").unwrap()->get_hero() ==
+          "zhangfei");
+}

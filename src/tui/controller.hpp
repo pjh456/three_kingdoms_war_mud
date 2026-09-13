@@ -61,8 +61,8 @@ namespace tkw
         /**
          * @class Controller
          * @brief 驱动一局会话的命令控制器：解析命令、调度 worker、回送快照、退出存档。
-         * @note 线程契约：new/load/save/status/cards/rules/audit 只在 Idle 的主线程
-         *       执行；step/run/simulate 在 worker 执行。worker 期间主线程不读
+         * @note 线程契约：new/load/save/status/cards/rules/audit/decks/heroes 只在
+         *       Idle 的主线程执行；step/run/simulate 在 worker 执行。worker 期间主线程不读
          *       session_/log_，只读 UiModel。
          *       析构不显式 join：成员声明序保证 worker_ 最先析构并自动 join。
          */
@@ -186,6 +186,10 @@ namespace tkw
                 case CommandKind::Decks:
                     if (require_idle())
                         do_decks(cmd);
+                    break;
+                case CommandKind::Heroes:
+                    if (require_idle())
+                        do_heroes(cmd);
                     break;
                 case CommandKind::Simulate:
                     if (require_idle())
@@ -379,8 +383,15 @@ namespace tkw
              */
             void start_game(const tkw::cli::Options &opt)
             {
-                auto built = tkw::game::build_game(tkw::game::BuildOptions{
-                    opt.deck, opt.players, opt.seed, opt.mode});
+                // --hero 解析失败（格式/座位/重复）先于任何会话改动返回，旧局不受影响。
+                auto bo =
+                    tkw::cli::detail::build_options_with_heroes(opt, opt.mode);
+                if (bo.is_err())
+                {
+                    append_line(bo.unwrap_err());
+                    return;
+                }
+                auto built = tkw::game::build_game(bo.unwrap());
                 if (built.is_err())
                 {
                     append_line(
@@ -389,10 +400,14 @@ namespace tkw
                 }
                 auto game = std::move(built).unwrap();
 
-                // 未实现卡警告只提示不阻断，与 CLI new 同口径。
+                // 未实现卡/技能警告只提示不阻断，与 CLI new 同口径。
                 for (const auto &line :
                      tkw::cli::detail::unsupported_cards_warning_lines(
                          game->catalog))
+                    append_line(line);
+                for (const auto &line :
+                     tkw::cli::detail::unsupported_hero_skills_warning_lines(
+                         *game))
                     append_line(line);
 
                 const std::string verr =
@@ -714,6 +729,13 @@ namespace tkw
             {
                 append_query_lines(
                     tkw::cli::detail::decks_lines(query_options(cmd).deck));
+            }
+
+            /** @brief heroes 结果就地写日志（武将数据根取查询牌表目录）。 */
+            void do_heroes(const Command &cmd)
+            {
+                append_query_lines(
+                    tkw::cli::detail::heroes_lines(query_options(cmd).deck));
             }
 
             /** @brief 显式存档：写 AI 档与统计元数据，失败给中文根因。 */
