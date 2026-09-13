@@ -184,6 +184,26 @@ TEST_CASE("aggressive: identity passes when only allies are reachable")
     CHECK(ai.choose_play(g.ctx, turn).is_none());
 }
 
+TEST_CASE("aggressive: identity traitor strikes the loyalist before the lord")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);  // 内奸持杀
+    g.add_player("b", 1, 1);  // 主公，体力最低
+    g.add_player("c", 2, 4);  // 忠臣
+    g.give("a", "sha", "s#1");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Traitor},
+               {"b", tkw::game::Role::Lord},
+               {"c", tkw::game::Role::Loyalist}};
+
+    tkw::game::AggressiveAI ai;
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    // 共享避让助手在攻击优先档同样生效：主公不进候选，先打忠臣
+    const auto chosen = ai.choose_play(g.ctx, turn);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().targets == std::vector<std::string>{"c"});
+}
+
 TEST_CASE("aggressive: pick_card_from_target cannot identify hidden hand cards")
 {
     TestGame g("deck");

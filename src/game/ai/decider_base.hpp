@@ -216,8 +216,8 @@ namespace tkw
 
                 /**
                  * @brief 是否应救濒死者：乱斗/无角色恒救；身份局主公阵营救
-                 *        主公与忠臣，反贼只救反贼，内奸救自己并（有反贼存活时）
-                 *        救主公以维持制衡。
+                 *        主公与忠臣，反贼只救反贼，内奸救自己并（主公尚未成为
+                 *        最后一名非内奸时）救主公以维持制衡。
                  * @param view 救者观察（含自身与其他角色）。
                  * @param dying 濒死者 id。
                  * @return true = 打出救场牌。
@@ -238,7 +238,7 @@ namespace tkw
                         return r == Role::Rebel;
                     case Role::Traitor:
                         return dying == view.self ||
-                               (r == Role::Lord && any_rebel_alive(view));
+                               (r == Role::Lord && !traitor_may_kill_lord(view));
                     case Role::None:
                         return true;
                     }
@@ -496,8 +496,48 @@ namespace tkw
                 }
 
                 /**
-                 * @brief 是否应保护/避让该目标：自己、同阵营友方；内奸在有反贼
-                 *        存活时额外包含主公。
+                 * @brief 是否仍有存活忠臣（内奸清场相位的对称判据）。
+                 * @note 观察的 others 只含存活者，已阵亡者不在此列。
+                 */
+                static bool any_loyalist_alive(const AiView &view)
+                {
+                    if (view.self_role == Role::Loyalist)
+                        return true;
+                    for (const auto &e : view.others)
+                        if (e.role == Role::Loyalist)
+                            return true;
+                    return false;
+                }
+
+                /**
+                 * @brief 内奸是否仍须保主：场上还有任一派系（反贼或忠臣）
+                 *        存活，主公尚非最后一名非内奸。
+                 * @note 只看阵容存在性，与决策者自身角色无关；供保护者判定
+                 *       使用，保证「内奸候选是否保主」由阵容而非视角决定。
+                 */
+                static bool traitor_keeps_lord(const AiView &view)
+                {
+                    return any_rebel_alive(view) || any_loyalist_alive(view);
+                }
+
+                /**
+                 * @brief 内奸的落刀相位开关：无反贼且无忠臣存活时，主公已是
+                 *        最后一名非内奸，杀主公即内奸独胜；在此之前内奸必须保
+                 *        主：借主公制衡反贼，并先清光忠臣。
+                 * @note 只看阵容存在性，不看体力/手牌，纯函数可回放；乱斗与
+                 *       非内奸角色恒 false，乱斗分支因此逐字节不变。
+                 */
+                static bool traitor_may_kill_lord(const AiView &view)
+                {
+                    return view.mode == GameMode::Identity &&
+                           view.self_role == Role::Traitor &&
+                           !traitor_keeps_lord(view);
+                }
+
+                /**
+                 * @brief 是否应保护/避让该目标：自己、同阵营友方；内奸在反贼
+                 *        或忠臣尚存时额外包含主公（主公成为最后一名非内奸前不
+                 *        落刀）。
                  * @note 乱斗/无角色只保护自己，其余恒 false。
                  */
                 static bool protects(const AiView &view, const std::string &id)
@@ -512,7 +552,7 @@ namespace tkw
                     if (is_friend(view.self_role, r))
                         return true;
                     return view.self_role == Role::Traitor && r == Role::Lord &&
-                           any_rebel_alive(view);
+                           !traitor_may_kill_lord(view);
                 }
 
                 /** @brief 避让档：应保护目标记 1，其余记 0（小者优先）。 */
@@ -552,7 +592,9 @@ namespace tkw
 
                 /**
                  * @brief candidate 是否是 target 的保护者：本人、同阵营友方，
-                 *        或（有反贼存活时）保主的内奸。
+                 *        或（尚有其他派系存活时）保主的内奸。
+                 * @note 内奸候选是否保主只看阵容存在性，不能按决策者角色判定，
+                 *       否则主公视角会误判内奸为首位保护者而拒绝自己的无懈。
                  */
                 static bool is_protector_of(
                     const AiView &view, const std::string &candidate,
@@ -568,7 +610,7 @@ namespace tkw
                     if (is_friend(cr, tr))
                         return true;
                     return cr == Role::Traitor && tr == Role::Lord &&
-                           any_rebel_alive(view);
+                           traitor_keeps_lord(view);
                 }
 
                 /**

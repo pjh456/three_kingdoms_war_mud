@@ -226,6 +226,63 @@ TEST_CASE("ai: identity traitor keeps the lowest-hp rule")
     CHECK(chosen.unwrap().targets == std::vector<std::string>{"c"});
 }
 
+TEST_CASE("ai: identity traitor strikes the loyalist before the lord")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);  // 内奸持杀
+    g.add_player("b", 1, 1);  // 主公，体力最低
+    g.add_player("c", 2, 4);  // 忠臣
+    g.give("a", "sha", "s#1");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Traitor},
+               {"b", tkw::game::Role::Lord},
+               {"c", tkw::game::Role::Loyalist}};
+
+    tkw::game::SimpleAI ai;
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    // 忠臣尚存：主公进避让集，即使体力最低也不打，先清忠臣
+    const auto chosen = ai.choose_play(g.ctx, turn);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().targets == std::vector<std::string>{"c"});
+}
+
+TEST_CASE("ai: identity traitor passes when only the lord is reachable")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);  // 内奸持杀
+    g.add_player("b", 1, 1);  // 主公，唯一可达
+    g.add_player("c", 2, 4);  // 忠臣装备 +1 马，超出攻击范围
+    g.give("a", "sha", "s#1");
+    g.equip("c", "dilu", "h#1");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Traitor},
+               {"b", tkw::game::Role::Lord},
+               {"c", tkw::game::Role::Loyalist}};
+
+    tkw::game::SimpleAI ai;
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    // 有害组唯一可达目标就是应避让的主公：整组跳过，内奸过牌而非冒险落刀
+    CHECK(ai.choose_play(g.ctx, turn).is_none());
+}
+
+TEST_CASE("ai: identity traitor kills the lord once no other faction remains")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);  // 内奸持杀
+    g.add_player("b", 1, 4);  // 主公，已是最后一名非内奸
+    g.give("a", "sha", "s#1");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Traitor},
+               {"b", tkw::game::Role::Lord}};
+
+    tkw::game::SimpleAI ai;
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    // 无反贼也无忠臣：落刀相位打开，直接打主公
+    const auto chosen = ai.choose_play(g.ctx, turn);
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap().targets == std::vector<std::string>{"b"});
+}
+
 TEST_CASE("ai: brawl targeting stays lowest-hp free-for-all")
 {
     TestGame g("deck");
@@ -1489,6 +1546,56 @@ TEST_CASE("ai: identity traitor saves the lord while rebels live")
     CHECK(ai.play_peach(g.ctx, "a", "b").is_some());  // 有反贼在：救主公制衡
     g.entities.remove("c");
     CHECK(ai.play_peach(g.ctx, "a", "b").is_none());  // 反贼尽灭：不救
+}
+
+TEST_CASE("ai: identity traitor saves the lord while any other faction lives")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.give("a", "tao", "t#0");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Traitor},
+               {"b", tkw::game::Role::Lord},
+               {"c", tkw::game::Role::Loyalist}};
+
+    tkw::game::SimpleAI ai;
+    CHECK(ai.play_peach(g.ctx, "a", "b").is_some());  // 忠臣尚存：救主公制衡
+    g.entities.remove("c");
+    CHECK(ai.play_peach(g.ctx, "a", "b").is_none());  // 主公已是最后非内奸：不救
+}
+
+TEST_CASE("ai: identity traitor rescues itself")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "tao", "t#0");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Traitor},
+               {"b", tkw::game::Role::Lord}};
+
+    tkw::game::SimpleAI ai;
+    // 救自己不受落刀相位影响：任何相位内奸都应自救
+    const auto saved = ai.play_peach(g.ctx, "a", "a");
+    REQUIRE(saved.is_some());
+    CHECK(saved.unwrap() == "t#0");
+}
+
+TEST_CASE("ai: identity traitor lets the lord die when solo")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "tao", "t#0");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Traitor},
+               {"b", tkw::game::Role::Lord}};
+
+    tkw::game::SimpleAI ai;
+    // 主公是最后一名非内奸：见死不救，等他死后落刀收割
+    CHECK(ai.play_peach(g.ctx, "a", "b").is_none());
 }
 
 TEST_CASE("ai: brawl rescue keeps first card")

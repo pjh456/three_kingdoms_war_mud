@@ -37,10 +37,10 @@ namespace
     constexpr std::uint64_t IDENTITY_4P_LORD_FP = 17659891135820584377ULL;
     constexpr std::size_t IDENTITY_4P_TRAITOR_LINES = 453;
     constexpr std::uint64_t IDENTITY_4P_TRAITOR_FP = 6165952664505355774ULL;
-    constexpr std::size_t IDENTITY_5P_REBEL_LINES = 268;
-    constexpr std::uint64_t IDENTITY_5P_REBEL_FP = 6096591313624321891ULL;
-    constexpr std::size_t IDENTITY_4P_AGGRESSIVE_LINES = 169;
-    constexpr std::uint64_t IDENTITY_4P_AGGRESSIVE_FP = 12315602747341503842ULL;
+    constexpr std::size_t IDENTITY_5P_LINES = 341;
+    constexpr std::uint64_t IDENTITY_5P_FP = 17439470642723056348ULL;
+    constexpr std::size_t IDENTITY_4P_AGGRESSIVE_LINES = 200;
+    constexpr std::uint64_t IDENTITY_4P_AGGRESSIVE_FP = 2073519308997878759ULL;
 
     /** 跑一局并返回完整事件日志（Ok 或 MaxRounds 都算完整对局）。 */
     std::vector<std::string> run_game(std::uint32_t seed, int players)
@@ -694,18 +694,25 @@ TEST_CASE("replay: golden identity four-player traitor fingerprint")
     CHECK(a.deaths >= 1);
 }
 
-TEST_CASE("replay: golden identity five-player rebel fingerprint")
+TEST_CASE("replay: golden identity five-player fingerprint")
 {
-    // seed 2、5 人配比（1 忠臣 / 2 反贼 / 1 内奸）：反贼阵营胜，19 回合，
-    // 2 人阵亡、1 次击杀反贼奖励摸牌。覆盖 RebelCamp 终局口径与 5 人角色
-    // 配比，胜者为角色表首个反贼。
+    // seed 2、5 人配比（1 忠臣 / 2 反贼 / 1 内奸）：主公阵营胜，3 人阵亡，
+    // 至少 1 次击杀反贼奖励摸牌。覆盖主公阵营终局与 5 人角色配比。
     //
     // 身份局 AI 阵营意识上线后的漂移（新旧日志逐行 diff 核对过）：204 → 268 行。
     // seed 2 角色为 P0=主公、P1=反贼、P2=反贼、P3=内奸、P4=忠臣。首个分叉在
     // P2（反贼）被闪电劈至濒死：旧口径在场的 P3（内奸）与 P4（忠臣）各出桃
     // 相救；新口径按阵营取舍——内奸只救自己与（有反贼存活时的）主公，忠臣只救
     // 主公/忠臣，二人均不救反贼，P2 阵亡。此后手牌/装备/终局序列级联，行数
-    // 增加；终局仍反贼阵营胜。
+    // 增加；该版本终局为反贼阵营胜。
+    //
+    // 内奸保主相位（主公成为最后一名非内奸前避让并救主公）上线后的漂移（新旧
+    // 日志逐行 diff 核对过）：268 → 341 行，终局由反贼阵营胜改为主公阵营胜。
+    // 首个分叉在两名反贼均已阵亡、忠臣 P4 尚存后的 P3（内奸）出杀：旧口径内奸
+    // 不再避让主公，按最低体力打 P0（主公）并打至濒死；新口径内奸仍有其他派系
+    // 时避让主公，改打忠臣 P4。此后治疗/装备/终局整体级联：新线下内奸被主公
+    // 阵营反杀，主公存活，终局主公阵营胜。这正是「内奸不应在反贼尽灭后误杀
+    // 主公送反贼胜」的预期语义变化，非缺陷。
     tkw::game::SimpleAI ai;
     const auto a = run_identity(ai, 2, 5);
     const auto b = run_identity(ai, 2, 5);
@@ -714,12 +721,12 @@ TEST_CASE("replay: golden identity five-player rebel fingerprint")
 
     CHECK(a.lines == b.lines);
     CHECK(!a.lines.empty());
-    CHECK(a.lines.size() == IDENTITY_5P_REBEL_LINES);
-    CHECK(fingerprint(a.lines) == IDENTITY_5P_REBEL_FP);
+    CHECK(a.lines.size() == IDENTITY_5P_LINES);
+    CHECK(fingerprint(a.lines) == IDENTITY_5P_FP);
 
     check_identity_roles(a.roles, 5);
     check_identity_outcome(a);
-    CHECK(a.outcome.camp == tkw::game::WinCamp::RebelCamp);
+    CHECK(a.outcome.camp == tkw::game::WinCamp::LordCamp);
     CHECK(a.kill_rewards >= 1);
     CHECK(a.deaths >= 1);
 }
@@ -727,13 +734,18 @@ TEST_CASE("replay: golden identity five-player rebel fingerprint")
 TEST_CASE("replay: golden identity aggressive fingerprint")
 {
     // 攻击优先档身份局自钉：证明身份阵营目标在 aggressive 档同样生效。
-    // seed 2：主公阵营胜，13 回合，2 人阵亡、1 次击杀反贼奖励摸牌。
+    // seed 2：主公阵营胜，至少 1 次击杀反贼奖励摸牌。
     //
     // 身份局 AI 阵营意识上线后的漂移（新旧日志逐行 diff 核对过）：179 → 169 行。
     // seed 2 角色为 P0=主公、P1=内奸、P2=反贼、P3=忠臣。首个分叉在 P0 的万箭齐发
     // 结算到 P1 的无懈窗口：旧口径 P1 因锦囊冲自己而连出两张无懈（偶数相抵仍受伤）；
     // 新口径内奸视主公为非敌（保主制衡），不再无懈主公的锦囊，直接吃下万箭伤害。
-    // 此后伤害/死亡序列级联，行数减少；终局仍主公阵营胜。
+    // 此后伤害/死亡序列级联，行数减少；该版本终局为主公阵营胜。
+    //
+    // 内奸保主相位（主公成为最后一名非内奸前避让并救主公）上线后的漂移（新旧
+    // 日志逐行 diff 核对过）：169 → 200 行。首个分叉在反贼 P2 阵亡、忠臣 P3 尚存
+    // 后 P1（内奸）的决斗目标：旧口径打 P0（主公），新口径避让主公改打忠臣 P3。
+    // 此后治疗/装备/终局级联，行数增加；终局仍主公阵营胜。
     tkw::game::AggressiveAI aggr;
     const auto a = run_identity(aggr, 2, 4);
     const auto b = run_identity(aggr, 2, 4);
