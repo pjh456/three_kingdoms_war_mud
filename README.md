@@ -71,8 +71,11 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
   [--mode brawl|identity] [--ai simple|aggressive] [--deck P] [--hand N]
   [--human <座位>] [--no-human]`、`deal <players> <seed>`、`step`、`run`/`r`、
   `status`/`st`、`save`/`w <file>`、`load`/`l <file>`、`cards [--text] [--deck 路径]`、
-  `rules [关键词] [--deck 路径]`、`audit [--deck 路径]`、`quit`/`q`、`help`/`?`；
-  `Esc`/`Ctrl-C` 退出。
+   `rules [关键词] [--deck 路径]`、`audit [--deck 路径]`、`quit`/`q`、
+  `help [命令]`/`? [关键词]`；`Esc`/`Ctrl-C` 退出。
+- 命令可发现性对齐 CLI：未知命令附邻近拼写建议（如 `runn` → `run`）；
+  不带参数的 `help`/`?` 打印全量表，`help <命令>` 看单条命令用法，
+  `? <关键词>` 过滤命令表（如 `? 牌`）。
 - 反馈对齐 CLI：`step`/`run` 每回合在日志写「—— 回合 N：P ——」回合头，终局追加
   「对局统计:」块（回合数/胜者/体力/击杀/伤害/治疗），状态面板显示「存活: N」；
   `new`/`load` 对未实现卡写警告进日志（只提示、不阻断）。`tkw-tui --help`/`-h`

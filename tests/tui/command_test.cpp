@@ -123,6 +123,74 @@ TEST_CASE("tui: simulate points to cli and unknown stays unknown")
     CHECK(unknown.unwrap_err().find("未知命令") != std::string::npos);
 }
 
+TEST_CASE("tui: unknown command suggests nearest command names")
+{
+    const auto base = base_options();
+
+    auto typo = parse_command("runn", base);
+    REQUIRE(typo.is_err());
+    const std::string &hint = typo.unwrap_err();
+    CHECK(hint.find("未知命令") != std::string::npos);
+    CHECK(hint.find("是否想输入") != std::string::npos);
+    CHECK(hint.find("run") != std::string::npos);
+
+    // 远距拼写无候选，保持原泛化提示。
+    auto far = parse_command("frobnicate", base);
+    REQUIRE(far.is_err());
+    CHECK(far.unwrap_err().find("是否想输入") == std::string::npos);
+}
+
+TEST_CASE("tui: command suggestions respect threshold and cap")
+{
+    CHECK(tkw::tui::detail::suggest_commands("frobnicate").empty());
+
+    const auto typo = tkw::tui::detail::suggest_commands("runn");
+    REQUIRE_FALSE(typo.empty());
+    CHECK(typo.size() <= 3);
+    CHECK(typo.front() == "run");
+}
+
+TEST_CASE("tui: help and ? accept at most one keyword")
+{
+    const auto base = base_options();
+
+    auto help = parse_command("help", base);
+    REQUIRE(help.is_ok());
+    CHECK(help.unwrap().kind == CommandKind::Help);
+    CHECK(help.unwrap().keyword.empty());
+
+    auto help_new = parse_command("help new", base);
+    REQUIRE(help_new.is_ok());
+    CHECK(help_new.unwrap().kind == CommandKind::Help);
+    CHECK(help_new.unwrap().keyword == "new");
+
+    auto query = parse_command("? 牌", base);
+    REQUIRE(query.is_ok());
+    CHECK(query.unwrap().kind == CommandKind::Help);
+    CHECK(query.unwrap().keyword == "牌");
+
+    auto too_many = parse_command("help new run", base);
+    REQUIRE(too_many.is_err());
+    CHECK(too_many.unwrap_err().find("只接受一个") != std::string::npos);
+}
+
+TEST_CASE("tui: query_help_lines filters without rewriting the full table")
+{
+    const auto all = tkw::tui::detail::help_lines();
+    const auto unfiltered = tkw::tui::detail::query_help_lines("");
+    CHECK(unfiltered == all);
+
+    const auto by_keyword = tkw::tui::detail::query_help_lines("牌");
+    CHECK_FALSE(by_keyword.empty());
+    for (const auto &line : by_keyword)
+        CHECK(line.find("牌") != std::string::npos);
+    CHECK(by_keyword.size() < all.size());
+
+    const auto no_match = tkw::tui::detail::query_help_lines("不存在的关键词");
+    REQUIRE(no_match.size() == 1);
+    CHECK(no_match.front().find("没有匹配") != std::string::npos);
+}
+
 TEST_CASE("tui: cards/rules/audit parse into query commands")
 {
     const auto base = base_options();

@@ -256,6 +256,49 @@ TEST_CASE("tui: help lists aliases defaults and log behavior")
     CHECK(log_contains(c.log_lines(), "事件日志"));
 }
 
+TEST_CASE("tui: help keyword filters the command table")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+
+    c.execute_line("help new");
+
+    CHECK(log_contains(c.log_lines(), "  new ["));
+    CHECK_FALSE(log_contains(c.log_lines(), "audit [--deck 路径]"));
+
+    c.execute_line("? 牌");
+
+    CHECK(log_contains(c.log_lines(), "只读牌表查询"));
+    CHECK_FALSE(log_contains(c.log_lines(), "tkw simulate"));
+}
+
+TEST_CASE("tui: help without keyword still prints the full table")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+
+    c.execute_line("help");
+
+    CHECK(log_contains(c.log_lines(), "TUI 命令与用法"));
+    CHECK(log_contains(c.log_lines(), "tkw simulate"));
+    CHECK(log_contains(c.log_lines(), "键位"));
+}
+
+TEST_CASE("tui: unknown command logs did-you-mean hint")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+
+    c.execute_line("runn");
+
+    CHECK(log_contains(c.log_lines(), "未知命令"));
+    CHECK(log_contains(c.log_lines(), "是否想输入"));
+    CHECK(log_contains(c.log_lines(), "run"));
+}
+
 TEST_CASE("tui: cards query writes deck listing to log")
 {
     tkw::tui::Controller c;

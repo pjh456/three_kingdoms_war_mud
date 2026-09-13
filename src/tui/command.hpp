@@ -8,12 +8,16 @@
 #ifndef INCLUDE_TKW_TUI_COMMAND_HPP
 #define INCLUDE_TKW_TUI_COMMAND_HPP
 
+#include <algorithm>
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
+
+#include <pjh_cli/command/matcher.hpp>
 
 #include "cli/session.hpp"
 #include "game/core/rules.hpp"
@@ -423,6 +427,27 @@ namespace tkw
                 return CommandParseResult::Ok(std::move(cmd));
             }
 
+            /**
+             * @brief 解析 help/? 的可选关键词（至多一个）。
+             * @param name   实际输入的命令名（help 或 ?），用于参数错误文案。
+             * @return Ok(Command{Help, keyword})；多于一个参数返回 Err。
+             * @note 关键词经 `Command::keyword` 承载，由 `query_help_lines` 过滤；
+             *       空 = 全量表。
+             */
+            inline CommandParseResult parse_help(
+                const std::string &name,
+                const std::vector<std::string> &tokens)
+            {
+                if (tokens.size() > 2)
+                    return CommandParseResult::Err(
+                        name + " 只接受一个 <关键词> 参数");
+                Command cmd;
+                cmd.kind = CommandKind::Help;
+                if (tokens.size() == 2)
+                    cmd.keyword = tokens[1];
+                return CommandParseResult::Ok(std::move(cmd));
+            }
+
             /** 解析单文件参数命令（save/load）。 */
             inline CommandParseResult parse_file_command(
                 CommandKind kind, const std::string &name,
@@ -450,6 +475,89 @@ namespace tkw
                     return tkw::Result<T, std::string>::Err(
                         name + " 不接受参数");
                 return tkw::Result<T, std::string>::Ok(std::move(value));
+            }
+
+            /**
+             * @brief 命令栏可识别的命令名与别名表。
+             * @return 规范名与别名的有序列表（命令表序），供 did-you-mean 建议使用。
+             * @note 与 `parse_command` 的分派面保持同步；simulate 虽指路回 CLI，
+             *       仍作为一个可识别名字参与纠错，避免手误时无候选。
+             */
+            inline const std::vector<std::string> &command_names()
+            {
+                static const std::vector<std::string> names = {
+                    "new",    "deal", "step", "run",    "r",    "status",
+                    "st",     "save", "w",    "load",   "l",    "quit",
+                    "q",      "help", "?",    "cards",  "rules", "audit",
+                    "simulate"};
+                return names;
+            }
+
+            /**
+             * @brief 对未知命令名生成 did-you-mean 候选。
+             * @param token 用户输入的未知命令名（已 trim）。
+             * @return 编辑距离不超过阈值的最近 1–3 个候选（距离升序、同距按命令
+             *         表序）；无候选返回空。
+             * @note 阈值 2 覆盖插入/删除/替换等常见手误；建议只用于提示，不参与
+             *       命令分派。长度差即编辑距离下界，先据此跳过不可能命中的候选。
+             */
+            inline std::vector<std::string> suggest_commands(
+                std::string_view token)
+            {
+                constexpr int kMaxDistance = 2;
+                constexpr std::size_t kMaxSuggestions = 3;
+
+                std::vector<std::pair<int, std::string>> scored;
+                for (const auto &name : command_names())
+                {
+                    const int length_gap = static_cast<int>(token.size()) -
+                                           static_cast<int>(name.size());
+                    if (length_gap > kMaxDistance || length_gap < -kMaxDistance)
+                        continue;
+                    const int distance = pjh::cli::edit_distance(token, name);
+                    if (distance <= kMaxDistance)
+                        scored.emplace_back(distance, name);
+                }
+
+                std::stable_sort(
+                    scored.begin(), scored.end(),
+                    [](const auto &a, const auto &b)
+                    { return a.first < b.first; });
+
+                std::vector<std::string> out;
+                for (std::size_t i = 0;
+                     i < scored.size() && i < kMaxSuggestions; ++i)
+                    out.push_back(scored[i].second);
+                return out;
+            }
+
+            /**
+             * @brief ASCII 大小写不敏感的子串查找。
+             * @param haystack 被查找文本（含中文时按字节原样比较）。
+             * @param needle   关键词；空串视为命中。
+             * @return 命中返回 true。
+             */
+            inline bool contains_ci(std::string_view haystack,
+                                    std::string_view needle)
+            {
+                if (needle.empty())
+                    return true;
+                const auto lower = [](char c) -> char
+                {
+                    return (c >= 'A' && c <= 'Z')
+                               ? static_cast<char>(c - 'A' + 'a')
+                               : c;
+                };
+                for (std::size_t i = 0; i + needle.size() <= haystack.size(); ++i)
+                {
+                    std::size_t j = 0;
+                    while (j < needle.size() &&
+                           lower(haystack[i + j]) == lower(needle[j]))
+                        ++j;
+                    if (j == needle.size())
+                        return true;
+                }
+                return false;
             }
 
             /**
@@ -483,6 +591,33 @@ namespace tkw
                     "  事件日志恒开；TUI 不提供 --verbose/--no-verbose",
                 };
             }
+
+            /**
+             * @brief 按关键词过滤命令表。
+             * @param keyword 关键词；去空白后为空时返回未过滤的全量表（逐字节
+             *                与 `help_lines()` 一致）。
+             * @return 命中行（ASCII 大小写不敏感子串匹配，中文按字节匹配）；
+             *         无命中返回单行中文提示。
+             * @note 过滤只挑选既有行、不重写文案，全量表断言不因本函数漂移；
+             *       命令表仍由 `help_lines()` 单一维护。
+             */
+            inline std::vector<std::string> query_help_lines(
+                std::string_view keyword)
+            {
+                const std::vector<std::string> all = help_lines();
+                const std::string_view key = trim(keyword);
+                if (key.empty())
+                    return all;
+
+                std::vector<std::string> filtered;
+                for (const auto &line : all)
+                    if (contains_ci(line, key))
+                        filtered.push_back(line);
+                if (filtered.empty())
+                    return {"没有匹配的帮助条目: '" + std::string(key) +
+                            "'（help 查看全部）"};
+                return filtered;
+            }
         }  // namespace detail
 
         /**
@@ -495,7 +630,8 @@ namespace tkw
          *       save/load 只取一个文件位置参数；new 只接受行内长选项与
          *       --human/--no-human，不接受位置参数；cards 接受可选 --text 与
          *       --deck <路径>，rules 接受至多一个关键词与 --deck <路径>，audit
-         *       接受 --deck <路径> 且无其它参数；simulate 仍指路回 CLI。
+         *       接受 --deck <路径> 且无其它参数；help/? 接受至多一个关键词用于
+         *       过滤命令表；simulate 仍指路回 CLI。未知命令名附邻近拼写建议。
          */
         inline CommandParseResult parse_command(
             std::string_view line, const tkw::cli::Options &base)
@@ -544,11 +680,7 @@ namespace tkw
                 return detail::no_args<Command>(name, tokens, std::move(cmd));
             }
             if (name == "help" || name == "?")
-            {
-                Command cmd;
-                cmd.kind = CommandKind::Help;
-                return detail::no_args<Command>(name, tokens, std::move(cmd));
-            }
+                return detail::parse_help(name, tokens);
             if (name == "cards")
                 return detail::parse_cards(tokens);
             if (name == "rules")
@@ -562,8 +694,23 @@ namespace tkw
                     "TUI 暂不支持 simulate，请退出后运行 `tkw simulate`"
                     "（REPL 内可直接用；help 查看 TUI 命令）");
 
-            return CommandParseResult::Err("未知命令: '" + name +
-                                           "'（help 查看用法）");
+            // 邻近拼写给 did-you-mean 候选；无候选时保持原有的泛化提示文案。
+            const std::vector<std::string> suggestions =
+                detail::suggest_commands(name);
+            if (suggestions.empty())
+                return CommandParseResult::Err("未知命令: '" + name +
+                                               "'（help 查看用法）");
+
+            std::string hint = "是否想输入: ";
+            for (std::size_t i = 0; i < suggestions.size(); ++i)
+            {
+                if (i > 0)
+                    hint += " / ";
+                hint += suggestions[i];
+            }
+            hint += "？ / ";
+            return CommandParseResult::Err("未知命令: '" + name + "'（" + hint +
+                                           "help 查看用法）");
         }
     }  // namespace tui
 }  // namespace tkw

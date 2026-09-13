@@ -167,7 +167,7 @@ namespace tkw
                     request_quit();
                     break;
                 case CommandKind::Help:
-                    do_help();
+                    do_help(cmd);
                     break;
                 case CommandKind::Cards:
                     if (require_idle())
@@ -730,10 +730,13 @@ namespace tkw
                 append_line("已加载: " + file);
             }
 
-            /** @brief 追加命令表（help/?）；与启动 --help 同源。 */
-            void do_help()
+            /**
+             * @brief 追加命令表（help/? [关键词]）；与启动 --help 同源。
+             * @param cmd 解析后的 Help 命令；keyword 空 = 全量表，非空 = 过滤。
+             */
+            void do_help(const Command &cmd)
             {
-                for (const auto &line : detail::help_lines())
+                for (const auto &line : detail::query_help_lines(cmd.keyword))
                     append_line(line);
             }
 
