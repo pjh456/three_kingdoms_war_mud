@@ -477,22 +477,38 @@ namespace tkw
             };
 
             /**
+             * @brief 回合头：打印回合序号与当前玩家，使后续事件可归属。
+             * @param session 当前会话进度；turns 为已执行回合数，故下一回合 = turns + 1。
+             * @note 仅过程可见（真人默认或 --verbose）时由调用方打印；全 AI 默认
+             *       静默路径不得调用，避免污染批量/回放输出。
+             */
+            inline void print_turn_header(const tkw::game::GameSession &session)
+            {
+                std::cout << "—— 回合 " << (session.turns + 1) << "："
+                          << session.current << " ——\n";
+            }
+
+            /**
              * @brief 重复 step_session 直到会话结束或达回合上限。
              * @param ctx     对局运行时；结束判定与逐步推进都作用于其容器。
              * @param ai      决策源，由调用方按真人/AI 档构造。
              * @param session 会话进度，原地推进。
              * @param root    非空时透传给 step_session，在回合失败时写回根因。
+             * @param show_turn_headers 为真时每个回合执行前打印回合头（仅过程可见路径）。
              * @return Ok(Finished) 会话结束；Ok(MaxRounds) 达回合上限平局；
              *         Err 其它 LoopError 原样上抛。
-             * @note 只驱动循环，不订阅事件、不打印；会话状态与统计由调用方持有。
+             * @note 只驱动循环，不订阅事件；回合头是唯一可选的打印（默认关闭）。
              */
             inline tkw::game::LoopResult<RunOutcome> run_to_completion(
                 tkw::game::GameContext &ctx, tkw::game::DecisionSource &ai,
                 tkw::game::GameSession &session,
-                tkw::game::TurnError *root = nullptr)
+                tkw::game::TurnError *root = nullptr,
+                bool show_turn_headers = false)
             {
                 while (!tkw::game::session_over(ctx))
                 {
+                    if (show_turn_headers)
+                        print_turn_header(session);
                     auto r = tkw::game::step_session(ctx, ai, session, root);
                     if (r.is_ok())
                         continue;
@@ -659,6 +675,8 @@ namespace tkw
                     std::cout << "对局已结束，胜者: " << game_end_label(ctx) << "\n";
                     return CliResult<void>::Ok();
                 }
+                if (verbose)
+                    print_turn_header(s.state);
                 tkw::game::TurnError root = tkw::game::TurnError::PlayRejected;
                 auto r = tkw::game::step_session(ctx, *ai, s.state, &root);
                 if (r.is_err())
@@ -693,7 +711,7 @@ namespace tkw
                 // 进入循环前判定：true 表示本次命令至少会推进（用于末尾统计门控）。
                 const bool advanced = !tkw::game::session_over(ctx);
                 tkw::game::TurnError root = tkw::game::TurnError::PlayRejected;
-                auto rr = run_to_completion(ctx, *ai, s.state, &root);
+                auto rr = run_to_completion(ctx, *ai, s.state, &root, verbose);
                 if (rr.is_err())
                     return CliFailure{CliError(
                         format_turn_failure(rr.unwrap_err(), root, s.state.current))};
@@ -808,7 +826,7 @@ namespace tkw
                 tkw::game::GameSession session;
                 if (tkw::game::start_session(ctx, session, "P0", opt.hand).is_err())
                     return CliFailure{CliError("开局失败")};
-                auto rr = run_to_completion(ctx, *ai, session);
+                auto rr = run_to_completion(ctx, *ai, session, nullptr, opt.verbose);
                 if (rr.is_err())
                     return CliFailure{CliError(format_loop_error(rr.unwrap_err()))};
                 if (rr.unwrap() == RunOutcome::MaxRounds)

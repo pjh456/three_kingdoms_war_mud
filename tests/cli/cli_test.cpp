@@ -217,6 +217,23 @@ TEST_CASE("cli: human session defaults event log on")
     CHECK_FALSE(ai.session.verbose);
 }
 
+TEST_CASE("cli: verbose step and run print turn headers")
+{
+    Repl repl;
+
+    REQUIRE(repl.run("new --players 2 --seed 1 --verbose").ok);
+    auto stepped = repl.run("step");
+    CHECK(stepped.out.find("—— 回合 1：P0 ——") != std::string::npos);
+    auto ran = repl.run("run --verbose");
+    CHECK(ran.out.find("—— 回合 2：P1 ——") != std::string::npos);
+
+    // 默认静默路径（全 AI、未开 verbose）不打印回合头。
+    Repl quiet;
+    REQUIRE(quiet.run("new --players 2 --seed 1").ok);
+    auto q = quiet.run("step");
+    CHECK(q.out.find("—— 回合") == std::string::npos);
+}
+
 TEST_CASE("cli: verbose log renders card moved events")
 {
     Repl repl;

@@ -338,6 +338,14 @@ add_test(NAME cli_repl_human_default_verbose
 set_tests_properties(cli_repl_human_default_verbose PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# 过程可见时 step/run 打印回合头，含回合序号与当前玩家；全 AI 默认静默无回合头。
+add_test(NAME cli_repl_turn_header
+         COMMAND sh -c
+                 "out=$(printf 'new --players 2 --seed 1 --verbose\\nstep\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); printf '%s' \"$out\" | grep -q '—— 回合 1：P0 ——' && \
+                  quiet=$(printf 'new --players 2 --seed 1\\nstep\\nquit\\n' | $<TARGET_FILE:tkw> repl --autosave '' 2>&1); ! printf '%s' \"$quiet\" | grep -q '—— 回合'")
+set_tests_properties(cli_repl_turn_header PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # 裸 tkw 与 REPL 各打印一行引导文案。
 add_test(NAME cli_bare_root_banner
          COMMAND sh -c "$<TARGET_FILE:tkw> 2>&1 | grep -q '无子命令'")
