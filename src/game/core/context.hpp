@@ -12,10 +12,13 @@
 #ifndef INCLUDE_TKW_GAME_CONTEXT_HPP
 #define INCLUDE_TKW_GAME_CONTEXT_HPP
 
+#include <string>
+
 #include "card/catalog.hpp"
 #include "card/manager.hpp"
 #include "entity/manager.hpp"
 #include "event/event_bus.hpp"
+#include "game/core/roles.hpp"
 #include "game/core/rules.hpp"
 #include "util/rng.hpp"
 
@@ -46,6 +49,8 @@ namespace tkw
             const card::CardDefCatalog *catalog = nullptr;
             Rng *rng = nullptr;                  /**< 判定/洗牌随机源（由对局持有） */
             const RulesConfig *rules = nullptr;  /**< 规则数值（由对局持有） */
+            const GameMode *mode = nullptr;      /**< 对局模式（由对局持有） */
+            const RoleTable *roles = nullptr;    /**< 身份局角色表（由对局持有） */
 
             /** @brief 隐式转出只读视图（值拷贝四个 const 指针），供决策接缝使用。 */
             operator ReadOnlyContext() const
@@ -59,6 +64,18 @@ namespace tkw
         {
             static const RulesConfig fallback{};
             return ctx.rules ? *ctx.rules : fallback;
+        }
+
+        /** @brief 取对局模式；ctx 未绑定模式时回落 Brawl（测试便利）。 */
+        inline GameMode mode_of(const GameContext &ctx)
+        {
+            return ctx.mode ? *ctx.mode : GameMode::Brawl;
+        }
+
+        /** @brief 取玩家角色；ctx 未绑定角色表或未命中时回落 Role::None。 */
+        inline Role role_of(const GameContext &ctx, const std::string &id)
+        {
+            return role_of(ctx.roles, id);
         }
     }
 }

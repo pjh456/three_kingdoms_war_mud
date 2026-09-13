@@ -312,11 +312,14 @@ namespace tkw
                        std::string(turn_error_label_zh(root)) + "）";
             }
 
-            /** 建局错误 → 用户可见文案（目录加载与玩家创建两类错误面）。 */
+            /** 建局错误 → 用户可见文案（目录加载、玩家创建与身份局人数三类错误面）。 */
             inline std::string format_build_error(const tkw::game::BuildError &e)
             {
                 if (e.kind == tkw::game::BuildError::Kind::CreatePlayer)
                     return "创建玩家失败: P" + std::to_string(e.player_index);
+                if (e.kind == tkw::game::BuildError::Kind::IdentityPlayerCount)
+                    return "身份模式至少 4 人、至多 8 人: " +
+                           std::to_string(e.player_index);
                 return format_load_error(e.config);
             }
 

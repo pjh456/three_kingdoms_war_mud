@@ -19,6 +19,7 @@
 #include "entity/manager.hpp"
 #include "event/event_bus.hpp"
 #include "game/core/context.hpp"
+#include "game/core/roles.hpp"
 #include "util/rng.hpp"
 
 namespace tkw
@@ -66,6 +67,8 @@ namespace tkw
                 ctx.catalog = &catalog;
                 ctx.rng = rng.get();
                 ctx.rules = &rules;
+                ctx.mode = &mode;
+                ctx.roles = &roles;
                 return ctx;
             }
 
@@ -75,6 +78,8 @@ namespace tkw
             card::CardDefCatalog catalog;          /**< 本局卡牌目录 */
             std::unique_ptr<Rng> rng;              /**< 本局随机源 */
             RulesConfig rules;                     /**< 本局规则数值（可调参） */
+            GameMode mode = GameMode::Brawl;       /**< 本局对局模式 */
+            RoleTable roles;                       /**< 本局身份局角色表（brawl 为空） */
         };
     }
 }
