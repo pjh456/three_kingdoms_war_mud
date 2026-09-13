@@ -161,3 +161,38 @@ TEST_CASE("tui: log buffer keeps only the newest capacity lines")
     CHECK(buffer.lines().back() == "5");
     CHECK(buffer.capacity() == 3);
 }
+
+TEST_CASE("tui: damage lines mark element and indirect transmission")
+{
+    tkw::EntityDamagedEvent damaged;
+    damaged.source = "P0";
+    damaged.target = "P1";
+    damaged.amount = 3;
+
+    damaged.damage_type = tkw::card::DamageType::Normal;
+    damaged.indirect = false;
+    CHECK(tkw::cli::detail::entity_damaged_line(damaged) ==
+          "[伤害] P0 -> P1 3");
+
+    damaged.damage_type = tkw::card::DamageType::Fire;
+    CHECK(tkw::cli::detail::entity_damaged_line(damaged) ==
+          "[伤害] P0 -> P1 3（火）");
+
+    damaged.damage_type = tkw::card::DamageType::Thunder;
+    CHECK(tkw::cli::detail::entity_damaged_line(damaged) ==
+          "[伤害] P0 -> P1 3（雷）");
+
+    damaged.damage_type = tkw::card::DamageType::Normal;
+    damaged.indirect = true;
+    CHECK(tkw::cli::detail::entity_damaged_line(damaged) ==
+          "[伤害] P0 -> P1 3（传导）");
+
+    damaged.damage_type = tkw::card::DamageType::Fire;
+    CHECK(tkw::cli::detail::entity_damaged_line(damaged) ==
+          "[伤害] P0 -> P1 3（火，传导）");
+
+    damaged.source = "";
+    damaged.damage_type = tkw::card::DamageType::Thunder;
+    CHECK(tkw::cli::detail::entity_damaged_line(damaged) ==
+          "[伤害] (无来源) -> P1 3（雷，传导）");
+}

@@ -114,16 +114,47 @@ namespace tkw
             }
 
             /**
+             * @brief 伤害属性的中文单字标记；普通伤害返回空串。
+             * @note 属性为「无」时不产生标记，避免普通伤害行出现冗余后缀。
+             */
+            inline const char *damage_type_hint_zh(tkw::card::DamageType type)
+            {
+                switch (type)
+                {
+                case tkw::card::DamageType::Fire:
+                    return "火";
+                case tkw::card::DamageType::Thunder:
+                    return "雷";
+                case tkw::card::DamageType::Normal:
+                    return "";
+                }
+                return "";
+            }
+
+            /**
              * @brief [伤害] 行：无来源 = 闪电等非玩家来源。
-             * @note 空来源渲染为 (无来源)，避免空段。
+             * @note 空来源渲染为 (无来源)，避免空段。普通伤害保持原格式逐字节
+             *       不变；火/雷属性与连环等间接传导在整行尾部以全角括号标记，
+             *       复合标记按属性在前、传导在后并以全角逗号分隔。
              */
             inline std::string entity_damaged_line(
                 const tkw::EntityDamagedEvent &event)
             {
                 const std::string source =
                     event.source.empty() ? "(无来源)" : event.source;
-                return "[伤害] " + source + " -> " + event.target + " " +
-                       std::to_string(event.amount);
+                std::string line = "[伤害] " + source + " -> " + event.target +
+                                   " " + std::to_string(event.amount);
+
+                std::string marks = damage_type_hint_zh(event.damage_type);
+                if (event.indirect)
+                {
+                    if (!marks.empty())
+                        marks += "，";
+                    marks += "传导";
+                }
+                if (!marks.empty())
+                    line += "（" + marks + "）";
+                return line;
             }
 
             /** @brief [体力] 行：实体体力变化（旧->新/上限）。 */
