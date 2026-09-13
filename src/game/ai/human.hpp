@@ -453,6 +453,33 @@ namespace tkw
                     return "装备能力";
                 }
 
+                /**
+                 * @brief 借刀杀人候选的受害者是否为决策者本人。
+                 * @param req    当前出牌决策请求。
+                 * @param act    待判定的合法动作。
+                 * @param holder 出参：命中时写入持武器者 id（targets[0]）。
+                 * @return 是则 true；非借刀/非双目标/受害者非本人则 false。
+                 * @note 只读，不改变候选与输入；用于出牌窗口的后果提示。
+                 */
+                static bool is_self_target_borrowed_sword(
+                    const DecisionRequest &req, const LegalAction &act,
+                    std::string &holder)
+                {
+                    if (!req.catalog || act.targets.size() != 2 ||
+                        act.targets[1] != req.actor)
+                        return false;
+
+                    const auto def = req.catalog->find(act.card.def_id);
+                    if (def.is_none() || def.unwrap()->effect.is_none())
+                        return false;
+                    if (def.unwrap()->effect.unwrap().kind !=
+                        card::CardEffectKind::BorrowedSword)
+                        return false;
+
+                    holder = act.targets[0];
+                    return true;
+                }
+
                 DecisionChoice decide_play(const DecisionRequest &req)
                 {
                     DecisionChoice out;
@@ -481,6 +508,10 @@ namespace tkw
                                     out_ << act.targets[j];
                                 }
                             }
+                            std::string holder;
+                            if (is_self_target_borrowed_sword(req, act, holder))
+                                out_ << "（警告：" << holder
+                                     << " 将对你出杀，可能致你受伤或阵亡）";
                             out_ << "\n";
                         }
                         out_ << "输入 play <序号> 或 pass：" << std::flush;

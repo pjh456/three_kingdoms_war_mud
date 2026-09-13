@@ -334,6 +334,32 @@ TEST_CASE("ai: human decider plays chosen legal action")
     CHECK(out.str().find("s#1") != std::string::npos);
 }
 
+TEST_CASE("ai: human warns when borrowed sword targets self")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.equip("b", "qinglong", "e#0");
+    g.give("a", "jiedao", "j#0");
+
+    std::istringstream in("pass\n");
+    std::ostringstream out;
+    HumanDecider dec(in, out);
+    RequestDecisionSource src(dec);
+    const auto chosen =
+        src.choose_play(g.ctx, tkw::game::TurnContext{"a", 0, 1});
+    CHECK(chosen.is_none());  // pass 结束出牌阶段
+
+    const std::string text = out.str();
+    // 自指候选带固定告警
+    CHECK(text.find("-> b,a（警告：b 将对你出杀") != std::string::npos);
+    // 非自指候选不带告警
+    CHECK(text.find("-> b,c（警告") == std::string::npos);
+    // 整次渲染只出现一条告警
+    CHECK(text.find("将对你出杀") == text.rfind("将对你出杀"));
+}
+
 TEST_CASE("ai: human decider renders the situation summary")
 {
     TestGame g("deck");

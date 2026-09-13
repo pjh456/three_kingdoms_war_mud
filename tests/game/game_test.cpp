@@ -844,6 +844,68 @@ TEST_CASE("game: jiedao requires holder to have a weapon")
     CHECK(g.cards.hand_size("a") == 1);  // 未消耗
 }
 
+TEST_CASE("game: jiedao victim may be the user and damages them")
+{
+    TestGame g("deck");
+    auto *a = g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.equip("b", "qinglong", "e#0");  // 攻击范围 3，够到座位 0 的 a
+    g.give("a", "jiedao", "j#0");
+    g.give("b", "sha", "s#1");
+
+    TestDecider decider;
+    decider.respond = true;  // b 对受害者出杀
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b", "a"});  // B = 使用者自己
+    REQUIRE(r.is_ok());
+    CHECK(a->get_hp() == 3);              // 使用者受 1 点伤害
+    CHECK(g.cards.hand_size("b") == 0);   // b 的杀已消耗
+    CHECK(g.cards.equip_size("b") == 1);  // b 已出杀，武器不被夺
+}
+
+TEST_CASE("game: jiedao self-target can kill the user in their own turn")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 1);  // 1 体力，出牌后无手牌
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.equip("b", "qinglong", "e#0");
+    g.give("a", "jiedao", "j#0");
+    g.give("b", "sha", "s#1");
+
+    TestDecider decider;
+    decider.respond = true;  // b 出杀
+    decider.save = false;    // 无人救
+    decider.plays = {PlayAction{"j#0", {"b", "a"}}};
+
+    GameSession session;
+    session.current = "a";
+    session.started = true;
+    auto r = step_session(g.ctx, decider, session);
+    REQUIRE(r.is_ok());  // 回合内死亡不是回合错误
+    CHECK(g.entities.find("a").is_none());
+    CHECK(session.current == "b");  // 死亡者按座位推进
+}
+
+TEST_CASE("game: legal_actions includes the user as borrowed sword victim")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.equip("b", "qinglong", "e#0");
+    g.give("a", "jiedao", "j#0");
+
+    const auto acts = legal_actions(g.ctx, "a", TurnContext{"a", 0, 1});
+    bool saw_self_victim = false;
+    for (const auto &act : acts)
+        if (act.card.def_id == "jiedao" &&
+            act.targets == std::vector<std::string>{"b", "a"})
+            saw_self_victim = true;
+    CHECK(saw_self_victim);  // 冻结「允许 + 警示」口径
+}
+
 TEST_CASE("game: validate_effect_targets pins the borrowed sword special case")
 {
     // targets = {A(持武器者), B(A 攻击范围内另一名角色)}
