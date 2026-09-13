@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -158,7 +159,7 @@ TEST_CASE("tui: autosave failure is not silent")
     CHECK(c.exit_message().find("自动存档失败") != std::string::npos);
 }
 
-TEST_CASE("tui: help mentions cli-only card queries")
+TEST_CASE("tui: help mentions in-place query commands")
 {
     tkw::tui::Controller c;
     c.set_base_options(test_options());
@@ -166,11 +167,193 @@ TEST_CASE("tui: help mentions cli-only card queries")
 
     c.execute_line("help");
 
+    bool mentions_cards = false;
     bool mentions_rules = false;
+    bool mentions_audit = false;
+    bool mentions_simulate = false;
     for (const auto &line : c.log_lines())
-        if (line.find("tkw rules") != std::string::npos)
+    {
+        if (line.find("cards") != std::string::npos)
+            mentions_cards = true;
+        if (line.find("rules") != std::string::npos)
             mentions_rules = true;
+        if (line.find("audit") != std::string::npos)
+            mentions_audit = true;
+        if (line.find("tkw simulate") != std::string::npos)
+            mentions_simulate = true;
+    }
+    CHECK(mentions_cards);
     CHECK(mentions_rules);
+    CHECK(mentions_audit);
+    CHECK(mentions_simulate);
+}
+
+TEST_CASE("tui: cards query writes deck listing to log")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+
+    c.execute_line("cards");
+
+    CHECK(log_has_prefix(c.log_lines(), "牌表: "));
+    bool deck_name = false;
+    bool sha_line = false;
+    for (const auto &line : c.log_lines())
+    {
+        if (line.find("标准版") != std::string::npos)
+            deck_name = true;
+        if (line.find("杀(sha) 基本 30") != std::string::npos)
+            sha_line = true;
+    }
+    CHECK(deck_name);
+    CHECK(sha_line);
+}
+
+TEST_CASE("tui: rules query filters by keyword")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+
+    c.execute_line("rules 杀");
+
+    bool sha_line = false;
+    bool guohe_line = false;
+    for (const auto &line : c.log_lines())
+    {
+        if (line.find("杀(sha):") != std::string::npos)
+            sha_line = true;
+        if (line.find("过河拆桥(guohe):") != std::string::npos)
+            guohe_line = true;
+    }
+    CHECK(sha_line);
+    CHECK_FALSE(guohe_line);
+}
+
+TEST_CASE("tui: audit query reports settleable deck")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+
+    c.execute_line("audit");
+
+    CHECK(log_has_prefix(c.log_lines(), "牌表: "));
+    bool reported = false;
+    for (const auto &line : c.log_lines())
+        if (line.find("牌堆全部可结算") != std::string::npos ||
+            line.find("未实现卡") != std::string::npos)
+            reported = true;
+    CHECK(reported);
+}
+
+TEST_CASE("tui: query uses active session deck over startup")
+{
+    const std::filesystem::path root =
+        std::filesystem::temp_directory_path() / "tkw-tui-query-deck";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    const std::filesystem::path deck_a = root / "a";
+    const std::filesystem::path deck_b = root / "b";
+    std::filesystem::create_directories(deck_a / "cards", ec);
+    std::filesystem::create_directories(deck_b / "cards", ec);
+    {
+        std::ofstream(deck_a / "deck.json")
+            << R"({"name":"甲","cards":["h0"]})";
+        std::ofstream(deck_a / "cards" / "h0.json")
+            << R"({"id":"h0","name":"甲卡","type":"basic","copies":[{"suit":"spade","number":7}]})";
+        std::ofstream(deck_b / "deck.json")
+            << R"({"name":"乙","cards":["h0"]})";
+        std::ofstream(deck_b / "cards" / "h0.json")
+            << R"({"id":"h0","name":"乙卡","type":"basic","copies":[{"suit":"spade","number":7}]})";
+    }
+
+    auto opt = test_options();
+    opt.deck = deck_a;
+    tkw::tui::Controller c;
+    c.set_base_options(opt);
+    c.bootstrap();
+
+    c.execute_line("new --players 2 --seed 1 --hand 0 --deck " +
+                   deck_b.string());
+    c.execute_line("cards");
+
+    bool source_b = false;
+    bool name_b = false;
+    bool card_b = false;
+    bool source_a = false;
+    for (const auto &line : c.log_lines())
+    {
+        if (line.find("牌表: " + deck_b.string()) != std::string::npos)
+            source_b = true;
+        if (line.find("乙") != std::string::npos)
+            name_b = true;
+        if (line.find("乙卡") != std::string::npos)
+            card_b = true;
+        if (line.find("牌表: " + deck_a.string()) != std::string::npos)
+            source_a = true;
+    }
+    CHECK(source_b);
+    CHECK(name_b);
+    CHECK(card_b);
+    CHECK_FALSE(source_a);
+
+    std::filesystem::remove_all(root, ec);
+}
+
+TEST_CASE("tui: query during run is rejected")
+{
+    tkw::tui::Controller c;
+    c.set_base_options(test_options());
+    c.bootstrap();
+    c.execute_line("new --human P0 --players 2 --seed 1");
+    REQUIRE_FALSE(c.running());
+
+    c.execute_line("step");
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    bool saw_pending = false;
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        if (c.has_pending_decision())
+        {
+            saw_pending = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    REQUIRE(saw_pending);
+
+    c.execute_line("cards");
+    CHECK(log_has_prefix(c.log_lines(), "引擎运行中"));
+
+    // 逐个提交直到 worker 结束，避免残留阻塞。
+    while (c.running() && std::chrono::steady_clock::now() < deadline)
+    {
+        tkw::tui::DecisionPanelView panel;
+        if (!c.fetch_new_decision(panel))
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            continue;
+        }
+        std::vector<std::size_t> selected;
+        if (panel.options.empty())
+        {
+            c.submit_decision(selected, panel.allow_pass);
+            continue;
+        }
+        if (panel.kind == tkw::game::ai::DecisionKind::Discard)
+            for (int i = 0; i < panel.need_count &&
+                            static_cast<std::size_t>(i) < panel.options.size();
+                 ++i)
+                selected.push_back(static_cast<std::size_t>(i));
+        else
+            selected.push_back(0);
+        c.submit_decision(selected, false);
+    }
+    c.wait_idle();
+    CHECK_FALSE(c.running());
 }
 
 TEST_CASE("tui: invalid input logs a hint and leaves state untouched")

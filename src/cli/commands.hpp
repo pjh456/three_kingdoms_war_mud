@@ -29,6 +29,7 @@
 #include "card/catalog.hpp"
 #include "cli/error_zh.hpp"
 #include "cli/help_zh.hpp"
+#include "cli/query_lines.hpp"
 #include "cli/render.hpp"
 #include "cli/session.hpp"
 #include "config/error.hpp"
@@ -886,12 +887,11 @@ namespace tkw
             }
 
             /**
-             * @brief 审计牌堆：容错扫描原始机制名，列出引擎未实现的卡。
+             * @brief 审计牌堆：拒绝真人座位后，把 audit_lines 逐行打印到标准输出。
              * @param opt 对局选项；仅 --deck 决定被审计的牌表目录。
              * @return Ok；Err 为牌堆加载失败（kind + detail，与建局错误面一致）。
-             * @note 不建局：未知机制名逐卡列出而非整体拒载（deal/simulate 仍走
-             *       严格加载，未知机制在建局入口响亮失败）；公共选项中仅 --deck
-             *       生效，--human 因该命令不运行对局而被拒绝。
+             * @note 打印包装：human 策略留在本层（--human 拒绝文案与退出行为不变），
+             *       行构造与加载复用查询纯函数；行序与换行由本层补齐。
              */
             inline CliResult<void> audit_deck(const Options &opt)
             {
@@ -899,87 +899,44 @@ namespace tkw
                 if (!herr.empty())
                     return CliFailure{CliError(herr)};
 
-                tkw::config::ResourceStore store(opt.deck);
-                auto unsupported = tkw::game::unsupported_cards(store, "deck");
-                if (unsupported.is_err())
-                {
-                    const auto &e = unsupported.unwrap_err();
-                    return CliFailure{CliError(format_load_error(e))};
-                }
-                const auto &cards = unsupported.unwrap();
-                // 输出头先亮明本命令实际读取的牌表目录，便于多牌表核对。
-                std::cout << "牌表: " << opt.deck.string() << "\n";
-                if (cards.empty())
-                {
-                    std::cout << "牌堆全部可结算\n";
-                    return CliResult<void>::Ok();
-                }
-                std::cout << "未实现卡（" << cards.size() << " 张）:\n";
-                for (const auto &c : cards)
-                    std::cout << "  " << c.name << "(" << c.id << ")\n";
+                auto lines = audit_lines(opt);
+                if (lines.is_err())
+                    return CliFailure{CliError(lines.unwrap_err())};
+                for (const auto &line : lines.unwrap())
+                    std::cout << line << "\n";
                 return CliResult<void>::Ok();
             }
 
             /**
-             * @brief 列出牌表：只加载卡牌目录，打印牌堆名与种类/张数，再按
-             *        deck 序逐卡打印「中文名(id) 大类 张数」。
+             * @brief 列出牌表：拒绝真人座位后，把 cards_lines 逐行打印到标准输出。
              * @param opt       对局选项；仅 --deck 决定被读取的牌表目录。
-             * @param show_text 为真时在每行末尾附 CardDef.text 效果文案。
+             * @param show_text 为真时在每卡行末尾附 CardDef.text 效果文案。
              * @return Ok；Err 为牌堆加载失败（kind + detail，与建局错误面一致）。
-             * @note 只读牌堆查询，不建局、不消耗随机源；公共选项中仅 --deck
-             *       生效，其余被接受但不读取（与 audit 声明面一致），--human
-             *       因该命令不运行对局而被拒绝。输出头先亮明实际牌表目录，再打
-             *       牌堆名与种类/张数；deck.json 的 name 缺失或类型不符时头行
-             *       退化为无牌堆名，不阻断列出。
+             * @note 打印包装：human 策略留在本层；只读查询不建局、不消耗随机源，
+             *       行构造复用查询纯函数，输出逐字节不变。
              */
             inline CliResult<void> cards_list(const Options &opt, bool show_text)
             {
                 const std::string herr = reject_humans(opt.humans, "cards");
                 if (!herr.empty())
                     return CliFailure{CliError(herr)};
-                tkw::config::ResourceStore store(opt.deck);
-                auto catalog = tkw::card::CardDefCatalog::load(store, "deck");
-                if (catalog.is_err())
-                {
-                    const auto &e = catalog.unwrap_err();
-                    return CliFailure{CliError(format_load_error(e))};
-                }
-                const auto &cat = catalog.unwrap();
 
-                std::string deck_name;
-                const auto deck_doc = store.load("deck");
-                if (deck_doc.is_ok())
-                {
-                    const auto nm = tkw::config::opt_string(
-                        deck_doc.unwrap().root(), "name", "", "deck");
-                    if (nm.is_ok())
-                        deck_name = nm.unwrap();
-                }
-
-                std::cout << "牌表: " << opt.deck.string() << "\n";
-                std::cout << "牌堆" << (deck_name.empty() ? "" : " " + deck_name)
-                          << "（" << cat.size() << " 种 / " << cat.total_copies()
-                          << " 张）\n";
-                for (const auto &def : cat)
-                {
-                    std::cout << "  " << def.name << "(" << def.id << ") "
-                              << card_type_zh(def.type) << ' ' << def.copies.size();
-                    if (show_text)
-                        std::cout << ": " << card_text_of(def);
-                    std::cout << "\n";
-                }
+                auto lines = cards_lines(opt, show_text);
+                if (lines.is_err())
+                    return CliFailure{CliError(lines.unwrap_err())};
+                for (const auto &line : lines.unwrap())
+                    std::cout << line << "\n";
                 return CliResult<void>::Ok();
             }
 
             /**
-             * @brief 规则/卡牌说明查询：只加载卡牌目录，逐卡打印 CardDef.text，
-             *        关键词过滤命中卡名/id/效果文案任一子串。
+             * @brief 规则/卡牌说明查询：拒绝真人座位后，把 rules_lines 逐行打印到
+             *        标准输出。
              * @param opt     对局选项；仅 --deck 决定被读取的牌表目录。
              * @param keyword 过滤关键词；空串 = 列出全部。
              * @return Ok；Err 为牌堆加载失败（kind + detail，与建局错误面一致）。
-             * @note 只读牌堆查询，不建局、不消耗随机源；输出头先亮明实际牌表
-             *       目录，--human 因该命令不运行对局而被拒绝。文案缺失时回落
-             *       「（无说明）」占位，不跳过该卡，保持列表面与 cards 同口径。
+             * @note 打印包装：human 策略留在本层；命中谓词与文案回落复用查询纯函数，
+             *       只读查询不建局、不消耗随机源。
              */
             inline CliResult<void> rules_lookup(
                 const Options &opt, const std::string &keyword)
@@ -987,39 +944,12 @@ namespace tkw
                 const std::string herr = reject_humans(opt.humans, "rules");
                 if (!herr.empty())
                     return CliFailure{CliError(herr)};
-                tkw::config::ResourceStore store(opt.deck);
-                auto catalog = tkw::card::CardDefCatalog::load(store, "deck");
-                if (catalog.is_err())
-                {
-                    const auto &e = catalog.unwrap_err();
-                    return CliFailure{CliError(format_load_error(e))};
-                }
-                const auto &cat = catalog.unwrap();
 
-                std::string body;
-                std::size_t shown = 0;
-                for (const auto &def : cat)
-                {
-                    if (!keyword.empty() &&
-                        def.name.find(keyword) == std::string::npos &&
-                        def.id.find(keyword) == std::string::npos &&
-                        def.text.find(keyword) == std::string::npos)
-                        continue;
-                    body += "  " + def.name + "(" + def.id + "): " +
-                            card_text_of(def) + "\n";
-                    ++shown;
-                }
-
-                std::cout << "牌表: " << opt.deck.string() << "\n";
-                if (keyword.empty())
-                    std::cout << "卡牌说明（" << shown << " 种）:\n";
-                else
-                    std::cout << "卡牌说明（匹配「" << keyword << "」的 " << shown
-                              << " 种）:\n";
-                if (shown == 0)
-                    std::cout << "  没有匹配的卡牌说明。\n";
-                else
-                    std::cout << body;
+                auto lines = rules_lines(opt, keyword);
+                if (lines.is_err())
+                    return CliFailure{CliError(lines.unwrap_err())};
+                for (const auto &line : lines.unwrap())
+                    std::cout << line << "\n";
                 return CliResult<void>::Ok();
             }
 

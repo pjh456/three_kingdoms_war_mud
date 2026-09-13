@@ -35,15 +35,20 @@ namespace tkw
             Load,   /**< 从存档恢复会话 */
             Quit,   /**< 退出 TUI */
             Help,   /**< 追加命令表 */
+            Cards,  /**< 列出牌表（结果写日志面板） */
+            Rules,  /**< 查询卡牌说明（结果写日志面板） */
+            Audit,  /**< 审计牌堆（结果写日志面板） */
         };
 
-        /** 解析后的命令值：类别 + new/deal 的已解析选项 + save/load 路径。 */
+        /** 解析后的命令值：类别 + new/deal 选项 + save/load 路径 + 查询参数。 */
         struct Command
         {
             CommandKind kind = CommandKind::Step;   /**< 命令类别 */
             tkw::cli::Options options;              /**< new/deal：base 继承 + 行内覆盖 */
             std::string file;                       /**< save/load 存档路径 */
             bool run_to_end = false;                /**< deal/run 建局或起跑后跑到底 */
+            std::string keyword;                    /**< rules：过滤关键词；空 = 全部 */
+            bool with_text = false;                 /**< cards：附 CardDef.text 效果文案 */
         };
 
         /** 解析结果：Ok(Command) 或 Err(中文提示)。 */
@@ -324,6 +329,37 @@ namespace tkw
                 return CommandParseResult::Ok(std::move(cmd));
             }
 
+            /** 解析 cards 的可选 --text；其余 token 报错。 */
+            inline CommandParseResult parse_cards(
+                const std::vector<std::string> &tokens)
+            {
+                Command cmd;
+                cmd.kind = CommandKind::Cards;
+                for (std::size_t i = 1; i < tokens.size(); ++i)
+                {
+                    if (tokens[i] == "--text")
+                        cmd.with_text = true;
+                    else
+                        return CommandParseResult::Err(
+                            "cards 只接受 --text 选项: '" + tokens[i] + "'");
+                }
+                return CommandParseResult::Ok(std::move(cmd));
+            }
+
+            /** 解析 rules 的 0/1 个位置关键词。 */
+            inline CommandParseResult parse_rules(
+                const std::vector<std::string> &tokens)
+            {
+                if (tokens.size() > 2)
+                    return CommandParseResult::Err(
+                        "rules 只接受一个 <关键词> 参数");
+                Command cmd;
+                cmd.kind = CommandKind::Rules;
+                if (tokens.size() == 2)
+                    cmd.keyword = tokens[1];
+                return CommandParseResult::Ok(std::move(cmd));
+            }
+
             /** 解析单文件参数命令（save/load）。 */
             inline CommandParseResult parse_file_command(
                 CommandKind kind, const std::string &name,
@@ -362,7 +398,8 @@ namespace tkw
          *         越界/未知选项），不抛异常。
          * @note 命令名与别名：run/r、status/st、quit/q、help/?。save/load 只取
          *       一个文件位置参数；new 只接受行内长选项与 --human/--no-human，
-         *       不接受位置参数。
+         *       不接受位置参数；cards 只接受可选 --text，rules 只接受至多一个
+         *       关键词，audit 不接受参数；simulate 仍指路回 CLI。
          */
         inline CommandParseResult parse_command(
             std::string_view line, const tkw::cli::Options &base)
@@ -416,13 +453,22 @@ namespace tkw
                 cmd.kind = CommandKind::Help;
                 return detail::no_args<Command>(name, tokens, std::move(cmd));
             }
+            if (name == "cards")
+                return detail::parse_cards(tokens);
+            if (name == "rules")
+                return detail::parse_rules(tokens);
+            if (name == "audit")
+            {
+                Command cmd;
+                cmd.kind = CommandKind::Audit;
+                return detail::no_args<Command>("audit", tokens, std::move(cmd));
+            }
 
-            // 只读与批量查询命令仅 CLI 提供：TUI 无对应命令面，明确指路而非报“未知命令”。
-            if (name == "cards" || name == "rules" || name == "audit" ||
-                name == "simulate")
+            // 批量模拟会长时间占用主线程且无 TUI 结果面：明确指路而非报“未知命令”。
+            if (name == "simulate")
                 return CommandParseResult::Err(
-                    "TUI 暂不支持 " + name + "，请退出后运行 `tkw " + name +
-                    "`（REPL 内可直接用；help 查看 TUI 命令）");
+                    "TUI 暂不支持 simulate，请退出后运行 `tkw simulate`"
+                    "（REPL 内可直接用；help 查看 TUI 命令）");
 
             return CommandParseResult::Err("未知命令: '" + name +
                                            "'（help 查看用法）");

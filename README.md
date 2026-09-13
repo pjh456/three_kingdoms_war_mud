@@ -70,8 +70,8 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
   空区显示「无」），底部命令栏：`new [--players N] [--seed S]
   [--mode brawl|identity] [--ai simple|aggressive] [--deck P] [--hand N]
   [--human <座位>] [--no-human]`、`deal <players> <seed>`、`step`、`run`/`r`、
-  `status`/`st`、`save <file>`、`load <file>`、`quit`/`q`、`help`/`?`；`Esc`/`Ctrl-C`
-  退出。
+  `status`/`st`、`save <file>`、`load <file>`、`cards [--text]`、`rules [关键词]`、
+  `audit`、`quit`/`q`、`help`/`?`；`Esc`/`Ctrl-C` 退出。
 - 日志面板支持翻阅：`PgUp`/`PgDn` 上下翻页、`End` 回到最新（贴尾）、命令栏为空时
   `Home` 回到最早；日志溢出时右侧显示滚动条。终端过小时自动隐藏次要面板（先棋盘/
   手牌，再状态）并保留底部命令输入行，同时提示被隐藏的面板。
@@ -84,8 +84,9 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
   只显示主公与真人座位的角色，其余座位显示「未知」占位（终局揭示全部）；手牌面板
   只展开**首个**真人座位（多真人同时展开属后续里程碑），其余只给数量；选择对手区域
   的牌时手牌出「未知手牌」占位，装备/判定区明置。
-- 卡牌查询（`tkw rules`/`tkw cards`/`tkw audit`）目前只在命令行/REPL 提供；
-  TUI 命令栏暂不支持，输入会提示改用 `tkw`。
+- 卡牌查询：命令栏 `cards [--text]`、`rules [关键词]`、`audit` 就地出结果，逐行
+  写入日志面板（长列表用日志翻阅）；牌表来源与 REPL 只读命令同口径（活动会话优先，
+  无会话回落启动 `--deck`）。`simulate` 仍在 CLI 执行，命令栏输入会提示改用 `tkw`。
 - 退出时若有进行中的会话，自动存档到当前目录的 `tkw-autosave.json`（与 REPL 同口径），
   退出信息写 stderr。
 - FTXUI 获取：优先 `find_package(ftxui CONFIG QUIET)`，未安装则 `FetchContent` 钉

@@ -110,25 +110,9 @@ TEST_CASE("tui: parse errors carry chinese hints")
     CHECK(empty.unwrap_err().find("空命令") != std::string::npos);
 }
 
-TEST_CASE("tui: cli-only queries point to tkw")
+TEST_CASE("tui: simulate points to cli and unknown stays unknown")
 {
     const auto base = base_options();
-
-    auto cards = parse_command("cards", base);
-    REQUIRE(cards.is_err());
-    CHECK(cards.unwrap_err().find("tkw cards") != std::string::npos);
-
-    auto rules = parse_command("rules", base);
-    REQUIRE(rules.is_err());
-    CHECK(rules.unwrap_err().find("tkw rules") != std::string::npos);
-
-    auto rules_keyword = parse_command("rules 杀", base);
-    REQUIRE(rules_keyword.is_err());
-    CHECK(rules_keyword.unwrap_err().find("tkw rules") != std::string::npos);
-
-    auto audit = parse_command("audit", base);
-    REQUIRE(audit.is_err());
-    CHECK(audit.unwrap_err().find("tkw audit") != std::string::npos);
 
     auto simulate = parse_command("simulate", base);
     REQUIRE(simulate.is_err());
@@ -137,6 +121,47 @@ TEST_CASE("tui: cli-only queries point to tkw")
     auto unknown = parse_command("frobnicate", base);
     REQUIRE(unknown.is_err());
     CHECK(unknown.unwrap_err().find("未知命令") != std::string::npos);
+}
+
+TEST_CASE("tui: cards/rules/audit parse into query commands")
+{
+    const auto base = base_options();
+
+    auto cards = parse_command("cards", base);
+    REQUIRE(cards.is_ok());
+    CHECK(cards.unwrap().kind == CommandKind::Cards);
+    CHECK_FALSE(cards.unwrap().with_text);
+
+    auto cards_text = parse_command("cards --text", base);
+    REQUIRE(cards_text.is_ok());
+    CHECK(cards_text.unwrap().kind == CommandKind::Cards);
+    CHECK(cards_text.unwrap().with_text);
+
+    auto cards_bad = parse_command("cards bogus", base);
+    REQUIRE(cards_bad.is_err());
+    CHECK(cards_bad.unwrap_err().find("只接受") != std::string::npos);
+
+    auto rules = parse_command("rules", base);
+    REQUIRE(rules.is_ok());
+    CHECK(rules.unwrap().kind == CommandKind::Rules);
+    CHECK(rules.unwrap().keyword.empty());
+
+    auto rules_keyword = parse_command("rules 杀", base);
+    REQUIRE(rules_keyword.is_ok());
+    CHECK(rules_keyword.unwrap().kind == CommandKind::Rules);
+    CHECK(rules_keyword.unwrap().keyword == "杀");
+
+    auto rules_many = parse_command("rules a b", base);
+    REQUIRE(rules_many.is_err());
+    CHECK(rules_many.unwrap_err().find("一个") != std::string::npos);
+
+    auto audit = parse_command("audit", base);
+    REQUIRE(audit.is_ok());
+    CHECK(audit.unwrap().kind == CommandKind::Audit);
+
+    auto audit_arg = parse_command("audit x", base);
+    REQUIRE(audit_arg.is_err());
+    CHECK(audit_arg.unwrap_err().find("不接受参数") != std::string::npos);
 }
 
 TEST_CASE("tui: deal takes positional players and seed")

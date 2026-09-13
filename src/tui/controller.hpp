@@ -25,6 +25,7 @@
 
 #include "cli/commands.hpp"
 #include "cli/error_zh.hpp"
+#include "cli/query_lines.hpp"
 #include "cli/render.hpp"
 #include "cli/session.hpp"
 #include "event/event_bus.hpp"
@@ -167,6 +168,18 @@ namespace tkw
                     break;
                 case CommandKind::Help:
                     do_help();
+                    break;
+                case CommandKind::Cards:
+                    if (require_idle())
+                        do_cards(cmd.with_text);
+                    break;
+                case CommandKind::Rules:
+                    if (require_idle())
+                        do_rules(cmd.keyword);
+                    break;
+                case CommandKind::Audit:
+                    if (require_idle())
+                        do_audit();
                     break;
                 }
             }
@@ -536,6 +549,54 @@ namespace tkw
                 append_line("状态: " + text);
             }
 
+            /**
+             * @brief 只读牌表查询的选项：活动会话牌表优先，无会话回落启动基准。
+             * @return 以 base_ 为基准的选项副本；活动会话存在时 deck 取会话牌表，
+             *         否则保持启动 deck；humans 一律清空。
+             * @note 只读命令不运行对局，继承启动 --human 会被 reject_humans 误拒，
+             *       故构造时清空；deck 口径与 CLI 只读命令的活动会话优先一致。
+             */
+            tkw::cli::Options query_options() const
+            {
+                tkw::cli::Options opt = base_;
+                opt.humans.clear();
+                if (session_.active && session_.game)
+                    opt.deck = session_.deck;
+                return opt;
+            }
+
+            /** @brief 把只读查询行结果写入日志；Err 作为单行错误提示。 */
+            void append_query_lines(const tkw::cli::detail::QueryLines &lines)
+            {
+                if (lines.is_err())
+                {
+                    append_line(lines.unwrap_err());
+                    return;
+                }
+                for (const auto &line : lines.unwrap())
+                    append_line(line);
+            }
+
+            /** @brief cards 结果就地写日志（Idle 主线程，不触引擎）。 */
+            void do_cards(bool show_text)
+            {
+                append_query_lines(
+                    tkw::cli::detail::cards_lines(query_options(), show_text));
+            }
+
+            /** @brief rules 结果就地写日志（keyword 空 = 全部）。 */
+            void do_rules(const std::string &keyword)
+            {
+                append_query_lines(
+                    tkw::cli::detail::rules_lines(query_options(), keyword));
+            }
+
+            /** @brief audit 结果就地写日志。 */
+            void do_audit()
+            {
+                append_query_lines(tkw::cli::detail::audit_lines(query_options()));
+            }
+
             /** @brief 显式存档：写 AI 档与统计元数据，失败给中文根因。 */
             void do_save(const std::string &file)
             {
@@ -632,8 +693,9 @@ namespace tkw
                             "[--hand N] [--human <座位>] [--no-human]");
                 append_line("      deal <players> <seed>；step；run/r；status/st；"
                             "save <file>；load <file>；quit/q；help/?");
-                append_line("      卡牌查询: 请退出后运行 tkw rules [关键词] / "
-                            "tkw cards / tkw audit（TUI 暂不支持）");
+                append_line("      cards [--text]；rules [关键词]；audit"
+                            "（只读牌表查询，结果写入本面板）");
+                append_line("      simulate: 请退出后运行 tkw simulate（TUI 暂不支持）");
             }
 
             /**
