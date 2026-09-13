@@ -577,3 +577,34 @@ TEST_CASE("tui: play panel marks recast candidates and passes the flag through")
     REQUIRE(make_choice(panel, {0}, false, normal_out));
     CHECK_FALSE(normal_out.recast);
 }
+
+TEST_CASE("tui: play panel marks wusheng conversions and passes the flag through")
+{
+    const auto catalog = load_catalog();
+    auto req = base_request(DecisionKind::Play, catalog);
+    tkw::game::LegalAction normal;
+    normal.card = card_of("c1", "tao");
+    normal.targets = {"P0"};
+    tkw::game::LegalAction converted;
+    converted.card = card_of("c2", "tao");
+    converted.targets = {"P1"};
+    converted.converted_sha = true;
+    req.legal = {normal, converted};
+
+    const DecisionPanelView panel = make_panel(req);
+    REQUIRE(panel.options.size() == 2);
+    CHECK_FALSE(panel.options[0].converted_sha);
+    CHECK(panel.options[0].text.find("当杀") == std::string::npos);
+    CHECK(panel.options[1].converted_sha);
+    CHECK(panel.options[1].text.find("（当杀）") != std::string::npos);
+
+    DecisionChoice converted_out;
+    REQUIRE(make_choice(panel, {1}, false, converted_out));
+    CHECK(converted_out.converted_sha);
+    REQUIRE(converted_out.instance_id.is_some());
+    CHECK(converted_out.instance_id.unwrap() == "c2");
+
+    DecisionChoice normal_out;
+    REQUIRE(make_choice(panel, {0}, false, normal_out));
+    CHECK_FALSE(normal_out.converted_sha);
+}

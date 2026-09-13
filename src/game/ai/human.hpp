@@ -562,6 +562,8 @@ namespace tkw
                             out_ << "  " << (i + 1) << ") "
                                  << card::display_name(req.catalog, act.card.def_id)
                                  << " " << act.card.instance_id;
+                            if (act.converted_sha)
+                                out_ << "（当杀）";
                             if (!act.second_instance_id.empty())
                                 out_ << " + " << act.second_instance_id;
                             if (!act.targets.empty())
@@ -622,6 +624,7 @@ namespace tkw
                                 out.targets = act.targets;
                                 out.second_instance_id = act.second_instance_id;
                                 out.recast = act.recast;
+                                out.converted_sha = act.converted_sha;
                                 return out;
                             }
                             print_invalid(index_hint(req.legal.size()));

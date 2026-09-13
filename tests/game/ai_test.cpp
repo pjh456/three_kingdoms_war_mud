@@ -37,6 +37,7 @@ namespace
         std::size_t pick_index = 0;     /**< 选中的 legal 动作下标（默认首个） */
         std::size_t option_index = 0;   /**< PickCard/PickRevealed 选中的候选下标 */
         std::string second_instance_id; /**< 最近一次透传的第二张手牌 */
+        bool converted_sha = false;     /**< 最近一次透传的单张转化当杀标记 */
         std::vector<tkw::card::Card> options;     /**< 最近一次请求的候选牌 */
         std::vector<tkw::card::Zone> zone_labels; /**< 与 options 等长的来源分区 */
 
@@ -55,7 +56,9 @@ namespace
                 out.targets = act.targets;
                 out.second_instance_id = act.second_instance_id;
                 out.recast = act.recast;
+                out.converted_sha = act.converted_sha;
                 second_instance_id = act.second_instance_id;
+                converted_sha = act.converted_sha;
             }
             if (req.kind == DecisionKind::PickCard ||
                 req.kind == DecisionKind::PickRevealed)
@@ -487,6 +490,75 @@ TEST_CASE("ai: decider forwards the zhangba second card")
     CHECK(act.unwrap().second_instance_id == legal[pair_index].second_instance_id);
     CHECK(act.unwrap().second_instance_id == "x#2");
     CHECK(rec.second_instance_id == "x#2");
+}
+
+TEST_CASE("ai: decider forwards the wusheng converted sha")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, tkw::entity::Gender::Male, "guanyu");
+    g.add_player("b", 1, 4);
+    g.cards.add_to_hand("a", tkw::card::Card{"x#1", "tao", tkw::card::Suit::Heart, 3});  // 红牌可当杀
+
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    const auto legal = tkw::game::legal_actions(g.ctx, "a", turn);
+    std::size_t index = legal.size();
+    for (std::size_t i = 0; i < legal.size(); ++i)
+        if (legal[i].converted_sha)
+        {
+            index = i;
+            break;
+        }
+    REQUIRE(index < legal.size());
+
+    RecordingDecider rec;
+    rec.pick_index = index;
+    RequestDecisionSource src(rec);
+    const auto act = src.choose_play(g.ctx, turn);
+    REQUIRE(act.is_some());
+    CHECK(act.unwrap().converted_sha);
+    CHECK(act.unwrap().second_instance_id.empty());
+    CHECK(rec.converted_sha);
+}
+
+TEST_CASE("ai: response options include wusheng red cards")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, tkw::entity::Gender::Male, "guanyu");
+    g.add_player("b", 1, 4);
+    g.cards.add_to_hand("a", tkw::card::Card{"x#1", "tao", tkw::card::Suit::Heart, 3});
+    g.cards.add_to_hand("a", tkw::card::Card{"x#2", "shan", tkw::card::Suit::Spade, 4});  // 黑色牌不可转化
+
+    RecordingDecider rec;
+    RequestDecisionSource src(rec);
+    const auto chosen = src.play_response(
+        g.ctx, "a", tkw::card::ResponseKind::Sha, tkw::game::ResponsePrompt{});
+    CHECK(chosen.is_none());
+
+    bool saw_red = false;
+    bool saw_black = false;
+    for (const auto &c : rec.options)
+    {
+        if (c.instance_id == "x#1")
+            saw_red = true;
+        if (c.instance_id == "x#2")
+            saw_black = true;
+    }
+    CHECK(saw_red);
+    CHECK_FALSE(saw_black);
+
+    // 无武将座位不追加红牌转化候选
+    TestGame plain("deck");
+    plain.add_player("a", 0, 4);
+    plain.add_player("b", 1, 4);
+    plain.cards.add_to_hand("a", tkw::card::Card{"x#1", "tao", tkw::card::Suit::Heart, 3});
+    RecordingDecider rec2;
+    RequestDecisionSource src2(rec2);
+    const auto plain_chosen = src2.play_response(
+        plain.ctx, "a", tkw::card::ResponseKind::Sha, tkw::game::ResponsePrompt{});
+    CHECK(plain_chosen.is_none());
+    CHECK(rec2.options.empty());
 }
 
 TEST_CASE("ai: simple trigger respects the discard cost")

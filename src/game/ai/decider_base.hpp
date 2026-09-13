@@ -285,8 +285,9 @@ namespace tkw
                 }
 
                 /**
-                 * @brief 丈八：多目标动作取目标最多者（方天画戟），否则集火
-                 *        最低体力；牌对取首个枚举 pair（确定性）。
+                 * @brief 虚拟杀（丈八两张 / 武圣单张）：多目标动作取目标最多者
+                 *        （方天画戟），否则集火最低体力；牌取首个枚举动作
+                 *        （确定性）。
                  */
                 static DecisionChoice decide_zhangba(
                     const DecisionRequest &req, const std::vector<LegalAction> &acts)
@@ -298,6 +299,7 @@ namespace tkw
                             most = &a;
                     out.instance_id = Option<std::string>::Some(most->card.instance_id);
                     out.second_instance_id = most->second_instance_id;
+                    out.converted_sha = most->converted_sha;
                     if (most->targets.size() > 1)
                         out.targets = most->targets;
                     else
@@ -434,6 +436,24 @@ namespace tkw
                         return nullptr;
                     const auto d = req.catalog->find(def_id);
                     return d.is_some() ? d.unwrap() : nullptr;
+                }
+
+                /**
+                 * @brief req.legal 中是否存在真杀动作（手牌有真杀）。
+                 * @return 任一动作的卡定义为「杀」时 true；目录缺失/未命中不算。
+                 * @note 与两张当杀 pair 的「手牌有真杀」同口径：有真杀时虚拟杀
+                 *       不作优先，单张转化动作也不参与分组（避免烧牌与非法选择）。
+                 */
+                static bool has_real_sha(const DecisionRequest &req)
+                {
+                    for (const auto &a : req.legal)
+                    {
+                        const card::CardDef *def = find_def(req, a.card.def_id);
+                        if (def && def->effect.is_some() &&
+                            is_sha_kind(def->effect.unwrap().kind))
+                            return true;
+                    }
+                    return false;
                 }
 
                 /**

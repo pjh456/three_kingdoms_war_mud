@@ -108,7 +108,7 @@ namespace tkw
             case H::PaoXiao:
                 return {true};
             case H::WuSheng:
-                return {false};
+                return {true};
             }
             return {};
         }

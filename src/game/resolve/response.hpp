@@ -20,6 +20,7 @@
 #include "game/core/effect.hpp"
 #include "game/core/state.hpp"
 #include "game/query/equip.hpp"
+#include "game/query/hero.hpp"
 #include "util/types.hpp"
 
 namespace tkw
@@ -28,7 +29,8 @@ namespace tkw
     {
         /**
          * @brief 实体手牌中是否存在指定响应牌。
-         * @note 杀响应额外计入「装备两张当杀能力且手牌 ≥2」（丈八蛇矛打出侧）。
+         * @note 杀响应额外计入「装备两张当杀能力且手牌 ≥2」（丈八蛇矛打出侧）
+         *       与「拥有武圣且手牌有红色牌」（红色牌当杀打出侧）。
          */
         inline bool has_response_card(
             const GameContext &ctx, const std::string &entity_id, card::ResponseKind kind)
@@ -38,9 +40,16 @@ namespace tkw
                     [kind](const card::CardDef &def)
                     { return is_response_def(def, kind); }))
                 return true;
-            return kind == card::ResponseKind::Sha &&
-                   has_ability(ctx, entity_id, card::Ability::TwoCardsAsSha) &&
-                   ctx.cards->hand_size(entity_id) >= 2;
+            if (kind != card::ResponseKind::Sha)
+                return false;
+            if (has_ability(ctx, entity_id, card::Ability::TwoCardsAsSha) &&
+                ctx.cards->hand_size(entity_id) >= 2)
+                return true;
+            if (has_hero_skill(ctx, entity_id, hero::HeroSkill::WuSheng))
+                for (const auto &c : ctx.cards->hand(entity_id))
+                    if (is_red_suit(c.suit))
+                        return true;
+            return false;
         }
 
         /**

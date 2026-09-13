@@ -56,6 +56,7 @@ namespace tkw
             std::string second_card_text;   /**< pair 第二张牌效果文案；空 = 无说明 */
             bool hidden = false;            /**< 对手手牌占位：card_* 三项恒空 */
             bool recast = false;            /**< Play：重铸动作（弃置此牌并摸一张，targets 为空） */
+            bool converted_sha = false;     /**< Play：单张转化当杀（武圣红牌当杀） */
         };
 
         /**
@@ -398,8 +399,8 @@ namespace tkw
             }
 
             /**
-             * @brief Play 候选的一行文本：牌名 + 实例 + 可选第二张 + 可选目标 +
-             *        重铸后缀 + 借刀警示。
+             * @brief Play 候选的一行文本：牌名 + 实例 + 可选转化/第二张 + 可选
+             *        目标 + 重铸后缀 + 借刀警示。
              */
             inline std::string play_option_text(
                 const tkw::game::ai::DecisionRequest &req,
@@ -408,6 +409,8 @@ namespace tkw
                 std::string text =
                     tkw::card::display_name(req.catalog, act.card.def_id) + " " +
                     act.card.instance_id;
+                if (act.converted_sha)
+                    text += "（当杀）";
                 if (!act.second_instance_id.empty())
                     text += " + " + act.second_instance_id;
                 if (!act.targets.empty())
@@ -471,6 +474,7 @@ namespace tkw
                     opt.second_instance_id = act.second_instance_id;
                     opt.targets = act.targets;
                     opt.recast = act.recast;
+                    opt.converted_sha = act.converted_sha;
                     detail::fill_card_fields(opt, req, act.card);
                     if (!act.second_instance_id.empty())
                         detail::fill_second_card_fields(opt, req,
@@ -694,6 +698,7 @@ namespace tkw
                 out.second_instance_id = opt.second_instance_id;
                 out.targets = opt.targets;
                 out.recast = opt.recast;
+                out.converted_sha = opt.converted_sha;
                 return true;
             case DecisionKind::Response:
                 out.instance_id = tkw::Option<std::string>::Some(opt.instance_id);

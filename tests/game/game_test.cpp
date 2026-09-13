@@ -5144,6 +5144,130 @@ TEST_CASE("game: simple ai uses zhangba before other tricks when holding no sha"
     CHECK(g.cards.hand_size("a") == 0);
 }
 
+// ── 武圣：红色牌当杀（主动使用侧）──────────────────────────────────────
+
+TEST_CASE("game: legal_actions enumerates wusheng red cards as sha")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Male, "guanyu");
+    g.add_player("b", 1, 4);
+    g.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Heart, 3});
+    g.cards.add_to_hand("a", Card{"x#2", "shan", Suit::Spade, 4});  // 黑色不可转化
+
+    const auto acts = legal_actions(g.ctx, "a", TurnContext{"a", 0, 1});
+    std::size_t converted = 0;
+    for (const auto &a : acts)
+        if (a.converted_sha)
+        {
+            ++converted;
+            CHECK(a.card.instance_id == "x#1");
+            CHECK(a.second_instance_id.empty());
+            REQUIRE(a.targets.size() == 1);
+            CHECK(a.targets.front() == "b");
+        }
+    CHECK(converted == 1);
+
+    // 无武将座位同手牌不产出转化候选
+    TestGame plain("deck");
+    plain.add_player("a", 0, 4);
+    plain.add_player("b", 1, 4);
+    plain.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Heart, 3});
+    for (const auto &a : legal_actions(plain.ctx, "a", TurnContext{"a", 0, 1}))
+        CHECK_FALSE(a.converted_sha);
+}
+
+TEST_CASE("game: wusheng plays a red card as sha")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Male, "guanyu");
+    auto *b = g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Heart, 3});
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"x#1", {"b"}, "", false, true}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);             // 转化杀命中
+    CHECK(g.cards.hand_size("a") == 2);  // 1 + 摸2 - 打出1
+    CHECK(g.cards.discard_size() == 1);  // 红牌进弃牌堆
+}
+
+TEST_CASE("game: wusheng rejects a black card conversion")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Male, "guanyu");
+    auto *b = g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Spade, 3});
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"x#1", {"b"}, "", false, true}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == TurnError::PlayRejected);
+    CHECK(b->get_hp() == 4);
+    CHECK(g.cards.hand_size("a") == 3);  // 1 + 摸2，校验失败不消耗
+}
+
+TEST_CASE("game: wusheng requires the hero skill")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);  // 无武将
+    auto *b = g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Heart, 3});
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"x#1", {"b"}, "", false, true}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == TurnError::PlayRejected);
+    CHECK(b->get_hp() == 4);
+    CHECK(g.cards.hand_size("a") == 3);
+}
+
+TEST_CASE("game: wusheng converted sha counts toward the sha limit")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Male, "guanyu");  // 无咆哮
+    auto *b = g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Heart, 3});
+    g.cards.add_to_hand("a", Card{"x#2", "wuzhong", Suit::Diamond, 4});
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"x#1", {"b"}, "", false, true},
+                     PlayAction{"x#2", {"b"}, "", false, true}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == TurnError::ShaLimitExceeded);
+    CHECK(b->get_hp() == 3);         // 第一个转化杀命中
+    CHECK(g.cards.hand_size("a") == 3);  // 第二个未消耗
+}
+
+TEST_CASE("game: simple ai uses wusheng red card as sha when holding no sha")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.rules.draw_per_turn = 0;  // 固定手牌序，排除摸到真杀的干扰
+    g.add_player("a", 0, 4, Gender::Male, "guanyu");
+    auto *b = g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.cards.add_to_hand("a", Card{"x#1", "wuzhong", Suit::Heart, 3});
+    g.cards.add_to_hand("a", Card{"x#2", "shan", Suit::Spade, 4});  // 黑色不可转化
+
+    SimpleAI ai;
+    auto r = execute_turn(g.ctx, ai, "a");
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);             // 手牌无真杀，红无中当作杀打出
+    CHECK(g.cards.hand_size("a") == 1);  // 仅黑闪留下
+}
+
 // ── 杀响应窗口：丈八蛇矛两张手牌当杀（响应侧）──────────────────────────
 
 TEST_CASE("game: zhangba answers a duel sha with two hand cards")
@@ -5331,6 +5455,76 @@ TEST_CASE("game: zhangba response pair candidates are all accepted by the engine
         CHECK(fresh.entities.find("c").unwrap()->get_hp() == 3);
         CHECK(fresh.cards.hand_size("b") == 1);
     }
+}
+
+// ── 武圣：红色牌当杀（响应/打出侧）──────────────────────────────────────
+
+TEST_CASE("game: wusheng response accepts a red card as sha")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Male, "guanyu");
+    g.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Heart, 3});
+
+    TestDecider decider;
+    decider.response_id = "x#1";
+    CHECK(respond_sha(g.ctx, decider, "a", "", ResponsePrompt{}));  // 仅消费（决斗/南蛮）
+    CHECK(g.cards.hand_size("a") == 0);
+    CHECK(g.cards.discard_size() == 1);
+
+    // 无武将座位：同牌不响应且不消耗
+    TestGame plain("deck");
+    plain.add_player("a", 0, 4);
+    plain.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Heart, 3});
+    TestDecider d2;
+    d2.response_id = "x#1";
+    CHECK_FALSE(respond_sha(plain.ctx, d2, "a", "", ResponsePrompt{}));
+    CHECK(plain.cards.hand_size("a") == 1);
+}
+
+TEST_CASE("game: wusheng response virtual sha is not black")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Male, "guanyu");
+    auto *b = g.add_player("b", 1, 4);
+    g.equip("b", "renwang", "e#0");
+    g.cards.add_to_hand("a", Card{"x#1", "shan", Suit::Heart, 3});  // 任意红牌可当杀
+
+    TestDecider decider;
+    decider.response_id = "x#1";
+    CHECK(respond_sha(g.ctx, decider, "a", "b", ResponsePrompt{}));
+    CHECK(b->get_hp() == 3);             // 虚拟杀无花色，仁王盾黑杀判定不适用
+    CHECK(g.cards.hand_size("a") == 0);
+}
+
+TEST_CASE("game: wusheng response rejects a black non-sha card")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Male, "guanyu");
+    g.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Heart, 3});   // 红牌使窗口成立
+    g.cards.add_to_hand("a", Card{"x#2", "shan", Suit::Spade, 4});  // 所选黑牌不可当杀
+
+    TestDecider decider;
+    decider.response_id = "x#2";
+    CHECK_FALSE(respond_sha(g.ctx, decider, "a", "", ResponsePrompt{}));
+    CHECK(g.cards.hand_size("a") == 2);  // 非法选择不消耗
+}
+
+TEST_CASE("game: has_response_card includes wusheng red cards")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Male, "guanyu");
+    g.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Heart, 3});
+    CHECK(has_response_card(g.ctx, "a", ResponseKind::Sha));
+    CHECK_FALSE(has_response_card(g.ctx, "a", ResponseKind::Jink));
+
+    TestGame plain("deck");
+    plain.add_player("a", 0, 4);
+    plain.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Heart, 3});
+    CHECK_FALSE(has_response_card(plain.ctx, "a", ResponseKind::Sha));
 }
 
 // ── 铁索连环：横置/重置与属性伤害传导 ─────────────────────────────────

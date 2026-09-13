@@ -21,8 +21,10 @@
 #include "game/core/context.hpp"
 #include "game/core/decision.hpp"
 #include "game/core/effect.hpp"
+#include "game/core/state.hpp"
 #include "game/query/distance.hpp"
 #include "game/query/equip.hpp"
+#include "game/query/hero.hpp"
 #include "game/query/judge.hpp"
 #include "util/types.hpp"
 
@@ -335,30 +337,40 @@ namespace tkw
         }
 
         /**
-         * @brief 校验「两张手牌当一张杀」（丈八蛇矛）是否合法（只读预检）。
+         * @brief 校验「虚拟杀」是否合法（只读预检）。
+         * @param first_id/second_id 虚拟杀的来源手牌。second_id 非空 = 丈八蛇矛
+         *        两张当杀；为空 = 单张转化（武圣：first 须为红色手牌）。
          * @return Ok 合法；错误值：
-         *         - CardNotOwned：两张为同一张或任一不在 player 手牌中；
-         *         - UnsupportedKind：未装备两张当杀能力，或牌堆无「杀」定义；
+         *         - CardNotOwned：两牌为同一张或任一（单张路径为 first）不在
+         *           player 手牌中；
+         *         - UnsupportedKind：来源不满足（丈八未装备两张当杀能力 / 单张
+         *           无武圣或首牌非红），或牌堆无「杀」定义；
          *         - ShaLimitExceeded：杀且本回合杀次数已达上限（turn）；
          *         - NoTarget/OutOfRange/InvalidTarget：目标校验失败
-         *         （攻击范围内的一名其他角色；方天画戟放宽与杀一致）。
-         * @note 检查顺序：两牌在手 → 能力 → 杀次数 → 目标；无副作用：不消费
-         *       牌、不发事件；实际消费归 resolve_virtual_sha。
+         *         （攻击范围内的一名其他角色；方天画戟放宽与杀一致，按消耗张数）。
+         * @note 检查顺序：两牌在手 → 来源能力/花色 → 杀次数 → 目标；无副作用：
+         *       不消费牌、不发事件；实际消费归 resolve_virtual_sha。
          */
         inline GameResult<void> validate_virtual_sha(
             const ReadOnlyContext &ctx, const std::string &player,
             const std::string &first_id, const std::string &second_id,
             const std::vector<std::string> &targets, const TurnContext &turn)
         {
-            // 两张手牌须为不同牌且都在手牌中
-            if (first_id == second_id)
+            const bool two_cards = !second_id.empty();
+
+            // 来源牌须为不同牌且都在手牌中（单张路径只查第一张）
+            if (two_cards && first_id == second_id)
                 return GameResult<void>::Err(EffectError::CardNotOwned);
             bool have_first = false;
-            bool have_second = false;
+            bool have_second = !two_cards;
+            bool first_red = false;
             for (const auto &c : ctx.cards->hand(player))
             {
                 if (c.instance_id == first_id)
+                {
                     have_first = true;
+                    first_red = is_red_suit(c.suit);
+                }
                 else if (c.instance_id == second_id)
                     have_second = true;
             }
@@ -366,15 +378,30 @@ namespace tkw
                 return GameResult<void>::Err(EffectError::CardNotOwned);
 
             const auto sha_def = find_sha_def(ctx);
-            if (sha_def.is_none() ||
-                !has_ability(ctx, player, card::Ability::TwoCardsAsSha))
+            if (sha_def.is_none())
                 return GameResult<void>::Err(EffectError::UnsupportedKind);
+
+            // 来源闸：两张 = 丈八蛇矛能力；单张 = 武圣且首牌为红色
+            std::size_t cards_consumed = 2;
+            if (two_cards)
+            {
+                if (!has_ability(ctx, player, card::Ability::TwoCardsAsSha))
+                    return GameResult<void>::Err(EffectError::UnsupportedKind);
+            }
+            else
+            {
+                if (!has_hero_skill(ctx, player, hero::HeroSkill::WuSheng) ||
+                    !first_red)
+                    return GameResult<void>::Err(EffectError::UnsupportedKind);
+                cards_consumed = 1;
+            }
 
             // 虚拟杀按一张杀计次数
             if (turn.sha_played >= turn.sha_limit)
                 return GameResult<void>::Err(EffectError::ShaLimitExceeded);
 
-            return validate_effect_targets(ctx, player, *sha_def.unwrap(), targets, 2);
+            return validate_effect_targets(ctx, player, *sha_def.unwrap(), targets,
+                                           cards_consumed);
         }
     }
 }

@@ -19,8 +19,10 @@
 #include "game/core/context.hpp"
 #include "game/core/decision.hpp"
 #include "game/core/effect.hpp"
+#include "game/core/state.hpp"
 #include "game/query/distance.hpp"
 #include "game/query/equip.hpp"
+#include "game/query/hero.hpp"
 #include "game/query/judge.hpp"
 #include "game/resolve/validate.hpp"
 
@@ -35,6 +37,7 @@ namespace tkw
             std::vector<std::string> targets; /**< 引擎认可的完整目标集合 */
             std::string second_instance_id; /**< 第二张手牌（丈八蛇矛两张当杀；空 = 普通动作） */
             bool recast = false; /**< 重铸动作：弃置此牌并摸一张（targets 为空） */
+            bool converted_sha = false; /**< 单张转化当杀（武圣：红色牌当杀；来源由引擎按武将判定） */
         };
 
         /** @brief 实体任一区域是否有牌（拆/顺的目标需有牌可拿）。 */
@@ -70,6 +73,34 @@ namespace tkw
             for (std::size_t i = 0; i + 1 < hand.size(); ++i)
                 for (std::size_t j = i + 1; j < hand.size(); ++j)
                     out.emplace_back(hand[i], hand[j]);
+            return out;
+        }
+
+        /**
+         * @brief 武圣：可作为杀使用的红色手牌（手牌序，确定性）。
+         * @return 拥有武圣技能、牌堆有杀定义时，返回手牌中花色为红且非真杀的牌；
+         *         否则为空。
+         * @note 真杀已有普通出牌动作，跳过以避免同张牌重复产出；杀次数与目标
+         *       合法性归校验层（主动侧 validate_virtual_sha）。红装备/锦囊/桃/闪
+         *       均可转化（官方语义），不额外排除。
+         */
+        inline std::vector<card::Card> red_cards_as_sha(
+            const ReadOnlyContext &ctx, const std::string &player)
+        {
+            std::vector<card::Card> out;
+            if (!has_hero_skill(ctx, player, hero::HeroSkill::WuSheng) ||
+                find_sha_def(ctx).is_none())
+                return out;
+            for (const auto &c : ctx.cards->hand(player))
+            {
+                if (!is_red_suit(c.suit))
+                    continue;
+                const auto d = ctx.catalog->find(c.def_id);
+                if (d.is_some() && d.unwrap()->effect.is_some() &&
+                    is_sha_kind(d.unwrap()->effect.unwrap().kind))
+                    continue;  // 真杀已有普通动作，不重复产出
+                out.push_back(c);
+            }
             return out;
         }
 
@@ -257,6 +288,48 @@ namespace tkw
                                     .is_ok())
                                 out.push_back(LegalAction{
                                     first, std::move(combo), second.instance_id});
+                        }
+                    }
+            }
+
+            // 武圣：任意一张红色手牌当杀（单张转化，真杀已有普通动作不重复；
+            // 杀次数/目标合法性经 validate_virtual_sha 过滤）
+            const auto wusheng_cards = red_cards_as_sha(ctx, player);
+            if (!wusheng_cards.empty())
+            {
+                const auto sha_def = find_sha_def(ctx);
+                const auto targets = valid_targets(ctx, player, *sha_def.unwrap());
+                const bool multi = sha_multi_target(ctx, player);
+                for (const auto &c : wusheng_cards)
+                    for (const auto &t : targets)
+                    {
+                        if (!validate_virtual_sha(
+                                ctx, player, c.instance_id, "",
+                                std::vector<std::string>{t}, turn)
+                                .is_ok())
+                            continue;
+                        out.push_back(LegalAction{c, {t}, "", false, true});
+
+                        // 方天画戟：该红牌为最后一张手牌时再产出多目标
+                        // 动作（原目标 + 至多 2 名其他在范围内角色）
+                        if (multi)
+                        {
+                            std::vector<std::string> combo{t};
+                            for (const auto &u : targets)
+                            {
+                                if (u != t)
+                                    combo.push_back(u);
+                                if (combo.size() >=
+                                    static_cast<std::size_t>(
+                                        rules_of(ctx).sha_multi_target_max))
+                                    break;
+                            }
+                            if (combo.size() > 1 &&
+                                validate_virtual_sha(
+                                    ctx, player, c.instance_id, "", combo, turn)
+                                    .is_ok())
+                                out.push_back(LegalAction{
+                                    c, std::move(combo), "", false, true});
                         }
                     }
             }

@@ -1986,7 +1986,7 @@ TEST_CASE("cli: unsupported cards warning lines stay empty without a deck")
     CHECK(err.str().empty());
 }
 
-TEST_CASE("cli: heroes lines list catalog and mark unimplemented skills")
+TEST_CASE("cli: heroes lines list catalog and mark implemented skills")
 {
     auto lines =
         tkw::cli::detail::heroes_lines(TKW_TEST_RESOURCE_DIR);
@@ -1996,9 +1996,10 @@ TEST_CASE("cli: heroes lines list catalog and mark unimplemented skills")
     CHECK(out.find("张飞(zhangfei)") != std::string::npos);
     CHECK(out.find("4体力") != std::string::npos);
     CHECK(out.find("技能: 咆哮") != std::string::npos);
-    // 关羽武圣尚未实现：审计面显式标注，避免玩家误以为已生效
+    // 关羽武圣已实现：不再标「（未实现）」
     CHECK(out.find("关羽(guanyu)") != std::string::npos);
-    CHECK(out.find("武圣（未实现）") != std::string::npos);
+    CHECK(out.find("武圣") != std::string::npos);
+    CHECK(out.find("武圣（未实现）") == std::string::npos);
 
     // 无 heroes.json 的目录回落空数据而不报错
     const std::filesystem::path empty_dir =

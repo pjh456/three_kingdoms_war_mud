@@ -29,6 +29,7 @@
 #include "game/core/state.hpp"
 #include "game/query/distance.hpp"
 #include "game/query/equip.hpp"
+#include "game/query/hero.hpp"
 #include "game/query/judge.hpp"
 #include "game/resolve/combat.hpp"
 #include "game/resolve/counter.hpp"
@@ -566,17 +567,18 @@ namespace tkw
         }
 
         /**
-         * @brief 结算「两张手牌当一张杀」（丈八蛇矛）。
-         * @param first_id/second_id 两张手牌的 instance_id。
+         * @brief 结算「虚拟杀」（丈八蛇矛两张当杀 / 武圣单张红牌当杀）。
+         * @param first_id/second_id 来源手牌的 instance_id。second_id 非空 = 两张
+         *        当杀（丈八蛇矛）；为空 = 单张转化（武圣）。
          * @param validate_targets 是否复验目标（最终闸门，含方天画戟放宽）；
          *        结算目标由引擎固定时（杀响应窗口）传 false 跳过——目标在
          *        打出时已以同一距离谓词校验，与真杀响应路径一致。
-         * @param damage_bonus 命中伤害修正初值（主动使用丈八虚拟杀时由回合入口
+         * @param damage_bonus 命中伤害修正初值（主动使用虚拟杀时由回合入口
          *        消费酒加成传入；响应/打出路径取默认 0）。
-         * @note 目标校验（最终闸门，含方天画戟放宽）与两牌在手检查先于消费，
-         *       失败不消耗牌；消费后两张各进弃牌堆并各发打出事件（防结算中
-         *       被再选），再逐目标按虚拟杀结算。虚拟杀无花色：仁王盾黑杀
-         *       判定不适用（经 resolve_sha 的 virtual 标记短路）。
+         * @note 目标校验（最终闸门，含方天画戟放宽，按消耗张数 1/2）与来源牌
+         *       在手检查先于消费，失败不消耗牌；消费后每张各进弃牌堆并发打出
+         *       事件（防结算中被再选），再逐目标按虚拟杀结算。虚拟杀无花色：
+         *       仁王盾黑杀判定不适用（经 resolve_sha 的 virtual 标记短路）。
          */
         inline GameResult<void> resolve_virtual_sha(
             GameContext &ctx, DecisionSource &ai, const std::string &player,
@@ -590,40 +592,48 @@ namespace tkw
             const card::CardDef &sha = *sha_def.unwrap();
             const card::CardEffect &eff = sha.effect.unwrap();
 
-            // 目标预校验（最终闸门；方天放宽按消耗两张手牌判定）
+            const bool two_cards = !second_id.empty();
+            const std::size_t cards_consumed = two_cards ? 2 : 1;
+
+            // 目标预校验（最终闸门；方天放宽按消耗手牌张数判定）
             if (validate_targets)
             {
-                auto tr = validate_effect_targets(ctx, player, sha, targets, 2);
+                auto tr = validate_effect_targets(ctx, player, sha, targets,
+                                                  cards_consumed);
                 if (tr.is_err())
                     return tr;
             }
 
-            // 两张牌都在手牌中（校验先于消费，失败不消耗）
+            // 来源牌都在手牌中且不重复（校验先于消费，失败不消耗）
             bool have_first = false;
             bool have_second = false;
             for (const auto &c : ctx.cards->hand(player))
             {
                 if (c.instance_id == first_id)
                     have_first = true;
-                else if (c.instance_id == second_id)
+                else if (two_cards && c.instance_id == second_id)
                     have_second = true;
             }
-            if (first_id == second_id || !have_first || !have_second)
+            if (!have_first ||
+                (two_cards && (first_id == second_id || !have_second)))
                 return GameResult<void>::Err(EffectError::CardNotOwned);
 
-            // 两张牌先弃置（防止结算中被再次选中）
+            // 来源牌先弃置（防止结算中被再次选中）
             auto removed = ctx.cards->remove_from_hand(player, first_id);
             if (removed.is_none())
                 return GameResult<void>::Err(EffectError::CardNotOwned);
             card::Card first = std::move(removed).unwrap();
             ctx.cards->discard(first);
             emit_card_played(ctx, player, first);
-            removed = ctx.cards->remove_from_hand(player, second_id);
-            if (removed.is_none())
-                return GameResult<void>::Err(EffectError::CardNotOwned);
-            card::Card second = std::move(removed).unwrap();
-            ctx.cards->discard(second);
-            emit_card_played(ctx, player, second);
+            if (two_cards)
+            {
+                removed = ctx.cards->remove_from_hand(player, second_id);
+                if (removed.is_none())
+                    return GameResult<void>::Err(EffectError::CardNotOwned);
+                card::Card second = std::move(removed).unwrap();
+                ctx.cards->discard(second);
+                emit_card_played(ctx, player, second);
+            }
 
             // 逐目标虚拟杀结算（无实体牌：花色仅仁王盾黑杀判定消费，已短路）
             const card::Card virtual_sha;
@@ -635,17 +645,20 @@ namespace tkw
         }
 
         /**
-         * @brief 开杀响应窗口并消费响应杀：响应者打出一张真杀，或（装备两张当杀
-         *        能力时）打出两张手牌当杀。消费在本函数内完成（弃置+事件）；
-         *        给出结算目标（借刀的 B）时再按杀对其结算（真杀带花色、虚拟杀
-         *        无花色），否则仅消费（决斗/南蛮无结算目标）。
+         * @brief 开杀响应窗口并消费响应杀：响应者打出一张真杀、武圣将一张红色牌
+         *        当杀打出，或（装备两张当杀能力时）打出两张手牌当杀。消费在本
+         *        函数内完成（弃置+事件）；给出结算目标（借刀的 B）时再按杀对其
+         *        结算（真杀带花色、虚拟杀无花色），否则仅消费（决斗/南蛮无结算
+         *        目标）。
          * @return 是否发生了有效杀响应；非法选择（幽灵引用/非杀的牌）按不响应
          *         处理，不消耗牌。
          * @note 响应侧不受出牌阶段杀次数限制（次数是出牌阶段「本回合已用杀」的
          *         簿记，响应窗口不在出牌阶段簿记内）。结算目标由引擎固定（借刀
          *         的 B，打出时已以同一距离谓词校验），响应侧不复核目标，与真杀
-         *         响应路径一致。借刀响应事件语法：对目标结算=打出、仅消费=响应
-         *         语义的弃置事件（展示为打出；真杀与虚拟杀同口径）。
+         *         响应路径一致。武圣转化的合法性由「武将技能 + 所选牌为红色」
+         *         无歧义识别，回传的 PlayAction 无需携带转化标记。借刀响应事件
+         *         语法：对目标结算=打出、仅消费=响应语义的弃置事件（展示为打出；
+         *         真杀与虚拟杀同口径）。
          */
         inline bool respond_sha(
             GameContext &ctx, DecisionSource &ai,
@@ -702,6 +715,42 @@ namespace tkw
                 ctx.cards->discard(second);
                 emit_card_played(ctx, entity, second);
                 return true;
+            }
+
+            // 武圣转化：所选红牌非真杀时按虚拟杀打出（真杀仍走下方原路径）
+            const card::Card *chosen_card = nullptr;
+            for (const auto &c : ctx.cards->hand(entity))
+                if (c.instance_id == act.instance_id)
+                {
+                    chosen_card = &c;
+                    break;
+                }
+            if (chosen_card != nullptr &&
+                has_hero_skill(ctx, entity, hero::HeroSkill::WuSheng) &&
+                is_red_suit(chosen_card->suit))
+            {
+                const auto cdef = ctx.catalog->find(chosen_card->def_id);
+                const bool real_sha =
+                    cdef.is_some() &&
+                    is_response_def(*cdef.unwrap(), card::ResponseKind::Sha);
+                if (!real_sha)
+                {
+                    // 有结算目标：虚拟杀接管（消费 + 逐目标结算，跳过目标复验）
+                    if (!victim.empty())
+                        return resolve_virtual_sha(
+                                   ctx, ai, entity, act.instance_id, "",
+                                   std::vector<std::string>{victim}, false)
+                            .is_ok();
+
+                    // 无结算目标（决斗/南蛮）：仅按响应语义消费并弃置
+                    auto removed =
+                        ctx.cards->remove_from_hand(entity, act.instance_id);
+                    if (removed.is_none())
+                        return false;
+                    discard_and_emit(ctx, entity, std::move(removed).unwrap(),
+                                     DiscardKind::Response);
+                    return true;
+                }
             }
 
             // 真杀：单牌消费

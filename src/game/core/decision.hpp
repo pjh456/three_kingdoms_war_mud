@@ -27,6 +27,7 @@ namespace tkw
             std::vector<std::string> targets; /**< 目标实体 id（响应侧为空） */
             std::string second_instance_id;  /**< 第二张手牌（丈八蛇矛两张当杀；空 = 普通打出） */
             bool recast = false; /**< 重铸动作：弃置此牌并摸一张（空目标；不使用牌面效果） */
+            bool converted_sha = false; /**< 单张转化当杀（武圣：红色牌当杀；来源由引擎按武将判定） */
         };
 
         /** @brief 弃牌的原因（同一接口在不同规则语境下的区分）。 */
@@ -105,6 +106,8 @@ namespace tkw
              * @param prompt 来源牌/使用者/不响应伤害量（只读事实，来源未知时留空）。
              * @return 要打出的手牌（可带第二张，两张手牌当杀）；None = 不响应。
              *         结算器会先检查手牌里确有响应牌，并负责消费。
+             * @note 响应侧的红色牌当杀（武圣）由引擎按「武将技能 + 花色」识别，
+             *       回传的 PlayAction 无需置 converted_sha。
              */
             virtual Option<PlayAction> play_response(
                 const ReadOnlyContext &ctx,

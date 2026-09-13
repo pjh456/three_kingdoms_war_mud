@@ -24,6 +24,7 @@
 #include "game/core/decision.hpp"
 #include "game/core/effect.hpp"
 #include "game/core/state.hpp"
+#include "game/query/hero.hpp"
 #include "util/types.hpp"
 
 namespace tkw
@@ -60,6 +61,7 @@ namespace tkw
                 std::vector<LegalAction> legal; /**< Play 合法出牌动作；Response 两张当杀 pair 候选（丈八） */
 
                 // Response / Peach / Counter / PickCard / PickRevealed / Discard
+                // Response 单牌候选 = 真响应牌 + 武圣红牌（红牌当杀）；
                 // PickCard 的对手手牌候选为无身份占位槽（def_id/instance_id 空，
                 // zone_labels 仍标 Hand）；其余类别均为决策者可见牌或公开亮牌。
                 std::vector<card::Card> options;
@@ -105,6 +107,7 @@ namespace tkw
                 std::vector<std::string> discards; /**< Discard：要弃的牌 */
                 std::string second_instance_id;   /**< Play/Response：第二张手牌（丈八蛇矛两张当杀；空 = 普通） */
                 bool recast = false; /**< Play：重铸动作（弃置此牌并摸一张，targets 为空） */
+                bool converted_sha = false; /**< Play：单张转化当杀（武圣红牌当杀；来源由引擎按武将判定） */
             };
 
             /** @brief 状态机接口：实现单个 decide 即可接入引擎。 */
@@ -138,6 +141,14 @@ namespace tkw
                     for (const auto &c : ctx.cards->hand(entity))
                         if (is_response_card(ctx, c, kind))
                             req.options.push_back(c);
+                    // 武圣：杀响应窗口把红色牌并入单牌候选（真响应牌优先在前，
+                    // 同张真杀不重复；转化合法性由引擎按武将 + 花色识别）
+                    if (kind == card::ResponseKind::Sha &&
+                        has_hero_skill(ctx, entity, hero::HeroSkill::WuSheng))
+                        for (const auto &c : ctx.cards->hand(entity))
+                            if (is_red_suit(c.suit) &&
+                                !is_response_card(ctx, c, kind))
+                                req.options.push_back(c);
                     // 杀响应窗口：携带两张当杀 pair 候选（与主动侧同一枚举口径）
                     if (kind == card::ResponseKind::Sha)
                         for (const auto &[first, second] :
@@ -262,7 +273,8 @@ namespace tkw
                         return Option<PlayAction>::None();
                     return Option<PlayAction>::Some(PlayAction{
                         choice.instance_id.unwrap(), choice.targets,
-                        choice.second_instance_id, choice.recast});
+                        choice.second_instance_id, choice.recast,
+                        choice.converted_sha});
                 }
 
                 std::vector<std::string> choose_discards(

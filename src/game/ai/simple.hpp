@@ -58,23 +58,32 @@ namespace tkw
                  * @note legal_actions 已按手牌序产出；按牌分组以复现「首张可出」
                  *       语义。OneOther 集火最低体力（方天画戟取目标最多者），
                  *       借刀对合法 {持武器者, 受害者} 对选集火对象体力最低者。
-                 *       丈八蛇矛两张当杀（legal 仅在无真杀时产出）按杀优先：
-                 *       先于锦囊打出，集火/多目标规则同杀。
+                 *       虚拟杀（丈八蛇矛两张当杀 / 武圣红牌当杀）按杀优先：
+                 *       先于锦囊打出，集火/多目标规则同杀；手牌有真杀时不作此
+                 *       优先，且转化动作不参与分组（避免烧牌与非法选择）。
                  */
                 static DecisionChoice decide_play(const DecisionRequest &req)
                 {
-                    // 丈八蛇矛：手牌无真杀时两张当杀（杀优先于锦囊）
-                    std::vector<LegalAction> zhangba;
+                    // 手牌有真杀：剔除单张转化动作，交回普通分组（真杀正常打出）
+                    const bool real_sha = has_real_sha(req);
+                    std::vector<LegalAction> acts;
+                    acts.reserve(req.legal.size());
                     for (const auto &a : req.legal)
-                        if (!a.second_instance_id.empty())
-                            zhangba.push_back(a);
-                    if (!zhangba.empty())
-                        return decide_zhangba(req, zhangba);
+                        if (!(real_sha && a.converted_sha))
+                            acts.push_back(a);
+
+                    // 虚拟杀：手牌无真杀时按杀优先（丈八两张 / 武圣单张）
+                    std::vector<LegalAction> virtual_sha;
+                    for (const auto &a : acts)
+                        if (!a.second_instance_id.empty() || a.converted_sha)
+                            virtual_sha.push_back(a);
+                    if (!virtual_sha.empty())
+                        return decide_zhangba(req, virtual_sha);
 
                     DecisionChoice out;
                     std::vector<std::string> order;
                     std::vector<std::vector<LegalAction>> groups;
-                    for (const auto &a : req.legal)
+                    for (const auto &a : acts)
                     {
                         const auto it =
                             std::find(order.begin(), order.end(), a.card.instance_id);

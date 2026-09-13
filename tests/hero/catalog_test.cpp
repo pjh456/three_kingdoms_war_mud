@@ -59,9 +59,9 @@ TEST_CASE("hero: standard catalog loads heroes and skill metadata")
     CHECK(hero::display_hero_name(zf) == "张飞");
     CHECK(hero::display_skill_name(hero::HeroSkill::PaoXiao) == "咆哮");
 
-    // 咆哮已实现，武圣未实现：审计面据此暴露未实现技能
+    // 咆哮与武圣均已实现：审计面不再标记为未实现
     CHECK_FALSE(game::is_unimplemented_skill(hero::HeroSkill::PaoXiao));
-    CHECK(game::is_unimplemented_skill(hero::HeroSkill::WuSheng));
+    CHECK_FALSE(game::is_unimplemented_skill(hero::HeroSkill::WuSheng));
 
     // 目录未命中回落 id
     CHECK(hero::display_hero_name(catalog, "nobody") == "nobody");

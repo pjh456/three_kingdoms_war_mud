@@ -47,7 +47,7 @@ namespace tkw
             private:
                 // 卡类出牌优先级（小者先打；同分取 legal 序靠前者）；-1 = 跳过该组。
                 static constexpr int kPlayPriorityAnaleptic = 0;     /**< 酒（先饮酒再出杀） */
-                static constexpr int kPlayPriorityDamage = 1;        /**< 伤害/丈八两张当杀 */
+                static constexpr int kPlayPriorityDamage = 1;        /**< 伤害/虚拟杀（丈八两张、武圣单张） */
                 static constexpr int kPlayPriorityAoe = 2;           /**< 群体伤害 */
                 static constexpr int kPlayPriorityDelayed = 3;       /**< 延时锦囊 */
                 static constexpr int kPlayPriorityDuel = 4;          /**< 决斗 */
@@ -90,14 +90,24 @@ namespace tkw
                 /**
                  * @brief 出牌：按牌分组（legal 首现序 = 手牌序），按卡类优先级
                  *        选出牌组（小者先打，同分取 legal 序靠前者），再组内选目标。
-                 * @note 丈八组（含第二张手牌动作）按伤害对待；满血自疗与目录缺失
-                 *       的组跳过；全跳过时返回空 Choice = 结束出牌阶段。
+                 * @note 虚拟杀组（丈八第二张 / 武圣单张转化）按伤害对待；手牌有
+                 *       真杀时单张转化动作不参与分组（真杀正常打出，避免烧牌）；
+                 *       满血自疗与目录缺失的组跳过；全跳过时返回空 Choice =
+                 *       结束出牌阶段。
                  */
                 static DecisionChoice decide_play(const DecisionRequest &req)
                 {
+                    // 手牌有真杀：剔除单张转化动作，交回普通分组（真杀正常打出）
+                    const bool real_sha = has_real_sha(req);
+                    std::vector<LegalAction> acts;
+                    acts.reserve(req.legal.size());
+                    for (const auto &a : req.legal)
+                        if (!(real_sha && a.converted_sha))
+                            acts.push_back(a);
+
                     std::vector<std::string> order;
                     std::vector<std::vector<LegalAction>> groups;
-                    for (const auto &a : req.legal)
+                    for (const auto &a : acts)
                     {
                         const auto it =
                             std::find(order.begin(), order.end(), a.card.instance_id);
@@ -136,38 +146,40 @@ namespace tkw
 
                 /**
                  * @brief 已选组内选目标。
-                 * @param def 组代表卡的定义；丈八组允许为空（按伤害结算，
-                 *        不查目录），非丈八组调用前已保证非空。
-                 * @note 丈八组按伤害接管；其余目标选择委托共享尾段，组内丈八
-                 *       扫描范围是本档与贪心档的有意分歧，故留在本处。
+                 * @param def 组代表卡的定义；虚拟杀组允许为空（按伤害结算，
+                 *        不查目录），非虚拟杀组调用前已保证非空。
+                 * @note 虚拟杀组（丈八第二张 / 武圣单张转化）按伤害接管；其余
+                 *       目标选择委托共享尾段，组内虚拟杀扫描范围是本档与贪心档
+                 *       的有意分歧，故留在本处。
                  */
                 static DecisionChoice decide_play_group(
                     const DecisionRequest &req, const std::vector<LegalAction> &opts,
                     const card::CardDef *def)
                 {
-                    // 丈八蛇矛：组内存在两张当杀动作（第二张非空）即按伤害接管
-                    std::vector<LegalAction> zhangba;
+                    // 虚拟杀：组内存在两张当杀或单张转化动作即按伤害接管
+                    std::vector<LegalAction> virtual_sha;
                     for (const auto &a : opts)
-                        if (!a.second_instance_id.empty())
-                            zhangba.push_back(a);
-                    if (!zhangba.empty())
-                        return decide_zhangba(req, zhangba);
+                        if (!a.second_instance_id.empty() || a.converted_sha)
+                            virtual_sha.push_back(a);
+                    if (!virtual_sha.empty())
+                        return decide_zhangba(req, virtual_sha);
 
                     return select_group_targets(req, opts, *def);
                 }
 
                 /**
-                 * @brief 卡组优先级：含两张当杀动作的组按伤害档；否则按组
-                 *        首张卡的定义分派。
+                 * @brief 卡组优先级：含虚拟杀动作的组按伤害档；否则按组首张卡的
+                 *        定义分派。
                  * @return kPlayPrioritySkip = 该组跳过（目录缺失；满血自疗）。
-                 * @note 丈八 pair 仅在无真杀时产出，与真杀同优先级无冲突。
+                 * @note 虚拟杀 pair 仅在无真杀时产出，单张转化动作在有真杀时已被
+                 *       剔除，与真杀同优先级无冲突。
                  */
                 static int group_priority(
                     const DecisionRequest &req,
                     const std::vector<LegalAction> &opts)
                 {
                     for (const auto &a : opts)
-                        if (!a.second_instance_id.empty())
+                        if (!a.second_instance_id.empty() || a.converted_sha)
                             return kPlayPriorityDamage;
                     const card::CardDef *def =
                         find_def(req, opts.front().card.def_id);

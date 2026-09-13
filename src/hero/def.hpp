@@ -30,7 +30,7 @@ namespace tkw
         enum class HeroSkill : std::uint8_t
         {
             PaoXiao, /**< 咆哮：锁定技，使用【杀】无次数限制 */
-            WuSheng, /**< 武圣：转化技，将一张红色牌当【杀】使用或打出（未实现） */
+            WuSheng, /**< 武圣：转化技，将一张红色牌当【杀】使用或打出 */
         };
 
         /** @brief 不可变武将定义：由 HeroCatalog 从 JSON 解析产出。 */
