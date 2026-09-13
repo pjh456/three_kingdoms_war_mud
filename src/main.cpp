@@ -1,7 +1,8 @@
 /**
  * @file main.cpp
- * @brief CLI 入口（pjh_cli）：构建命令树后解析 argv 并分派 help/version/action。
+ * @brief CLI 入口（pjh_cli）：构建命令树后一次性解析并分派 help/version/action。
  * @note 命令树与执行体在 cli/commands.hpp，便于测试复用同一棵树。
+ *       入口自行渲染：解析错误经项目中文前缀，动作错误保留原消息。
  */
 
 #include <iostream>
@@ -18,30 +19,21 @@ int main(int argc, char **argv)
     tkw::cli::build_app(app, session);
 
     // 批量入口也启用模糊匹配：唯一近距匹配自动纠错，多候选报歧义。
-    auto parsed = app.parse_fuzzy(argc, argv);
-    if (parsed.is_err())
+    // 非打印执行：帮助/版本与错误均交回入口按项目文案输出，退出码走框架契约。
+    auto result = app.run_fuzzy_quiet(argc, argv);
+    if (result.kind == pjh::cli::AppRunResult::Kind::Help ||
+        result.kind == pjh::cli::AppRunResult::Kind::Version)
     {
-        std::cerr << tkw::cli::render_error_zh(parsed.unwrap_err()) << "\n";
-        return 2;
-    }
-
-    auto &ctx = parsed.unwrap();
-    if (ctx.help_requested())
-    {
-        std::cout << ctx.help_text();
+        std::cout << result.text;
         return 0;
     }
-    if (ctx.version_requested())
+    if (result.error.is_some())
     {
-        std::cout << ctx.version_text();
-        return 0;
+        const auto &e = result.error.unwrap();
+        if (e.kind() == pjh::cli::ErrorKind::Runtime)
+            std::cerr << e.what() << "\n";
+        else
+            std::cerr << tkw::cli::render_error_zh(e) << "\n";
     }
-
-    auto executed = ctx.matched_command()->execute(ctx);
-    if (executed.is_err())
-    {
-        std::cerr << executed.unwrap_err().what() << "\n";
-        return 1;
-    }
-    return 0;
+    return result.exit_code();
 }
