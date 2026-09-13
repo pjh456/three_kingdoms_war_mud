@@ -94,6 +94,7 @@ namespace tkw
             bool counter = false;
             std::vector<std::vector<std::string>>
                 counter_windows;  /**< 各无懈窗口携带的目标集合（按询问顺序） */
+            std::vector<int> counter_played_seen; /**< 各无懈窗口询问时引擎传入的已出张数（按询问顺序） */
             bool bogus_pick = false;  /**< 选牌返回一张不存在的牌（校验测试用） */
             bool bogus_revealed = false; /**< 亮牌选择返回一张不在候选中的牌（校验测试用） */
             bool decline_revealed = false; /**< 亮牌选择返回空（强制选择被拒测试用） */
@@ -163,9 +164,10 @@ namespace tkw
                 const ReadOnlyContext &ctx, const std::string &player,
                 const std::string &,
                 const std::vector<std::string> &trick_targets,
-                const std::string &) override
+                const std::string &, int counter_played = 0) override
             {
                 counter_windows.push_back(trick_targets);
+                counter_played_seen.push_back(counter_played);
                 if (!counter)
                     return Option<std::string>::None();
                 for (const auto &c : ctx.cards->hand(player))

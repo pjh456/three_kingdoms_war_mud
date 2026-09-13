@@ -637,6 +637,12 @@ TEST_CASE("replay: golden identity four-player lord fingerprint")
     // 首个分叉在 P1 回合：P1 的「杀」目标由 P0（主公）改为 P2（忠臣）——内奸在
     // 有反贼存活时避让主公，改打非主公目标。此后手牌/伤害/死亡序列级联，行数
     // 减少；终局仍主公阵营胜。
+    //
+    // 敌方自益锦囊无懈（窗口奇偶）上线后的核对（新旧日志逐行 diff 核对过）：
+    // 四条身份局黄金线（seed 4、seed 5、5 人 seed 2 simple 与 seed 2 aggressive）
+    // 均未进入「敌方打出无中生有且其敌人持有无懈」的触发态，日志逐字节不变，
+    // 故身份局四个指纹与乱斗四常量均不重钉；窗口奇偶只作用于自益窗，既有有害
+    // 窗的逐轮重问残差保持不变。
     tkw::game::SimpleAI ai;
     const auto a = run_identity(ai, 4, 4);
     const auto b = run_identity(ai, 4, 4);
@@ -667,6 +673,9 @@ TEST_CASE("replay: golden identity four-player traitor fingerprint")
     // P0 持两张无懈，引擎逐轮重问首位保护者时再次打出（偶数相抵，乐仍生效、
     // 两张无懈均消耗；单点轮询无法感知链状态，属既有近似）。此后手牌/装备/
     // 死亡序列整体级联，行数增加；终局仍内奸阵营胜。
+    //
+    // 敌方自益锦囊无懈（窗口奇偶）上线后的核对：本条的偶数相抵落在有害延时
+    // 锦囊判定窗，窗口奇偶仅作用于自益窗，故该窗行为不变、本指纹不重钉。
     tkw::game::SimpleAI ai;
     const auto a = run_identity(ai, 5, 4);
     const auto b = run_identity(ai, 5, 4);

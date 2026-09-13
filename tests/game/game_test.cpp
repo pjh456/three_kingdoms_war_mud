@@ -2385,6 +2385,85 @@ TEST_CASE("game: wuxie chain is bounded by wuxie_rounds")
     CHECK(g.cards.discard_size() == 2);  // 过拆 + 1 张无懈
 }
 
+TEST_CASE("game: wuxie parity counts cards played in a window")
+{
+    // 引擎逐张透传本窗已出无懈数：两名持无懈者先后出手，决策源依次看到 0、1
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.give("a", "guohe", "g#0");
+    g.give("b", "sha", "s#1");
+    g.give("b", "wuxie", "w#0");
+    g.give("c", "wuxie", "w#1");
+
+    TestDecider decider;
+    decider.counter = true;
+    const auto played = g.cards.hand("a")[0];
+    auto r = resolve_play(g.ctx, decider, "a", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(decider.counter_played_seen == std::vector<int>{0, 1});
+}
+
+TEST_CASE("game: enemy wuxie nullifies a self-benefit trick exactly once")
+{
+    // 核心验收：敌方 AI 对自益锦囊出手一次，且不因同窗/跨轮重问而偶数相抵
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("c", "wuzhong", "wz#0");
+    g.give("a", "wuxie", "wx#0");
+    g.give("a", "wuxie", "wx#1");
+    make_identity(g, {{"a", Role::Lord},
+                      {"b", Role::Loyalist},
+                      {"c", Role::Rebel}});
+
+    SimpleAI ai;
+    const auto played = g.cards.hand("c")[0];
+    auto r = resolve_play(g.ctx, ai, "c", played, {"c"});
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.hand_size("c") == 0);  // 被抵消，未摸牌
+    CHECK(g.cards.hand_size("a") == 1);  // 主公仅消费 1 张无懈
+}
+
+TEST_CASE("game: ally does not nullify a self-benefit trick")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("b", "wuzhong", "wz#0");
+    g.give("a", "wuxie", "wx#0");
+    make_identity(g, {{"a", Role::Lord}, {"b", Role::Loyalist}});
+
+    SimpleAI ai;
+    const auto played = g.cards.hand("b")[0];
+    auto r = resolve_play(g.ctx, ai, "b", played, {"b"});
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.hand_size("b") == 2);  // 摸 2（打出的无中生有已弃置）
+    CHECK(g.cards.hand_size("a") == 1);  // 无懈未消费
+}
+
+TEST_CASE("game: brawl self-benefit trick is never nullified")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.cards.build_deck(g.catalog);
+    g.give("c", "wuzhong", "wz#0");
+    g.give("a", "wuxie", "wx#0");
+
+    SimpleAI ai;  // 无角色：无懈决策回落乱斗旧口径
+    const auto played = g.cards.hand("c")[0];
+    auto r = resolve_play(g.ctx, ai, "c", played, {"c"});
+    REQUIRE(r.is_ok());
+    CHECK(g.cards.hand_size("c") == 2);  // 正常摸 2
+    CHECK(g.cards.hand_size("a") == 1);  // 无懈未消费
+}
+
 TEST_CASE("game: tao is a basic card and cannot be countered")
 {
     TestGame g("deck");

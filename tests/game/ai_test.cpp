@@ -1314,7 +1314,7 @@ TEST_CASE("ai: identity counter handles the judgement window by camp")
     CHECK(ai.play_counter(g.ctx, "a", "", {"b"}, "shandian").is_none());
 }
 
-TEST_CASE("ai: identity counter declines an enemy self-benefit trick")
+TEST_CASE("ai: identity counter nullifies an enemy self-benefit trick")
 {
     TestGame g("deck");
     g.add_player("a", 0, 4);
@@ -1327,7 +1327,78 @@ TEST_CASE("ai: identity counter declines an enemy self-benefit trick")
                {"c", tkw::game::Role::Rebel}};
 
     tkw::game::SimpleAI ai;
-    // 敌方自益锦囊窗口目标 = 使用者本人：不无懈（另案协调口径）
+    // 敌方自益锦囊窗口目标 = 使用者本人：主公视反贼为敌，本窗尚未被抵消
+    // （已出 0 张）故补一张无懈
+    const auto chosen = ai.play_counter(g.ctx, "a", "c", {"c"}, "wuzhong");
+    REQUIRE(chosen.is_some());
+    CHECK(chosen.unwrap() == "w#0");
+}
+
+TEST_CASE("ai: identity counter stops once the self-benefit window is cancelled")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.give("a", "wuxie", "w#0");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Lord},
+               {"b", tkw::game::Role::Loyalist},
+               {"c", tkw::game::Role::Rebel}};
+
+    tkw::game::SimpleAI ai;
+    // 本窗已打出 1 张（奇数 = 已被抵消）：敌方不再补牌，避免偶数相抵
+    CHECK(ai.play_counter(g.ctx, "a", "c", {"c"}, "wuzhong", 1).is_none());
+}
+
+TEST_CASE("ai: identity counter declines an ally self-benefit trick")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.give("a", "wuxie", "w#0");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Lord},
+               {"b", tkw::game::Role::Loyalist}};
+
+    tkw::game::SimpleAI ai;
+    // 友方 b 的自益锦囊（窗口目标 = b）：抵消等于拆自家台，故不出
+    CHECK(ai.play_counter(g.ctx, "a", "b", {"b"}, "wuzhong").is_none());
+}
+
+TEST_CASE("ai: identity counter weighs a traitor self-benefit trick by camp")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.add_player("d", 3, 4);
+    g.give("a", "wuxie", "w#a");
+    g.give("d", "wuxie", "w#d");
+    g.mode = tkw::game::GameMode::Identity;
+    g.roles = {{"a", tkw::game::Role::Lord},
+               {"b", tkw::game::Role::Loyalist},
+               {"c", tkw::game::Role::Traitor},
+               {"d", tkw::game::Role::Rebel}};
+
+    tkw::game::SimpleAI ai;
+    // 内奸自益窗：主公阵营视内奸为敌，补无懈；反贼视内奸为非敌，不出
+    const auto lord = ai.play_counter(g.ctx, "a", "c", {"c"}, "wuzhong");
+    REQUIRE(lord.is_some());
+    CHECK(lord.unwrap() == "w#a");
+    CHECK(ai.play_counter(g.ctx, "d", "c", {"c"}, "wuzhong").is_none());
+}
+
+TEST_CASE("ai: brawl counter stays legacy on a self-benefit trick")
+{
+    TestGame g("deck");
+    g.add_player("a", 0, 4);
+    g.add_player("b", 1, 4);
+    g.add_player("c", 2, 4);
+    g.give("a", "wuxie", "w#0");
+
+    tkw::game::SimpleAI ai;
+    // 无角色回落乱斗旧口径：锦囊目标仅含使用者 c，a 不在目标内故不出
     CHECK(ai.play_counter(g.ctx, "a", "c", {"c"}, "wuzhong").is_none());
 }
 

@@ -80,6 +80,7 @@ namespace tkw
                 std::string counter_user;              /**< 锦囊使用者（延时判定窗口 = 空串哨兵） */
                 std::vector<std::string> counter_targets; /**< 锦囊目标集合（判定窗口 = 被判定玩家一人） */
                 std::string counter_trick;             /**< 被无懈的锦囊 def id（空 = 未知） */
+                int counter_played = 0; /**< 本窗已打出的无懈张数（公开事实，0 起） */
 
                 // PickCard
                 std::string target;
@@ -165,13 +166,15 @@ namespace tkw
                     const ReadOnlyContext &ctx, const std::string &player,
                     const std::string &trick_user,
                     const std::vector<std::string> &trick_targets,
-                    const std::string &trick_def_id) override
+                    const std::string &trick_def_id,
+                    int counter_played = 0) override
                 {
                     DecisionRequest req = base_request(ctx, player);
                     req.kind = DecisionKind::Counter;
                     req.counter_user = trick_user;
                     req.counter_targets = trick_targets;
                     req.counter_trick = trick_def_id;
+                    req.counter_played = counter_played;
                     for (const auto &c : ctx.cards->hand(player))
                         if (is_counter_card(ctx, c))
                             req.options.push_back(c);

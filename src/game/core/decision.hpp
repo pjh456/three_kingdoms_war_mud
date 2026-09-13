@@ -165,15 +165,18 @@ namespace tkw
              *        （使用者不随牌记录，窗口主体为被判定玩家）。
              * @param trick_targets 锦囊目标集合（判定窗口 = 被判定玩家一人）。
              * @param trick_def_id 被结算锦囊的 def id（只读事实；判定窗口亦携带）。
+             * @param counter_played 本窗已打出的无懈张数（公开事实，0 起；引擎
+             *        恒显式传值，直调测试可省略）。
              * @return 要打出的手牌 instance_id；None = 不出。结算器先检查手牌
              *         确有牌再询问，并负责消费。
-             * @note 接缝只传事实（谁的锦囊、冲谁），不传「该不该出」的结论。
+             * @note 接缝只传事实（谁的锦囊、冲谁、本窗已出几张），不传「该不该出」
+             *       的结论。
              */
             virtual Option<std::string> play_counter(
                 const ReadOnlyContext &ctx, const std::string &player,
                 const std::string &trick_user,
                 const std::vector<std::string> &trick_targets,
-                const std::string &trick_def_id) = 0;
+                const std::string &trick_def_id, int counter_played = 0) = 0;
 
             /**
              * @brief 装备效果触发：player 是否发动 ability 指定的可选装备能力

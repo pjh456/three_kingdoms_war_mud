@@ -60,17 +60,19 @@ namespace tkw
         /**
          * @brief 询问某玩家是否打出无懈（有牌且决定出则消费）。
          * @param trick_def_id 被结算锦囊的 def id（只读事实，透传窗口文案）。
+         * @param counter_played 本窗此前已打出的无懈张数（公开链状态，透传决策源）。
          */
         inline bool try_play_counter(
             GameContext &ctx, DecisionSource &ai, const std::string &player,
             const std::string &trick_user,
             const std::vector<std::string> &trick_targets,
-            const std::string &trick_def_id)
+            const std::string &trick_def_id, int counter_played)
         {
             if (!has_counter_card(ctx, player))
                 return false;
-            const auto chosen =
-                ai.play_counter(ctx, player, trick_user, trick_targets, trick_def_id);
+            const auto chosen = ai.play_counter(
+                ctx, player, trick_user, trick_targets, trick_def_id,
+                counter_played);
             if (chosen.is_none())
                 return false;
             return consume_counter(ctx, player, chosen.unwrap());
@@ -88,6 +90,8 @@ namespace tkw
          * @note 窗口粒度 = 每个受影响目标一次（调用方按目标调用）：一张锦囊
          *       可开多个独立窗口，每个目标窗口各自出奇数张无懈才抵消该目标
          *       （卡面「对一名角色产生的效果」）。
+         * @note 逐轮向决策源透传本窗已打出的无懈张数（公开事实），使决策源能
+         *       感知链状态、避免同窗或跨轮偶数相抵。
          */
         inline bool resolve_nullification(
             GameContext &ctx, DecisionSource &ai, const card::CardDef &trick,
@@ -98,16 +102,19 @@ namespace tkw
                 trick_user.empty() ? trick_targets.front() : trick_user;
             const auto order = seat_order_from(ctx, start);
             bool cancelled = false;
+            int played = 0;
             for (int round = 0; round < rules_of(ctx).wuxie_rounds; ++round)
             {
                 bool any = false;
                 for (const auto &p : order)
                 {
                     if (try_play_counter(
-                            ctx, ai, p, trick_user, trick_targets, trick.id))
+                            ctx, ai, p, trick_user, trick_targets, trick.id,
+                            played))
                     {
                         cancelled = !cancelled;
                         any = true;
+                        ++played;
                     }
                 }
                 if (!any)

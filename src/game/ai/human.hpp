@@ -1047,10 +1047,12 @@ namespace tkw
                     const ReadOnlyContext &ctx, const std::string &player,
                     const std::string &trick_user,
                     const std::vector<std::string> &trick_targets,
-                    const std::string &trick_def_id) override
+                    const std::string &trick_def_id,
+                    int counter_played = 0) override
                 {
                     return route(player).play_counter(
-                        ctx, player, trick_user, trick_targets, trick_def_id);
+                        ctx, player, trick_user, trick_targets, trick_def_id,
+                        counter_played);
                 }
 
                 bool trigger_effect(

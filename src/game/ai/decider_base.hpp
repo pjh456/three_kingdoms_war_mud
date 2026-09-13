@@ -105,7 +105,9 @@ namespace tkw
                  * @brief 无懈窗口：乱斗或无角色时回落旧口径（仅当锦囊冲自己
                  *        时出）；身份局按阵营判断——使用者为空（判定窗）或为
                  *        敌方时，敌方锦囊冲自己必出、冲友方时仅窗内首位保护者
-                 *        出；友方锦囊一律不出（不拆自家人的牌）。
+                 *        出；友方锦囊一律不出（不拆自家人的牌）。敌方有益自益
+                 *        锦囊（窗口唯一目标 = 使用者）按窗口奇偶补一张：仅当本
+                 *        窗尚未被抵消（已出张数为偶）时出手。
                  * @note 候选已由适配器滤为无懈牌且窗口询问前保证非空；直调
                  *       decide 时按不出处理空候选。多目标窗（借刀等）与使用者
                  *       角色未知时回落旧口径，避免误读奇偶链。
@@ -128,11 +130,11 @@ namespace tkw
 
                     const std::string &t = req.counter_targets.front();
 
-                    // 敌方有益锦囊（桃园/五谷/无中生有等）对目标回血或摸牌，
-                    // 抵消它等于伤害己方（或浪费无懈），故一律不出。仅当目录
-                    // 能解析出定义时判极性；空/未知 def 保持旧行为，避免打断
-                    // 不携定义的直调用例。
+                    // 极性判定：回血/摸牌/亮牌选牌对目标有益，抵消它只在目标
+                    // 为己方时才划算。仅当目录能解析出定义时判极性；空/未知
+                    // def 保持旧行为，避免打断不携定义的直调用例。
                     const card::CardDef *trick = find_def(req, req.counter_trick);
+                    bool beneficial = false;
                     if (trick && trick->effect.is_some())
                     {
                         using E = card::CardEffectKind;
@@ -141,7 +143,8 @@ namespace tkw
                         case E::Heal:
                         case E::Draw:
                         case E::RevealPick:
-                            return out;
+                            beneficial = true;
+                            break;
                         default:
                             break;
                         }
@@ -151,12 +154,28 @@ namespace tkw
                         req.counter_user.empty() ||
                         is_enemy(view.self_role,
                                  role_in_view(view, req.counter_user));
+
+                    // 自益窗（窗口唯一目标 = 使用者）且为有益效果：敌方在本窗
+                    // 尚未被抵消（窗口奇偶为偶）时补一张无懈；友方自益不拆台，
+                    // 已被抵消（奇数）则收手，同时消除同窗双无懈与跨轮重放。
+                    if (!req.counter_user.empty() && t == req.counter_user &&
+                        beneficial)
+                    {
+                        if (hostile && req.counter_played % 2 == 0)
+                            out.instance_id = Option<std::string>::Some(
+                                req.options.front().instance_id);
+                        return out;
+                    }
+
+                    // 敌方有益锦囊冲友方：抵消只会伤害己方（或浪费无懈），故不出
+                    if (beneficial)
+                        return out;
+
                     const std::string start =
                         req.counter_user.empty() ? t : req.counter_user;
 
                     // 冲自己或友方：使用者敌对且本决策者是窗内首位保护者时
-                    // 出一张；同一轮至多一名保护者出手，首位保护者持多张无懈
-                    // 时仍会被逐轮重问（已知残差）
+                    // 出一张；同一轮至多一名保护者出手
                     if (hostile && protects(view, t) &&
                         is_first_protector(view, t, start))
                         out.instance_id = Option<std::string>::Some(
