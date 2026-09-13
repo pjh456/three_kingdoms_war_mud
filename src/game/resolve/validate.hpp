@@ -341,12 +341,12 @@ namespace tkw
         /**
          * @brief 校验「虚拟杀」是否合法（只读预检）。
          * @param first_id/second_id 虚拟杀的来源手牌。second_id 非空 = 丈八蛇矛
-         *        两张当杀；为空 = 单张转化（武圣：first 须为红色手牌）。
+         *        两张当杀；为空 = 单张转化（武圣红牌 / 龙胆闪）。
          * @return Ok 合法；错误值：
          *         - CardNotOwned：两牌为同一张或任一（单张路径为 first）不在
          *           player 手牌中；
          *         - UnsupportedKind：来源不满足（丈八未装备两张当杀能力 / 单张
-         *           无武圣或首牌非红），或牌堆无「杀」定义；
+         *           不满足 can_convert_card_to_sha），或牌堆无「杀」定义；
          *         - ShaLimitExceeded：杀且本回合杀次数已达上限（turn）；
          *         - NoTarget/OutOfRange/InvalidTarget：目标校验失败
          *         （攻击范围内的一名其他角色；方天画戟放宽与杀一致，按消耗张数）。
@@ -365,13 +365,13 @@ namespace tkw
                 return GameResult<void>::Err(EffectError::CardNotOwned);
             bool have_first = false;
             bool have_second = !two_cards;
-            bool first_red = false;
+            card::Card first_card;
             for (const auto &c : ctx.cards->hand(player))
             {
                 if (c.instance_id == first_id)
                 {
                     have_first = true;
-                    first_red = is_red_suit(c.suit);
+                    first_card = c;
                 }
                 else if (c.instance_id == second_id)
                     have_second = true;
@@ -392,8 +392,10 @@ namespace tkw
             }
             else
             {
-                if (!has_hero_skill(ctx, player, hero::HeroSkill::WuSheng) ||
-                    !first_red)
+                const auto first_def = ctx.catalog->find(first_card.def_id);
+                if (first_def.is_none() ||
+                    !can_convert_card_to_sha(ctx, player, first_card,
+                                             *first_def.unwrap()))
                     return GameResult<void>::Err(EffectError::UnsupportedKind);
                 cards_consumed = 1;
             }

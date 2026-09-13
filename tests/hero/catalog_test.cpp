@@ -47,7 +47,7 @@ TEST_CASE("hero: standard catalog loads heroes and skill metadata")
     REQUIRE(cat.is_ok());
     const auto &catalog = cat.unwrap();
 
-    REQUIRE(catalog.size() == 6);
+    REQUIRE(catalog.size() == 7);
     const auto zhangfei = catalog.find("zhangfei");
     REQUIRE(zhangfei.is_some());
     const hero::HeroDef &zf = *zhangfei.unwrap();
@@ -99,6 +99,16 @@ TEST_CASE("hero: standard catalog loads heroes and skill metadata")
     CHECK(has_skill(hy, hero::HeroSkill::QiCai));
     CHECK(hero::display_skill_name(hero::HeroSkill::QiCai) == "奇才");
 
+    const auto zhaoyun = catalog.find("zhaoyun");
+    REQUIRE(zhaoyun.is_some());
+    const hero::HeroDef &zd = *zhaoyun.unwrap();
+    CHECK(zd.name == "赵云");
+    REQUIRE(zd.gender.is_some());
+    CHECK(zd.gender.unwrap() == entity::Gender::Male);
+    CHECK(zd.hp == 4);
+    CHECK(has_skill(zd, hero::HeroSkill::LongDan));
+    CHECK(hero::display_skill_name(hero::HeroSkill::LongDan) == "龙胆");
+
     // 标准目录内全部技能均已实现：审计面不再标记为未实现
     CHECK_FALSE(game::is_unimplemented_skill(hero::HeroSkill::PaoXiao));
     CHECK_FALSE(game::is_unimplemented_skill(hero::HeroSkill::WuSheng));
@@ -106,6 +116,7 @@ TEST_CASE("hero: standard catalog loads heroes and skill metadata")
     CHECK_FALSE(game::is_unimplemented_skill(hero::HeroSkill::FanKui));
     CHECK_FALSE(game::is_unimplemented_skill(hero::HeroSkill::MaShu));
     CHECK_FALSE(game::is_unimplemented_skill(hero::HeroSkill::QiCai));
+    CHECK_FALSE(game::is_unimplemented_skill(hero::HeroSkill::LongDan));
 
     // 目录未命中回落 id
     CHECK(hero::display_hero_name(catalog, "nobody") == "nobody");

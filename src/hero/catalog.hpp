@@ -45,7 +45,8 @@ namespace tkw
                                 {"yingzi", HeroSkill::YingZi},
                                 {"fankui", HeroSkill::FanKui},
                                 {"mashu", HeroSkill::MaShu},
-                                {"qicai", HeroSkill::QiCai}};
+                                {"qicai", HeroSkill::QiCai},
+                                {"longdan", HeroSkill::LongDan}};
 
             /** 字符串 → 技能枚举：未知值报 InvalidValue（detail = 字段路径）。 */
             inline cfg::ConfigResult<HeroSkill> skill_value(
@@ -193,6 +194,8 @@ namespace tkw
                 return "马术";
             case HeroSkill::QiCai:
                 return "奇才";
+            case HeroSkill::LongDan:
+                return "龙胆";
             }
             return "";
         }

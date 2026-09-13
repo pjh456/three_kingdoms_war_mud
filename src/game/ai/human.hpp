@@ -531,6 +531,7 @@ namespace tkw
                     case hero::HeroSkill::YingZi:
                     case hero::HeroSkill::MaShu:
                     case hero::HeroSkill::QiCai:
+                    case hero::HeroSkill::LongDan:
                         return "武将技能";
                     }
                     return "武将技能";

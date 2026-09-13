@@ -2008,6 +2008,10 @@ TEST_CASE("cli: heroes lines list catalog and mark implemented skills")
     CHECK(out.find("3体力") != std::string::npos);
     CHECK(out.find("技能: 奇才") != std::string::npos);
     CHECK(out.find("奇才（未实现）") == std::string::npos);
+    // 赵云龙胆：转化技，列出且已实现
+    CHECK(out.find("赵云(zhaoyun)") != std::string::npos);
+    CHECK(out.find("技能: 龙胆") != std::string::npos);
+    CHECK(out.find("龙胆（未实现）") == std::string::npos);
 
     // 无 heroes.json 的目录回落空数据而不报错
     const std::filesystem::path empty_dir =

@@ -117,6 +117,8 @@ namespace tkw
                 return {true};
             case H::QiCai:
                 return {true};
+            case H::LongDan:
+                return {true};
             }
             return {};
         }

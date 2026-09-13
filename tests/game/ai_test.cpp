@@ -572,6 +572,63 @@ TEST_CASE("ai: response options include wusheng red cards")
     CHECK(rec2.options.empty());
 }
 
+TEST_CASE("ai: decider forwards the longdan converted sha")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, tkw::entity::Gender::Male, "zhaoyun");
+    g.add_player("b", 1, 4);
+    g.cards.add_to_hand("a", tkw::card::Card{"x#1", "shan", tkw::card::Suit::Heart, 3});
+
+    const tkw::game::TurnContext turn{"a", 0, 1};
+    const auto legal = tkw::game::legal_actions(g.ctx, "a", turn);
+    std::size_t index = legal.size();
+    for (std::size_t i = 0; i < legal.size(); ++i)
+        if (legal[i].converted_sha)
+        {
+            index = i;
+            break;
+        }
+    REQUIRE(index < legal.size());
+
+    RecordingDecider rec;
+    rec.pick_index = index;
+    RequestDecisionSource src(rec);
+    const auto act = src.choose_play(g.ctx, turn);
+    REQUIRE(act.is_some());
+    CHECK(act.unwrap().converted_sha);
+    CHECK(act.unwrap().second_instance_id.empty());
+    CHECK(rec.converted_sha);
+}
+
+TEST_CASE("ai: response options include longdan jink as sha")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, tkw::entity::Gender::Male, "zhaoyun");
+    g.add_player("b", 1, 4);
+    g.cards.add_to_hand("a", tkw::card::Card{"x#1", "shan", tkw::card::Suit::Heart, 3});
+    g.cards.add_to_hand("a", tkw::card::Card{"x#2", "tao", tkw::card::Suit::Heart, 4});  // 非闪不可转化
+
+    RecordingDecider rec;
+    RequestDecisionSource src(rec);
+    const auto chosen = src.play_response(
+        g.ctx, "a", tkw::card::ResponseKind::Sha, tkw::game::ResponsePrompt{});
+    CHECK(chosen.is_none());
+
+    bool saw_jink = false;
+    bool saw_tao = false;
+    for (const auto &c : rec.options)
+    {
+        if (c.instance_id == "x#1")
+            saw_jink = true;
+        if (c.instance_id == "x#2")
+            saw_tao = true;
+    }
+    CHECK(saw_jink);
+    CHECK_FALSE(saw_tao);
+}
+
 TEST_CASE("ai: simple trigger respects the discard cost")
 {
     TestGame g("deck");

@@ -1,0 +1,8 @@
+{
+  "id": "zhaoyun",
+  "name": "赵云",
+  "gender": "male",
+  "hp": 4,
+  "skills": ["longdan"],
+  "text": "龙胆：你可以将一张【杀】当【闪】、一张【闪】当【杀】使用或打出。"
+}

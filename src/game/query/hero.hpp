@@ -10,8 +10,13 @@
 #define INCLUDE_TKW_GAME_HERO_HPP
 
 #include <string>
+#include <vector>
 
+#include "card/card.hpp"
+#include "card/def.hpp"
 #include "game/core/context.hpp"
+#include "game/core/effect.hpp"
+#include "game/core/state.hpp"
 #include "hero/catalog.hpp"
 #include "hero/def.hpp"
 
@@ -57,6 +62,50 @@ namespace tkw
                 if (s == skill)
                     return true;
             return false;
+        }
+
+        /**
+         * @brief 该手牌能否被实体转化为虚拟「杀」（武圣红牌 / 龙胆闪）。
+         * @param c 手牌对象（武圣按花色判定）。
+         * @param def 该手牌的目录定义（龙胆按效果类别判定）。
+         * @return 拥有对应转化技能且牌面满足来源条件 → true；否则 false。
+         * @note 转化来源的唯一判定入口：主动枚举、响应存在性、响应候选与结算
+         *       重识别共用，保证「哪些牌可当杀」各处口径一致。
+         */
+        inline bool can_convert_card_to_sha(
+            const ReadOnlyContext &ctx, const std::string &entity_id,
+            const card::Card &c, const card::CardDef &def)
+        {
+            if (has_hero_skill(ctx, entity_id, hero::HeroSkill::WuSheng) &&
+                is_red_suit(c.suit))
+                return true;
+            return has_hero_skill(ctx, entity_id, hero::HeroSkill::LongDan) &&
+                   def.effect.is_some() &&
+                   def.effect.unwrap().kind == card::CardEffectKind::Jink;
+        }
+
+        /**
+         * @brief 手牌中可作为虚拟杀打出的转化来源（手牌序，确定性；跳过真杀）。
+         * @return 满足 can_convert_card_to_sha 的手牌副本；目录未命中该牌的跳过。
+         * @note 真杀已有普通出牌动作，跳过以避免同张牌重复产出；杀次数与目标
+         *       合法性归校验层（主动侧 validate_virtual_sha）。
+         */
+        inline std::vector<card::Card> sha_conversion_cards(
+            const ReadOnlyContext &ctx, const std::string &entity_id)
+        {
+            std::vector<card::Card> out;
+            for (const auto &c : ctx.cards->hand(entity_id))
+            {
+                const auto d = ctx.catalog->find(c.def_id);
+                if (d.is_none())
+                    continue;
+                const card::CardDef &def = *d.unwrap();
+                if (is_response_def(def, card::ResponseKind::Sha))
+                    continue;
+                if (can_convert_card_to_sha(ctx, entity_id, c, def))
+                    out.push_back(c);
+            }
+            return out;
         }
 
         /**

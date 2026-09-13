@@ -645,8 +645,9 @@ namespace tkw
         }
 
         /**
-         * @brief 开杀响应窗口并消费响应杀：响应者打出一张真杀、武圣将一张红色牌
-         *        当杀打出，或（装备两张当杀能力时）打出两张手牌当杀。消费在本
+         * @brief 开杀响应窗口并消费响应杀：响应者打出一张真杀、将一张转化来源牌
+         *        当杀打出（武圣红牌 / 龙胆闪），或（装备两张当杀能力时）打出两张
+         *        手牌当杀。消费在本
          *        函数内完成（弃置+事件）；给出结算目标（借刀的 B）时再按杀对其
          *        结算（真杀带花色、虚拟杀无花色），否则仅消费（决斗/南蛮无结算
          *        目标）。
@@ -655,8 +656,8 @@ namespace tkw
          * @note 响应侧不受出牌阶段杀次数限制（次数是出牌阶段「本回合已用杀」的
          *         簿记，响应窗口不在出牌阶段簿记内）。结算目标由引擎固定（借刀
          *         的 B，打出时已以同一距离谓词校验），响应侧不复核目标，与真杀
-         *         响应路径一致。武圣转化的合法性由「武将技能 + 所选牌为红色」
-         *         无歧义识别，回传的 PlayAction 无需携带转化标记。借刀响应事件
+         *         响应路径一致。转化来源的合法性由「武将技能 + 所选牌面」无歧义
+         *         识别，回传的 PlayAction 无需携带转化标记。借刀响应事件
          *         语法：对目标结算=打出、仅消费=响应语义的弃置事件（展示为打出；
          *         真杀与虚拟杀同口径）。
          */
@@ -725,15 +726,15 @@ namespace tkw
                     chosen_card = &c;
                     break;
                 }
-            if (chosen_card != nullptr &&
-                has_hero_skill(ctx, entity, hero::HeroSkill::WuSheng) &&
-                is_red_suit(chosen_card->suit))
+            if (chosen_card != nullptr)
             {
                 const auto cdef = ctx.catalog->find(chosen_card->def_id);
                 const bool real_sha =
                     cdef.is_some() &&
                     is_response_def(*cdef.unwrap(), card::ResponseKind::Sha);
-                if (!real_sha)
+                if (cdef.is_some() && !real_sha &&
+                    can_convert_card_to_sha(ctx, entity, *chosen_card,
+                                            *cdef.unwrap()))
                 {
                     // 有结算目标：虚拟杀接管（消费 + 逐目标结算，跳过目标复验）
                     if (!victim.empty())

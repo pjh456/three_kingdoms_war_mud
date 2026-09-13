@@ -5527,6 +5527,176 @@ TEST_CASE("game: has_response_card includes wusheng red cards")
     CHECK_FALSE(has_response_card(plain.ctx, "a", ResponseKind::Sha));
 }
 
+// ── 龙胆：闪当杀（主动使用侧）──────────────────────────────────────────
+
+TEST_CASE("game: legal_actions enumerates longdan jink as sha")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Male, "zhaoyun");
+    g.add_player("b", 1, 4);
+    g.cards.add_to_hand("a", Card{"x#1", "shan", Suit::Heart, 3});
+    g.cards.add_to_hand("a", Card{"x#2", "tao", Suit::Heart, 4});   // 红桃不转化（非闪）
+    g.cards.add_to_hand("a", Card{"x#3", "sha", Suit::Spade, 7});   // 真杀走普通动作
+
+    const auto acts = legal_actions(g.ctx, "a", TurnContext{"a", 0, 1});
+    std::size_t converted = 0;
+    for (const auto &a : acts)
+        if (a.converted_sha)
+        {
+            ++converted;
+            CHECK(a.card.instance_id == "x#1");
+            CHECK(a.second_instance_id.empty());
+            REQUIRE(a.targets.size() == 1);
+            CHECK(a.targets.front() == "b");
+        }
+    CHECK(converted == 1);
+
+    // 无武将座位同手牌不产出转化候选
+    TestGame plain("deck");
+    plain.add_player("a", 0, 4);
+    plain.add_player("b", 1, 4);
+    plain.cards.add_to_hand("a", Card{"x#1", "shan", Suit::Heart, 3});
+    for (const auto &a : legal_actions(plain.ctx, "a", TurnContext{"a", 0, 1}))
+        CHECK_FALSE(a.converted_sha);
+}
+
+TEST_CASE("game: longdan plays a jink as sha")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.rules.draw_per_turn = 0;  // 固定手牌序
+    g.add_player("a", 0, 4, Gender::Male, "zhaoyun");
+    auto *b = g.add_player("b", 1, 4);
+    g.cards.add_to_hand("a", Card{"x#1", "shan", Suit::Heart, 3});
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"x#1", {"b"}, "", false, true}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);             // 闪当杀命中
+    CHECK(g.cards.hand_size("a") == 0);
+    CHECK(g.cards.discard_size() == 1);  // 闪进弃牌堆
+}
+
+TEST_CASE("game: longdan rejects a non-jink red card conversion")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.rules.draw_per_turn = 0;
+    g.add_player("a", 0, 4, Gender::Male, "zhaoyun");
+    auto *b = g.add_player("b", 1, 4);
+    g.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Heart, 3});  // 红桃非闪
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"x#1", {"b"}, "", false, true}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == TurnError::PlayRejected);
+    CHECK(b->get_hp() == 4);
+    CHECK(g.cards.hand_size("a") == 1);  // 校验失败不消耗
+}
+
+TEST_CASE("game: longdan requires the hero skill")
+{
+    TestGame g("deck");
+    g.rules.draw_per_turn = 0;
+    g.add_player("a", 0, 4);  // 无武将
+    auto *b = g.add_player("b", 1, 4);
+    g.cards.add_to_hand("a", Card{"x#1", "shan", Suit::Heart, 3});
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"x#1", {"b"}, "", false, true}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == TurnError::PlayRejected);
+    CHECK(b->get_hp() == 4);
+    CHECK(g.cards.hand_size("a") == 1);
+}
+
+TEST_CASE("game: longdan converted sha counts toward the sha limit")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.rules.draw_per_turn = 0;
+    g.add_player("a", 0, 4, Gender::Male, "zhaoyun");
+    auto *b = g.add_player("b", 1, 4);
+    g.cards.add_to_hand("a", Card{"x#1", "shan", Suit::Heart, 3});
+    g.cards.add_to_hand("a", Card{"x#2", "shan", Suit::Diamond, 4});
+
+    TestDecider decider;
+    decider.plays = {PlayAction{"x#1", {"b"}, "", false, true},
+                     PlayAction{"x#2", {"b"}, "", false, true}};
+    auto r = execute_turn(g.ctx, decider, "a");
+    REQUIRE(r.is_err());
+    CHECK(r.unwrap_err() == TurnError::ShaLimitExceeded);
+    CHECK(b->get_hp() == 3);             // 第一个转化杀命中
+    CHECK(g.cards.hand_size("a") == 1);  // 第二张未消耗
+}
+
+TEST_CASE("game: simple ai uses longdan jink as sha when holding no sha")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.rules.draw_per_turn = 0;
+    g.add_player("a", 0, 4, Gender::Male, "zhaoyun");
+    auto *b = g.add_player("b", 1, 4);
+    g.cards.add_to_hand("a", Card{"x#1", "shan", Suit::Heart, 3});
+
+    SimpleAI ai;
+    auto r = execute_turn(g.ctx, ai, "a");
+    REQUIRE(r.is_ok());
+    CHECK(b->get_hp() == 3);             // 手牌无真杀，闪当作杀打出
+    CHECK(g.cards.hand_size("a") == 0);
+}
+
+// ── 龙胆：闪当杀（响应/打出侧）──────────────────────────────────────────
+
+TEST_CASE("game: has_response_card includes longdan jink as sha")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Male, "zhaoyun");
+    g.cards.add_to_hand("a", Card{"x#1", "shan", Suit::Heart, 3});
+    CHECK(has_response_card(g.ctx, "a", ResponseKind::Sha));
+
+    // 红桃非闪不可当杀
+    TestGame only_tao("deck");
+    only_tao.load_heroes();
+    only_tao.add_player("a", 0, 4, Gender::Male, "zhaoyun");
+    only_tao.cards.add_to_hand("a", Card{"x#1", "tao", Suit::Heart, 3});
+    CHECK_FALSE(has_response_card(only_tao.ctx, "a", ResponseKind::Sha));
+
+    // 无武将同牌不响应
+    TestGame plain("deck");
+    plain.add_player("a", 0, 4);
+    plain.cards.add_to_hand("a", Card{"x#1", "shan", Suit::Heart, 3});
+    CHECK_FALSE(has_response_card(plain.ctx, "a", ResponseKind::Sha));
+}
+
+TEST_CASE("game: longdan response accepts a jink as sha")
+{
+    TestGame g("deck");
+    g.load_heroes();
+    g.add_player("a", 0, 4, Gender::Male, "zhaoyun");
+    g.cards.add_to_hand("a", Card{"x#1", "shan", Suit::Heart, 3});
+
+    TestDecider decider;
+    decider.response_id = "x#1";
+    CHECK(respond_sha(g.ctx, decider, "a", "", ResponsePrompt{}));  // 仅消费
+    CHECK(g.cards.hand_size("a") == 0);
+    CHECK(g.cards.discard_size() == 1);
+
+    // 无武将座位：同牌不响应且不消耗
+    TestGame plain("deck");
+    plain.add_player("a", 0, 4);
+    plain.cards.add_to_hand("a", Card{"x#1", "shan", Suit::Heart, 3});
+    TestDecider d2;
+    d2.response_id = "x#1";
+    CHECK_FALSE(respond_sha(plain.ctx, d2, "a", "", ResponsePrompt{}));
+    CHECK(plain.cards.hand_size("a") == 1);
+}
+
 // ── 铁索连环：横置/重置与属性伤害传导 ─────────────────────────────────
 
 namespace
