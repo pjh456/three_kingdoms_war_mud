@@ -42,7 +42,7 @@ if(TKW_ENABLE_TESTS)
     add_subdirectory(tests)
 endif()
 
-# 可选 TUI 目标：FTXUI 只链进 tkw-tui，tkw / tkw_cli / header-only 引擎零新增依赖。
+# 可选 TUI 目标：FTXUI 只链进 tkw-tui，tkw / tkw_cli / 引擎各 tkw_* 静态库零新增依赖。
 # 默认 OFF 时不探测、不拉取 FTXUI；本机已装优先，未装回退 FetchContent 钉版本。
 if(TKW_ENABLE_TUI)
     find_package(ftxui CONFIG QUIET)
