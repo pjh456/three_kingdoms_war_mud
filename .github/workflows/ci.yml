@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [ "*" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux (GCC)
+            cache_key: Linux-GCC
+            os: ubuntu-latest
+            cc: gcc
+            cxx: g++
+            ccache_variant: ccache
+            cmake_args: ""
+            ctest_args: ""
+          - name: Linux (Clang)
+            cache_key: Linux-Clang
+            os: ubuntu-latest
+            cc: clang
+            cxx: clang++
+            ccache_variant: ccache
+            cmake_args: ""
+            ctest_args: ""
+          - name: Linux (Clang, ASan+UBSan)
+            cache_key: Linux-Clang-ASan-UBSan
+            os: ubuntu-latest
+            cc: clang
+            cxx: clang++
+            ccache_variant: ccache
+            cmake_args: "-DCMAKE_BUILD_TYPE=Debug -DPJH_PLATFORM_SANITIZERS=ON"
+            ctest_args: ""
+          - name: macOS (Clang)
+            cache_key: macOS-Clang
+            os: macos-latest
+            cc: clang
+            cxx: clang++
+            ccache_variant: ccache
+            cmake_args: ""
+            ctest_args: "-E cli_repl_raw_mode_smoke"
+          - name: Windows (MSVC)
+            cache_key: Windows-MSVC
+            os: windows-latest
+            cc: cl
+            cxx: cl
+            ccache_variant: ccache
+            cmake_args: ""
+            ctest_args: ""
+
+    steps:
+      # pjh_cli 子模块在 .gitmodules 里用 SSH 地址；CI 无部署密钥，统一重写成
+      # HTTPS 后再让 checkout 拉取（其余子模块本就是 HTTPS）。
+      - name: Rewrite SSH submodule URLs to HTTPS
+        shell: bash
+        run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Compiler cache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.cache_key }}
+          variant: ${{ matrix.ccache_variant }}
+
+      - name: Setup MSVC
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vsPath = vswhere -latest -property installationPath
+          cmd /c "`"$vsPath\VC\Auxiliary\Build\vcvars64.bat`" >nul && set" | ForEach-Object { Add-Content $env:GITHUB_ENV $_ }
+
+      - name: Configure CMake
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+          CMAKE_C_COMPILER_LAUNCHER: ${{ matrix.ccache_variant }}
+          CMAKE_CXX_COMPILER_LAUNCHER: ${{ matrix.ccache_variant }}
+        run: cmake -B build -G Ninja ${{ matrix.cmake_args }}
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      # 测试是 sh/grep/awk 驱动的 Unix 脚本；Windows 无 sh，故只构建不跑测试。
+      # macOS 的 BSD script 不支持 `script -qec`，排除依赖它的 raw 冒烟用例。
+      - name: Test
+        if: runner.os != 'Windows'
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ctest --test-dir build --output-on-failure --no-tests=error --repeat until-fail:3 ${{ matrix.ctest_args }}
