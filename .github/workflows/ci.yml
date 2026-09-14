@@ -20,7 +20,7 @@ jobs:
             cc: gcc
             cxx: g++
             ccache_variant: ccache
-            cmake_args: ""
+            cmake_args: "-DTKW_ENABLE_TUI=ON"
             ctest_args: ""
           - name: Linux (Clang)
             cache_key: Linux-Clang
@@ -55,7 +55,7 @@ jobs:
             cc: cl
             cxx: cl
             ccache_variant: ccache
-            cmake_args: ""
+            cmake_args: "-DTKW_ENABLE_TUI=ON"
             ctest_args: ""
 
     steps:
@@ -94,10 +94,10 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
 
-      # 测试是 sh/grep/awk 驱动的 Unix 脚本；Windows 无 sh，故只构建不跑测试。
+      # Windows 无 sh：shell/PTY E2E 已由 tests/CMakeLists.txt 的 if(UNIX) 门控跳过；
+      # Windows 跑全部 doctest 目标、直跑二进制的 E2E，以及 TUI ON 时的 tui_panel_tests。
       # macOS 的 BSD script 不支持 `script -qec`，排除依赖它的 raw 冒烟用例。
       - name: Test
-        if: runner.os != 'Windows'
         env:
           ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
