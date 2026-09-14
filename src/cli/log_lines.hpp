@@ -60,13 +60,9 @@ namespace tkw
              * @param[in] event   打出事件。
              * @return 不含换行的整行文案。
              */
-            inline std::string card_played_line(
+            std::string card_played_line(
                 const tkw::card::CardDefCatalog &catalog,
-                const tkw::CardPlayedEvent &event)
-            {
-                return "[打出] " + event.user + " " +
-                       tkw::card::display_name(catalog, event.def_id);
-            }
+                const tkw::CardPlayedEvent &event);
 
             /**
              * @brief [弃置] 行：进弃牌堆的标签按来源语义区分。
@@ -76,20 +72,9 @@ namespace tkw
              * @note Judgement → [判定]、Response → [打出]，其余 → [弃置]；
              *       空 entity（无主/亮牌来源）渲染为 (无)，避免空段。
              */
-            inline std::string card_discarded_line(
+            std::string card_discarded_line(
                 const tkw::card::CardDefCatalog &catalog,
-                const tkw::CardDiscardedEvent &event)
-            {
-                const char *label = "[弃置] ";
-                if (event.kind == tkw::DiscardKind::Judgement)
-                    label = "[判定] ";
-                else if (event.kind == tkw::DiscardKind::Response)
-                    label = "[打出] ";
-                const std::string entity =
-                    event.entity.empty() ? "(无)" : event.entity;
-                return std::string(label) + entity + " " +
-                       tkw::card::display_name(catalog, event.def_id);
-            }
+                const tkw::CardDiscardedEvent &event);
 
             /**
              * @brief [摸牌] 行：击杀奖惩摸牌与常规摸牌同走摸牌事件。
@@ -101,18 +86,9 @@ namespace tkw
              * @note KillReward → [击杀奖励]，其余 → [摸牌]；行结构（标签 + 实体 +
              *       空格 + 名称）不变，便于既有解析。
              */
-            inline std::string card_drawn_line(
+            std::string card_drawn_line(
                 const tkw::card::CardDefCatalog &catalog,
-                const tkw::CardDrawnEvent &event, bool reveal = true)
-            {
-                const char *label =
-                    event.kind == tkw::DrawKind::KillReward ? "[击杀奖励] "
-                                                            : "[摸牌] ";
-                const std::string name =
-                    reveal ? tkw::card::display_name(catalog, event.def_id)
-                           : kHiddenCardName;
-                return std::string(label) + event.entity + " " + name;
-            }
+                const tkw::CardDrawnEvent &event, bool reveal = true);
 
             /**
              * @brief [移牌] 行：区域转移；空实体 = 亮牌等非玩家来源/去向。
@@ -121,18 +97,9 @@ namespace tkw
              * @return 不含换行的整行文案。
              * @note 空实体渲染为 (无)，避免空段。
              */
-            inline std::string card_moved_line(
+            std::string card_moved_line(
                 const tkw::card::CardDefCatalog &catalog,
-                const tkw::CardMovedEvent &event)
-            {
-                const std::string from =
-                    event.from_entity.empty() ? "(无)" : event.from_entity;
-                const std::string to =
-                    event.to_entity.empty() ? "(无)" : event.to_entity;
-                return "[移牌] " + from + "(" + zone_name_zh(event.from) +
-                       ") -> " + to + "(" + zone_name_zh(event.to) + ") " +
-                       tkw::card::display_name(catalog, event.def_id);
-            }
+                const tkw::CardMovedEvent &event);
 
             /**
              * @brief 伤害属性的中文单字标记；普通伤害返回空串。
@@ -140,19 +107,7 @@ namespace tkw
              * @return 火→"火"、雷→"雷"、普通→空串。
              * @note 属性为「无」时不产生标记，避免普通伤害行出现冗余后缀。
              */
-            inline const char *damage_type_hint_zh(tkw::card::DamageType type)
-            {
-                switch (type)
-                {
-                case tkw::card::DamageType::Fire:
-                    return "火";
-                case tkw::card::DamageType::Thunder:
-                    return "雷";
-                case tkw::card::DamageType::Normal:
-                    return "";
-                }
-                return "";
-            }
+            const char *damage_type_hint_zh(tkw::card::DamageType type);
 
             /**
              * @brief [伤害] 行：无来源 = 闪电等非玩家来源。
@@ -162,49 +117,23 @@ namespace tkw
              *       不变；火/雷属性与连环等间接传导在整行尾部以全角括号标记，
              *       复合标记按属性在前、传导在后并以全角逗号分隔。
              */
-            inline std::string entity_damaged_line(
-                const tkw::EntityDamagedEvent &event)
-            {
-                const std::string source =
-                    event.source.empty() ? "(无来源)" : event.source;
-                std::string line = "[伤害] " + source + " -> " + event.target +
-                                   " " + std::to_string(event.amount);
-
-                std::string marks = damage_type_hint_zh(event.damage_type);
-                if (event.indirect)
-                {
-                    if (!marks.empty())
-                        marks += "，";
-                    marks += "传导";
-                }
-                if (!marks.empty())
-                    line += "（" + marks + "）";
-                return line;
-            }
+            std::string entity_damaged_line(
+                const tkw::EntityDamagedEvent &event);
 
             /**
              * @brief  [体力] 行：实体体力变化（旧->新/上限）。
              * @param[in] event 体力变化事件。
              * @return 不含换行的整行文案。
              */
-            inline std::string entity_hp_changed_line(
-                const tkw::EntityHpChangedEvent &event)
-            {
-                return "[体力] " + event.entity_id + " " +
-                       std::to_string(event.old_cur) + "->" +
-                       std::to_string(event.new_cur) + "/" +
-                       std::to_string(event.max);
-            }
+            std::string entity_hp_changed_line(
+                const tkw::EntityHpChangedEvent &event);
 
             /**
              * @brief  [阵亡] 行：实体死亡（救场窗口关闭、无人救回）。
              * @param[in] event 阵亡事件。
              * @return 不含换行的整行文案。
              */
-            inline std::string entity_died_line(const tkw::EntityDiedEvent &event)
-            {
-                return "[阵亡] " + event.entity_id;
-            }
+            std::string entity_died_line(const tkw::EntityDiedEvent &event);
 
             /**
              * @brief 摸牌可见性谓词：默认全可见。

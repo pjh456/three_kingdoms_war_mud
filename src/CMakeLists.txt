@@ -167,11 +167,18 @@ target_include_directories(tkw_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(tkw_core INTERFACE tkw_entity tkw_config tkw_card tkw_game tkw_event tkw_io tkw_save pjh_result)
 
-add_library(tkw_cli INTERFACE)
+add_library(tkw_cli STATIC
+    cli/commands.cpp
+    cli/render.cpp
+    cli/error_zh.cpp
+    cli/help_zh.cpp
+    cli/query_lines.cpp
+    cli/log_lines.cpp
+)
 
-target_include_directories(tkw_cli INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(tkw_cli PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(tkw_cli INTERFACE tkw_core pjh_cli)
+target_link_libraries(tkw_cli PUBLIC tkw_core pjh_cli)
 
 # TUI 纯视图模型与控制器：无 FTXUI、无新外链，只读消费 cli/引擎只读接口；
 # 控制器起后台引擎线程，故向消费目标传递 Threads::Threads。

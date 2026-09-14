@@ -30,13 +30,7 @@ namespace tkw
              * @return 前缀已中文化的文本；无该前缀时原样返回。
              * @note   帮助与 REPL 无匹配提示共用。
              */
-            inline std::string zh_usage_prefix(std::string text)
-            {
-                constexpr std::string_view prefix = "Usage: ";
-                if (text.starts_with(prefix))
-                    text.replace(0, prefix.size(), "用法: ");
-                return text;
-            }
+            std::string zh_usage_prefix(std::string text);
 
             /**
              * @brief  把帮助正文中独占一行的英文段标题替换为中文。
@@ -45,14 +39,8 @@ namespace tkw
              * @param[in]     to   中文段标题。
              * @note   只替换首个匹配。
              */
-            inline void replace_heading_line(
-                std::string &text, std::string_view from, std::string_view to)
-            {
-                const std::string needle = "\n" + std::string(from) + ":\n";
-                const std::string replacement = "\n" + std::string(to) + ":\n";
-                if (std::size_t pos = text.find(needle); pos != std::string::npos)
-                    text.replace(pos, needle.size(), replacement);
-            }
+            void replace_heading_line(
+                std::string &text, std::string_view from, std::string_view to);
 
             /**
              * @brief 按命令名列表渲染「命令名（含别名）+ 描述」两列。
@@ -61,56 +49,9 @@ namespace tkw
              * @return 两列文本；无别名命令按命令名单列渲染，描述缺失留空。
              * @note 列宽按带别名后缀的名字计算，保证行对齐。
              */
-            inline std::string command_lines_zh(
+            std::string command_lines_zh(
                 const pjh::cli::BranchCommand &root,
-                const std::vector<std::string> &names)
-            {
-                std::vector<std::string> lefts;
-                std::vector<std::string> descs;
-                lefts.reserve(names.size());
-                descs.reserve(names.size());
-
-                for (const auto &n : names)
-                {
-                    std::string left = n;
-                    std::string desc;
-                    const pjh::cli::BaseCommand *sub = root.find_subcommand(n);
-                    if (sub != nullptr)
-                    {
-                        desc = sub->description();
-                        const auto &aliases = sub->aliases();
-                        if (!aliases.empty())
-                        {
-                            left += " (";
-                            for (std::size_t i = 0; i < aliases.size(); ++i)
-                            {
-                                if (i > 0)
-                                    left += ", ";
-                                left += aliases[i];
-                            }
-                            left += ")";
-                        }
-                    }
-                    lefts.push_back(std::move(left));
-                    descs.push_back(std::move(desc));
-                }
-
-                std::size_t width = 0;
-                for (const auto &l : lefts)
-                    if (l.size() > width)
-                        width = l.size();
-
-                std::string out;
-                for (std::size_t i = 0; i < names.size(); ++i)
-                {
-                    out += "  " + lefts[i];
-                    out.append(width - lefts[i].size(), ' ');
-                    out += "  ";
-                    out += descs[i];
-                    out += "\n";
-                }
-                return out;
-            }
+                const std::vector<std::string> &names);
 
             /**
              * @brief 高频 leaf 命令的单命令用法示例（根帮助「示例」段的叶子版）。
@@ -120,68 +61,7 @@ namespace tkw
              *       一次性命令给 `tkw <命令>` 形态。示例必须与当前选项面一致，
              *       增删选项或位置参数时同步复核本表。
              */
-            inline std::string leaf_help_examples(std::string_view name)
-            {
-                if (name == "new")
-                    return "示例:\n"
-                           "    tkw new --players 2 --seed 1   开一局并打印状态\n"
-                           "    new --players 2 --seed 1       REPL 内开新局\n"
-                           "    tkw new --hero P0=zhangfei --players 2 --seed 1  指定 P0 为张飞\n"
-                           "    tkw new --mode identity --players 5 --seed 1  身份局（4–8 人）\n";
-                if (name == "deal")
-                    return "示例:\n"
-                           "    tkw deal 2 1                     2 人、种子 1 跑一局\n"
-                           "    tkw --ai aggressive deal 2 1     用 aggressive AI 跑一局\n";
-                if (name == "simulate")
-                    return "示例:\n"
-                           "    tkw simulate 100 2               2 人模拟 100 局\n"
-                           "    tkw --ai aggressive simulate 100 2  用 aggressive AI 模拟\n";
-                if (name == "cards")
-                    return "示例:\n"
-                           "    tkw cards                        列出默认牌表构成\n"
-                           "    tkw cards --text                 列出并附每张卡效果文案\n"
-                           "    tkw --deck resources cards       显式指定牌表目录后再列出\n";
-                if (name == "decks")
-                    return "示例:\n"
-                           "    tkw decks                        列出默认目录下的可用牌表\n"
-                           "    tkw decks resources              指定扫描根目录\n"
-                           "    tkw --deck resources/junzheng cards  选定军争篇后列出其构成\n";
-                if (name == "heroes")
-                    return "示例:\n"
-                           "    tkw heroes                       列出默认目录下的可用武将\n"
-                           "    tkw heroes resources             指定武将数据根目录\n"
-                           "    new --hero P0=zhangfei --players 2 --seed 1  REPL 内选将开局\n"
-                           "    tkw --hero P0=machao deal 4 1    选马超：马术锁定技，计算距离 -1\n"
-                           "    tkw --hero P0=huangyueying deal 4 1  选黄月英：奇才锁定技，锦囊无距离限制\n";
-                if (name == "rules")
-                    return "示例:\n"
-                           "    tkw rules                        列出全部卡牌效果说明\n"
-                           "    tkw rules 过河拆桥               按关键词过滤卡牌说明\n";
-                if (name == "audit")
-                    return "示例:\n"
-                           "    tkw audit                        审计默认牌堆\n"
-                           "    tkw --deck resources audit       审计指定目录的牌堆\n";
-                if (name == "step")
-                    return "示例:\n"
-                           "    new --players 2 --seed 1   先在 REPL 内开一局\n"
-                           "    step                       执行一个回合（可重复）\n";
-                if (name == "run")
-                    return "示例:\n"
-                           "    new --players 2 --seed 1   先在 REPL 内开一局\n"
-                           "    run                        跑到对局结束（别名 r）\n";
-                if (name == "save")
-                    return "示例:\n"
-                           "    new --players 2 --seed 1   先在 REPL 内开一局\n"
-                           "    save s.json                保存当前对局（别名 w）\n";
-                if (name == "load")
-                    return "示例:\n"
-                           "    load s.json                      在 REPL 内载入存档续玩（别名 l）\n"
-                           "    tkw load s.json --ai aggressive  命令行载入并覆盖 AI 档\n"
-                           "    注: load 的模式与角色以存档为准，--mode 不生效\n"
-                           "    注: load 不支持 --hero，武将随存档恢复；要改选请用 "
-                           "new --hero <座位>=<武将>\n";
-                return {};
-            }
+            std::string leaf_help_examples(std::string_view name);
         }  // namespace detail
 
         /**
@@ -197,60 +77,7 @@ namespace tkw
          *       在 `tkw repl` 内逐条输入，不带 tkw 前缀。叶子示例只覆盖高频命令，见
          *       detail::leaf_help_examples。
          */
-        inline std::string render_help_zh(const pjh::cli::BaseCommand &cmd)
-        {
-            std::vector<std::string_view> parts;
-            for (const pjh::cli::BaseCommand *c = &cmd; c != nullptr; c = c->parent())
-                if (!c->name().empty())
-                    parts.push_back(c->name());
-            std::string path;
-            for (auto it = parts.rbegin(); it != parts.rend(); ++it)
-            {
-                if (!path.empty())
-                    path += ' ';
-                path += *it;
-            }
-
-            pjh::cli::HelpInfo info = pjh::cli::HelpFormatter::collect_help(cmd, path);
-            pjh::cli::HelpDocument doc = pjh::cli::HelpFormatter::build_document(info);
-
-            std::string text =
-                detail::zh_usage_prefix(pjh::cli::HelpFormatter::format_help(doc));
-            detail::replace_heading_line(text, "Options", "选项");
-            detail::replace_heading_line(text, "Inherited Options", "公共选项");
-            detail::replace_heading_line(text, "Arguments", "参数");
-            detail::replace_heading_line(text, "Subcommands", "子命令");
-
-            if (cmd.parent() == nullptr)
-                text +=
-                    "示例:\n"
-                    "  第一局（真人参与，先 tkw --human P0 repl，再逐条输入）:\n"
-                    "    new --players 2 --seed 1 开新局\n"
-                    "    step                     推进一个回合；轮到你按 play/pass/discard 提示操作\n"
-                    "    rules                    查卡牌效果说明；窗口内 card <序号> 看该候选牌\n"
-                    "  批量一次性:\n"
-                    "    tkw                      跑一局 AI 对局\n"
-                    "    tkw deal 2 1             按位置参数跑一局（2 人，种子 1）\n"
-                    "    tkw --ai aggressive deal 2 1  aggressive AI 跑一局\n"
-                    "    tkw --mode identity deal 4 1  身份局跑一局（4–8 人）\n"
-                    "    tkw audit                审计牌堆\n"
-                    "    tkw cards                列出牌表构成\n"
-                    "    tkw decks                列出可用牌表（标准版/军争篇）\n"
-                    "    tkw heroes               列出可用武将（张飞/关羽/周瑜/司马懿/马超/黄月英/赵云/甄姬）\n"
-                    "    tkw --hero P0=zhangfei deal 2 1  指定 P0 为张飞后跑一局\n"
-                    "    tkw --deck resources/junzheng deal 2 1  用军争篇牌表跑一局\n"
-                    "    tkw rules 过河拆桥      查询卡牌效果说明\n"
-                    "    tkw simulate 100 2     批量模拟 100 局（2 人）\n"
-                    "  REPL 会话（先 tkw repl，再逐条输入）:\n"
-                    "    new --players 2 --seed 1 开新局\n"
-                    "    step                     执行一个回合\n"
-                    "    status                   查看会话状态\n"
-                    "    save s.json              保存当前对局\n"
-                    "    load s.json              载入存档到会话，再 step 继续\n";
-            else
-                text += detail::leaf_help_examples(cmd.name());
-            return text;
-        }
+        std::string render_help_zh(const pjh::cli::BaseCommand &cmd);
 
         /**
          * @brief REPL `?` 查询结果的中文渲染。
@@ -260,31 +87,9 @@ namespace tkw
          * @note 只消费框架结构，不重复实现匹配逻辑；描述直接取命令树，保证与
          *       --help 子命令表同源。
          */
-        inline std::string render_query_zh(
+        std::string render_query_zh(
             const pjh::cli::BranchCommand &root,
-            const pjh::cli::QueryResult &result)
-        {
-            using pjh::cli::QueryKind;
-            switch (result.kind)
-            {
-            case QueryKind::Listing:
-                return "命令（? <关键词> 过滤，help <命令> 看用法）:\n" +
-                       detail::command_lines_zh(root, result.names);
-            case QueryKind::Matched:
-                return "匹配命令:\n" + detail::command_lines_zh(root, result.names);
-            case QueryKind::Fuzzy:
-            {
-                std::string out = "您是否要找:";
-                for (const auto &m : result.suggestions.matches)
-                    out += " " + m.name;
-                return out + "\n";
-            }
-            case QueryKind::NoMatch:
-                // 调用方统一在结果末尾补一个换行，这里不自带换行以免多出空行。
-                return "没有匹配的命令。" + detail::zh_usage_prefix(result.usage_line);
-            }
-            return {};
-        }
+            const pjh::cli::QueryResult &result);
 
         /**
          * @brief REPL `help [命令]` 的中文渲染。
@@ -292,31 +97,8 @@ namespace tkw
          * @return 根/子命令帮助走同一中文渲染；叶命令与未知命令用中文提示。
          * @note 帮助正文复用 render_help_zh，保证 REPL `help` 与批量 `--help` 同格式。
          */
-        inline std::string render_help_nav_zh(
-            const pjh::cli::HelpNavigationResult &result)
-        {
-            using pjh::cli::HelpNavigationKind;
-            switch (result.kind)
-            {
-            case HelpNavigationKind::RootHelp:
-            case HelpNavigationKind::SubcommandHelp:
-                return render_help_zh(*result.resolved);
-            case HelpNavigationKind::NonBranch:
-                return "'" + result.failed_command_name + "' 没有子命令。\n";
-            case HelpNavigationKind::UnknownCommand:
-            {
-                std::string out = "未知命令 '" + result.failed_token + "'。";
-                if (!result.suggestions.matches.empty())
-                {
-                    out += " 您是否要找:";
-                    for (const auto &m : result.suggestions.matches)
-                        out += " " + m.name;
-                }
-                return out + "\n";
-            }
-            }
-            return {};
-        }
+        std::string render_help_nav_zh(
+            const pjh::cli::HelpNavigationResult &result);
     }  // namespace cli
 }  // namespace tkw
 
