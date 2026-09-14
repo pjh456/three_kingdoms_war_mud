@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" role="img" aria-label="三国杀式卡牌对局引擎 tkw">
+  <!-- 后一张牌（灰、半透明）：表示牌堆 -->
+  <g transform="rotate(9 108 60)" opacity="0.35">
+    <rect x="72" y="16" width="72" height="88" rx="9" fill="none" stroke="#8b93a1" stroke-width="6"/>
+  </g>
+  <!-- 前一张牌（红）+ 三道金条（“三”） -->
+  <g transform="rotate(-8 94 60)">
+    <rect x="58" y="16" width="72" height="88" rx="9" fill="none" stroke="#d9403a" stroke-width="7"/>
+    <rect x="76" y="40" width="36" height="7" rx="3.5" fill="#e2a33c"/>
+    <rect x="76" y="56.5" width="36" height="7" rx="3.5" fill="#e2a33c"/>
+    <rect x="76" y="73" width="36" height="7" rx="3.5" fill="#e2a33c"/>
+  </g>
+</svg>
