@@ -109,13 +109,18 @@ target_link_libraries(tkw_game_resolve PUBLIC tkw_game_core tkw_game_query
                                              tkw_card tkw_entity tkw_event
                                              pjh_result)
 
-add_library(tkw_game_flow INTERFACE)
+add_library(tkw_game_flow STATIC
+    game/flow/table.cpp
+    game/flow/turn.cpp
+    game/flow/loop.cpp
+    game/flow/factory.cpp
+)
 
-target_include_directories(tkw_game_flow INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(tkw_game_flow PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(tkw_game_flow INTERFACE tkw_game_core tkw_game_query
-                                              tkw_game_resolve tkw_card tkw_entity
-                                              tkw_event pjh_result tkw_util)
+target_link_libraries(tkw_game_flow PUBLIC tkw_game_core tkw_game_query
+                                             tkw_game_resolve tkw_card tkw_entity
+                                             tkw_event pjh_result tkw_util)
 
 add_library(tkw_game_ai INTERFACE)
 

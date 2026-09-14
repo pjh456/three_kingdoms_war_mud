@@ -79,20 +79,7 @@ namespace tkw
              *         `rng` 可空（空 = 不洗牌，供确定性测试）。
              * @post  返回的上下文指向本对象成员，生命周期不得超过本对象。
              */
-            GameContext context()
-            {
-                GameContext ctx;
-                ctx.bus = &bus;
-                ctx.entities = &entities;
-                ctx.cards = &cards;
-                ctx.catalog = &catalog;
-                ctx.rng = rng.get();
-                ctx.rules = &rules;
-                ctx.mode = &mode;
-                ctx.roles = &roles;
-                ctx.heroes = &hero_catalog;
-                return ctx;
-            }
+            GameContext context();
 
             EventBus bus;                          /**< 本局事件总线。 */
             EntityManager entities{bus};           /**< 实体容器（绑定本局总线）。 */
