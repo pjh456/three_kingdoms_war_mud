@@ -36,13 +36,7 @@ namespace tkw
              * @param[in] initial 初始体力，同时作为上限；`cur = max = initial`。
              * @return 满血的 `Hp` 值对象。
              */
-            static Hp make(int initial)
-            {
-                Hp hp;
-                hp.m_cur = initial;
-                hp.m_max = initial;
-                return hp;
-            }
+            static Hp make(int initial);
 
             /**
              * @brief  返回当前体力。
@@ -65,18 +59,7 @@ namespace tkw
              * @retval false `val > m_max`，状态不变。
              * @post   若 `val` 与当前值不同且已注册回调，则触发一次 `on_change`。
              */
-            bool set_cur(int val)
-            {
-                if (val > m_max)
-                    return false;
-                if (val == m_cur)
-                    return true;
-                const int old = m_cur;
-                m_cur = val;
-                if (m_on_change)
-                    m_on_change(old, m_cur, m_max);
-                return true;
-            }
+            bool set_cur(int val);
 
             /**
              * @brief  变更体力上限。
@@ -87,44 +70,21 @@ namespace tkw
              * @post   若 `m_cur` 超过新上限则夹紧为上限；仅就 `m_cur` 的变化触发
              *          一次回调（上限自身变化不触发）。
              */
-            bool set_max(int val)
-            {
-                if (val < 0)
-                    return false;
-                if (val == m_max)
-                    return true;
-                m_max = val;
-                const int old_cur = m_cur;
-                if (m_cur > m_max)
-                    m_cur = m_max;
-                if (m_cur != old_cur && m_on_change)
-                    m_on_change(old_cur, m_cur, m_max);
-                return true;
-            }
+            bool set_max(int val);
 
             /**
              * @brief  增加体力（受上限钳制）。
              * @param[in] det 期望增加量。
              * @return 实际增加量（可能小于 `det` 或为 0）。
              */
-            int add(int det)
-            {
-                const int old = m_cur;
-                set_cur(std::min(m_cur + det, m_max));
-                return m_cur - old;
-            }
+            int add(int det);
 
             /**
              * @brief  减少体力（可为非正 = 濒死值状态）。
              * @param[in] det 期望减少量。
              * @return 实际减少量。
              */
-            int sub(int det)
-            {
-                const int old = m_cur;
-                set_cur(m_cur - det);
-                return old - m_cur;
-            }
+            int sub(int det);
 
             /**
              * @brief  注册体力变化回调。

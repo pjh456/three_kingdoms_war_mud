@@ -80,19 +80,7 @@ namespace tkw
             std::string id, int seat, entity::Hp hp,
             entity::Gender gender = entity::Gender::Male,
             bool chained = false,
-            std::string hero = {})
-        {
-            if (contains(id))
-                return entity::EntityResult<entity::Entity *>::Err(
-                    entity::EntityError::DuplicateId);
-            const std::size_t at = entities.size();
-            entities.push_back(
-                std::make_unique<entity::Entity>(
-                    std::move(id), seat, std::move(hp), *bus, gender, chained,
-                    std::move(hero)));
-            index.emplace(entities[at]->get_id(), at);
-            return entity::EntityResult<entity::Entity *>::Ok(entities[at].get());
-        }
+            std::string hero = {});
 
         /**
          * @brief  O(1) 按 id 查询（可写容器）。
@@ -103,13 +91,7 @@ namespace tkw
          * @note   与 const 重载按 `this` 的 cv 选择：非 const 容器得到可变实体，
          *         const 容器得到只读实体。
          */
-        Option<entity::Entity *> find(const std::string &id)
-        {
-            auto it = index.find(id);
-            if (it == index.end())
-                return Option<entity::Entity *>::None();
-            return Option<entity::Entity *>::Some(entities[it->second].get());
-        }
+        Option<entity::Entity *> find(const std::string &id);
 
         /**
          * @brief  O(1) 按 id 查询（只读容器）。
@@ -118,23 +100,14 @@ namespace tkw
          * @retval Some 指向只读实体的指针；未 `remove` 前有效。
          * @retval None 不存在该 id。
          */
-        Option<const entity::Entity *> find(const std::string &id) const
-        {
-            auto it = index.find(id);
-            if (it == index.end())
-                return Option<const entity::Entity *>::None();
-            return Option<const entity::Entity *>::Some(entities[it->second].get());
-        }
+        Option<const entity::Entity *> find(const std::string &id) const;
 
         /**
          * @brief  判断是否存在指定 id 的实体。
          * @param[in] id 目标实体 id。
          * @return `true` 表示存在；本查询为 O(1)。
          */
-        bool contains(const std::string &id) const
-        {
-            return index.find(id) != index.end();
-        }
+        bool contains(const std::string &id) const;
 
         /**
          * @brief  按 id 移除（不存在时幂等无操作）。
@@ -143,14 +116,7 @@ namespace tkw
          *         （堆对象不移动），索引重建。
          * @note   应在事件分发之外的安静时刻调用，避免迭代中改动容器。
          */
-        void remove(const std::string &id)
-        {
-            auto it = index.find(id);
-            if (it == index.end())
-                return;
-            entities.erase(entities.begin() + std::ptrdiff_t(it->second));
-            rebuild_index();
-        }
+        void remove(const std::string &id);
 
         /**
          * @brief  返回当前实体数量。
@@ -168,17 +134,7 @@ namespace tkw
          * @brief  按创建序导出快照。
          * @return 快照列表，含体力/上限、性别、连环状态与武将 id；顺序 = 创建序。
          */
-        std::vector<EntitySnapshot> snapshot() const
-        {
-            std::vector<EntitySnapshot> out;
-            out.reserve(entities.size());
-            for (const auto &e : entities)
-                out.push_back(EntitySnapshot{
-                    e->get_id(), e->get_seat(), e->get_hp(),
-                    e->get_hp_bar().get_max(), e->get_gender(), e->get_chained(),
-                    e->get_hero()});
-            return out;
-        }
+        std::vector<EntitySnapshot> snapshot() const;
 
         /**
          * @brief  清空后按快照顺序重建。
@@ -186,27 +142,13 @@ namespace tkw
          * @post   原实体与索引全部丢弃，实体按 `in` 顺序重建并绑定当前总线；
          *         `in` 中重复 id 会被 `create` 拒绝而跳过。
          */
-        void restore(const std::vector<EntitySnapshot> &in)
-        {
-            clear();
-            for (const auto &s : in)
-            {
-                entity::Hp hp = entity::Hp::make(s.max_hp);
-                hp.set_cur(s.hp);
-                (void)create(s.id, s.seat, std::move(hp), s.gender, s.chained,
-                             s.hero);
-            }
-        }
+        void restore(const std::vector<EntitySnapshot> &in);
 
         /**
          * @brief  清空全部实体与索引。
          * @post   所有 `Entity*` 失效。
          */
-        void clear()
-        {
-            entities.clear();
-            index.clear();
-        }
+        void clear();
 
         /**
          * @brief  按座位序返回全部实体 id。
@@ -214,21 +156,7 @@ namespace tkw
          * @note   座位是回合序与距离的唯一事实源：创建顺序与座位号不一致时，
          *         回合序仍以座位为准。
          */
-        std::vector<std::string> ordered_ids() const
-        {
-            std::vector<std::pair<int, std::string>> tmp;
-            tmp.reserve(entities.size());
-            for (const auto &e : entities)
-                tmp.emplace_back(e->get_seat(), e->get_id());
-            std::stable_sort(
-                tmp.begin(), tmp.end(),
-                [](const auto &a, const auto &b) { return a.first < b.first; });
-            std::vector<std::string> ids;
-            ids.reserve(tmp.size());
-            for (auto &p : tmp)
-                ids.push_back(std::move(p.second));
-            return ids;
-        }
+        std::vector<std::string> ordered_ids() const;
 
         /**
          * @brief  座位序下家（环绕）。
@@ -238,17 +166,7 @@ namespace tkw
          * @retval 首个 id    `id` 在末位（环绕）或不在集合内。
          * @note   集合为空时原样返回 `id`。
          */
-        std::string next(const std::string &id) const
-        {
-            const auto ids = ordered_ids();
-            if (ids.empty())
-                return id;
-            auto it = std::find(ids.begin(), ids.end(), id);
-            if (it == ids.end())
-                return ids.front();
-            ++it;
-            return it == ids.end() ? ids.front() : *it;
-        }
+        std::string next(const std::string &id) const;
 
         /**
          * @brief  从 `start` 起按座位序环绕的 id 列表。
@@ -256,14 +174,7 @@ namespace tkw
          * @return 以 `start` 开头、按座位序环绕的 id 列表。
          * @retval 原序列表  `start` 不在集合内。
          */
-        std::vector<std::string> order_from(const std::string &start) const
-        {
-            auto ids = ordered_ids();
-            const auto it = std::find(ids.begin(), ids.end(), start);
-            if (it != ids.end())
-                std::rotate(ids.begin(), it, ids.end());
-            return ids;
-        }
+        std::vector<std::string> order_from(const std::string &start) const;
 
         /**
          * @brief  按创建序导出只读实体视图（副本）。
@@ -271,14 +182,7 @@ namespace tkw
          * @note   直接迭代 `unique_ptr` 容器经 `operator->` 仍会泄漏可变
          *         `Entity*`；只读路径用本视图取 `const` 实体。
          */
-        std::vector<const entity::Entity *> const_view() const
-        {
-            std::vector<const entity::Entity *> out;
-            out.reserve(entities.size());
-            for (const auto &e : entities)
-                out.push_back(e.get());
-            return out;
-        }
+        std::vector<const entity::Entity *> const_view() const;
 
         /**
          * @brief  按创建序迭代（仅供写层使用）。
@@ -300,12 +204,7 @@ namespace tkw
         std::vector<std::unique_ptr<entity::Entity>> entities;
         std::unordered_map<std::string, std::size_t> index;
 
-        void rebuild_index()
-        {
-            index.clear();
-            for (std::size_t i = 0; i < entities.size(); ++i)
-                index.emplace(entities[i]->get_id(), i);
-        }
+        void rebuild_index();
     };
 }
 

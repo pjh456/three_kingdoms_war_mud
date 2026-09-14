@@ -27,11 +27,15 @@ target_include_directories(tkw_config PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(tkw_config PUBLIC tkw_io pjh_json)
 
-add_library(tkw_entity INTERFACE)
+add_library(tkw_entity STATIC
+    entity/base.cpp
+    entity/hp.cpp
+    entity/manager.cpp
+)
 
-target_include_directories(tkw_entity INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(tkw_entity PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(tkw_entity INTERFACE tkw_event tkw_card pjh_result)
+target_link_libraries(tkw_entity PUBLIC tkw_event tkw_card pjh_result)
 
 # 事件支撑域：`Event` 虚表锚点与类型标签定义在 event.cpp；总线的模板实体保持头内。
 # 无第三方依赖，故无 target_link_libraries。
