@@ -170,10 +170,17 @@ namespace tkw
                 // 方天多目标共享同一次消费（每个目标都 +1）
                 const int jiu = consume_jiu_sha_bonus(e.ctx, e.player);
                 for (const auto &t : e.targets)
-                    resolve_sha(
-                        e.ctx, e.ai, e.player, e.played, t, e.eff.amount,
-                        static_cast<int>(e.targets.size()), false,
-                        e.eff.damage_type, jiu);
+                    ShaResolver(e.ctx, e.ai)
+                        .resolve_sha(
+                            ShaRequest::Builder{}
+                                .attacker(e.player)
+                                .sha(e.played)
+                                .target(t)
+                                .damage_val(e.eff.amount)
+                                .target_count(static_cast<int>(e.targets.size()))
+                                .damage_type(e.eff.damage_type)
+                                .damage_bonus(jiu)
+                                .build());
                 return GameResult<void>::Ok();
             }
 
@@ -766,9 +773,18 @@ namespace tkw
             // 逐目标虚拟杀结算（无实体牌：花色仅仁王盾黑杀判定消费，已短路）
             const card::Card virtual_sha;
             for (const auto &t : targets)
-                resolve_sha(ctx, ai, player, virtual_sha, t, eff.amount,
-                            static_cast<int>(targets.size()), true,
-                            card::DamageType::Normal, damage_bonus);
+                ShaResolver(ctx, ai)
+                    .resolve_sha(
+                        ShaRequest::Builder{}
+                            .attacker(player)
+                            .sha(virtual_sha)
+                            .target(t)
+                            .damage_val(eff.amount)
+                            .target_count(static_cast<int>(targets.size()))
+                            .virtual_sha(true)
+                            .damage_type(card::DamageType::Normal)
+                            .damage_bonus(damage_bonus)
+                            .build());
             return GameResult<void>::Ok();
         }
 
@@ -913,7 +929,14 @@ namespace tkw
                     dtype = def.unwrap()->effect.unwrap().damage_type;
                 }
                 emit_card_played(ctx, entity, card);
-                resolve_sha(ctx, ai, entity, card, victim, dmg, 1, false, dtype);
+                ShaResolver(ctx, ai).resolve_sha(
+                    ShaRequest::Builder{}
+                        .attacker(entity)
+                        .sha(card)
+                        .target(victim)
+                        .damage_val(dmg)
+                        .damage_type(dtype)
+                        .build());
             }
             else
                 emit_card_discarded(ctx, entity, card, DiscardKind::Response);

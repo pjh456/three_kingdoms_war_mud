@@ -66,12 +66,166 @@ namespace tkw
             bool virtual_sha = false; /**< 虚拟杀（丈八两张当杀）：无花色，黑杀判定不适用 */
         };
 
-        inline void resolve_sha(
-            GameContext &ctx, DecisionSource &ai, const std::string &attacker,
-            const card::Card &sha, const std::string &target, int amount,
-            int target_count = 1, bool virtual_sha = false,
-            card::DamageType damage_type = card::DamageType::Normal,
-            int damage_bonus = 0);
+        /**
+         * @brief 一次「杀」结算的只读输入。
+         * @details 把攻击方、杀牌面、目标与各结算参数归为一个值，调用方按名给出
+         *          字段；需要分步组装时用 `Builder`。
+         * @note `virtual_sha` 为真时无花色（仁王盾黑杀判定短路），`sha` 传占位牌；
+         *       `target_count` 为该杀指定的目标总数（雌雄双股剑仅唯一目标触发）。
+         */
+        struct ShaRequest
+        {
+            std::string attacker; /**< 攻击方实体 id。 */
+            card::Card sha;       /**< 该杀牌面；虚拟杀传占位牌。 */
+            std::string target;   /**< 目标实体 id。 */
+            int damage_val = 1;   /**< 伤害量基数。 */
+            int target_count = 1; /**< 该杀指定的目标总数。 */
+            bool virtual_sha = false; /**< 是否虚拟杀（无花色）。 */
+            card::DamageType damage_type = card::DamageType::Normal; /**< 伤害属性。 */
+            int damage_bonus = 0; /**< 命中伤害修正初值（酒等）。 */
+
+            class Builder; /**< 链式构造器；定义见下。 */
+        };
+
+        /**
+         * @brief `ShaRequest` 的链式构造器（可选字段按需设置）。
+         * @details 每个设置方法名与所设字段同名：调用什么就是设置什么。
+         */
+        class ShaRequest::Builder
+        {
+        public:
+            /**
+             * @brief  设置攻击方。
+             * @param[in] attacker 攻击方实体 id。
+             * @return 本构造器，供链式调用。
+             */
+            Builder &attacker(std::string attacker)
+            {
+                m_request.attacker = std::move(attacker);
+                return *this;
+            }
+
+            /**
+             * @brief  设置杀牌面。
+             * @param[in] sha 该杀卡牌对象；虚拟杀传占位牌。
+             * @return 本构造器，供链式调用。
+             */
+            Builder &sha(card::Card sha)
+            {
+                m_request.sha = std::move(sha);
+                return *this;
+            }
+
+            /**
+             * @brief  设置目标。
+             * @param[in] target 目标实体 id。
+             * @return 本构造器，供链式调用。
+             */
+            Builder &target(std::string target)
+            {
+                m_request.target = std::move(target);
+                return *this;
+            }
+
+            /**
+             * @brief  设置伤害量基数。
+             * @param[in] damage_val 伤害量基数。
+             * @return 本构造器，供链式调用。
+             */
+            Builder &damage_val(int damage_val)
+            {
+                m_request.damage_val = damage_val;
+                return *this;
+            }
+
+            /**
+             * @brief  设置该杀指定的目标总数。
+             * @param[in] target_count 目标总数。
+             * @return 本构造器，供链式调用。
+             */
+            Builder &target_count(int target_count)
+            {
+                m_request.target_count = target_count;
+                return *this;
+            }
+
+            /**
+             * @brief  设置是否为虚拟杀。
+             * @param[in] value 为 `true` 时无花色（仁王盾黑杀判定短路）。
+             * @return 本构造器，供链式调用。
+             */
+            Builder &virtual_sha(bool value)
+            {
+                m_request.virtual_sha = value;
+                return *this;
+            }
+
+            /**
+             * @brief  设置伤害属性。
+             * @param[in] damage_type 伤害属性。
+             * @return 本构造器，供链式调用。
+             */
+            Builder &damage_type(card::DamageType damage_type)
+            {
+                m_request.damage_type = damage_type;
+                return *this;
+            }
+
+            /**
+             * @brief  设置命中伤害修正初值。
+             * @param[in] damage_bonus 修正初值（酒等）。
+             * @return 本构造器，供链式调用。
+             */
+            Builder &damage_bonus(int damage_bonus)
+            {
+                m_request.damage_bonus = damage_bonus;
+                return *this;
+            }
+
+            /**
+             * @brief  产出组装好的杀请求。
+             * @return 组装完成的值。
+             */
+            ShaRequest build() const { return m_request; }
+
+        private:
+            ShaRequest m_request; /**< 组装中的值。 */
+        };
+
+        /**
+         * @brief 「杀」结算操作类：以对局上下文与决策源为依赖。
+         * @details 把「指定目标 → 防具 → 响应 → 被闪后 → 命中前 → 伤害 → 命中后」
+         *          整条管线收敛为成员函数。
+         * @warning 本类**不拥有** `ctx`/`ai`：二者须比本对象存活更久，不得跨局复用。
+         * @see   ShaRequest
+         */
+        class ShaResolver
+        {
+        public:
+            /**
+             * @brief  绑定对局上下文与决策源。
+             * @param[in,out] ctx 对局上下文；本对象只持引用。
+             * @param[in,out] ai  决策源。
+             */
+            ShaResolver(GameContext &ctx, DecisionSource &ai)
+                : m_ctx(ctx), m_ai(ai)
+            {
+            }
+
+            /**
+             * @brief  结算一次「杀」。
+             * @param[in] request 本次杀的只读输入。
+             * @post   命中时目标已扣血，并可能触发濒死/死亡/击杀奖惩与命中后钩子；
+             *         被闪/防具无效/伤害替代时不扣血，响应牌与判定牌按规则消费。
+             * @note   执行顺序固定：朱雀羽扇转化 → OnTarget → Armor → Respond →
+             *         PostJink → PreDamage → 伤害 → OnHit。
+             */
+            void resolve_sha(const ShaRequest &request);
+
+        private:
+            GameContext &m_ctx;   /**< 对局上下文（引用，非拥有）。 */
+            DecisionSource &m_ai; /**< 决策源（引用，非拥有）。 */
+        };
 
         // ── 装备效果（钩子实现）────────────────────────────────────────
 
@@ -322,9 +476,14 @@ namespace tkw
                 // 打出的牌只发打出事件；进弃牌堆是打出的必然后果，不另发弃置事件
                 emit_card_played(sc.ctx, sc.attacker, extra_card);
             }
-            resolve_sha(
-                sc.ctx, sc.ai, sc.attacker, extra.unwrap(), sc.target, sc.amount, 1,
-                false, sc.damage_type);
+            ShaResolver(sc.ctx, sc.ai).resolve_sha(
+                ShaRequest::Builder{}
+                    .attacker(sc.attacker)
+                    .sha(extra.unwrap())
+                    .target(sc.target)
+                    .damage_val(sc.amount)
+                    .damage_type(sc.damage_type)
+                    .build());
         }
 
         /**
@@ -529,45 +688,24 @@ namespace tkw
                 ctx, ai, target, card::ResponseKind::Jink, prompt);
         }
 
-        /**
-         * @brief 「杀」结算主流程：attacker 对 target 使用杀。
-         * @param[in] ctx          对局上下文。
-         * @param[in] ai           决策源；防具/响应/钩子触发询问。
-         * @param[in] attacker     攻击方实体 id。
-         * @param[in] sha          该杀的卡牌对象（花色用于仁王盾黑杀判定）。
-         * @param[in] target       目标实体 id。
-         * @param[in] amount       伤害量（config 驱动，当前数据均为 1）。
-         * @param[in] target_count 该杀指定的目标总数（缺省 1；多目标杀逐目标
-         *                         结算时由调用方传入，供仅唯一目标触发的能力判定）。
-         * @param[in] virtual_sha  是否虚拟杀（丈八两张当杀）：真无花色，仁王盾
-         *                         黑杀判定短路；此时 sha 参数可为占位对象。
-         * @param[in] damage_type  伤害属性（默认普通；火杀/雷杀由 effect 透传）。
-         * @param[in] damage_bonus 命中伤害修正初值（酒等调用方传入；目标侧藤甲钩子
-         *                         在其上继续累加）。
-         * @post 命中时目标已扣血，并可能已触发濒死/死亡/击杀奖惩与命中后钩子；
-         *       被闪/防具无效/伤害替代时不扣血，响应牌与判定牌已按规则消费。
-         * @note 执行顺序固定：朱雀羽扇转化 → OnTarget → Armor → Respond →
-         *       PostJink → PreDamage → 伤害 → OnHit。
-         */
-        inline void resolve_sha(
-            GameContext &ctx, DecisionSource &ai, const std::string &attacker,
-            const card::Card &sha, const std::string &target, int amount,
-            int target_count, bool virtual_sha, card::DamageType damage_type,
-            int damage_bonus)
+        inline void ShaResolver::resolve_sha(const ShaRequest &request)
         {
-            ShaContext sc{ctx, ai, sha, attacker, target, amount};
-            sc.ignore_armor = has_ability(ctx, attacker, card::Ability::IgnoreArmor);
-            sc.target_count = target_count;
-            sc.virtual_sha = virtual_sha;
-            sc.damage_type = damage_type;
+            ShaContext sc{m_ctx, m_ai, request.sha, request.attacker,
+                          request.target, request.damage_val};
+            sc.ignore_armor =
+                has_ability(m_ctx, request.attacker, card::Ability::IgnoreArmor);
+            sc.target_count = request.target_count;
+            sc.virtual_sha = request.virtual_sha;
+            sc.damage_type = request.damage_type;
             // 加成初值先落位，钩子（藤甲火焰脆弱等）在 Armor 阶段累加
-            sc.damage_bonus = damage_bonus;
+            sc.damage_bonus = request.damage_bonus;
 
             // 朱雀羽扇：普通杀使用时可转为火焰伤害。非锁定技、可放弃、无每回合
             // 限制；火杀/雷杀属性非普通，不询问（只能转化普通杀）
             if (sc.damage_type == card::DamageType::Normal &&
-                has_ability(ctx, attacker, card::Ability::FireShaConvert) &&
-                ai.trigger_effect(ctx, attacker, card::Ability::FireShaConvert))
+                has_ability(m_ctx, request.attacker, card::Ability::FireShaConvert) &&
+                m_ai.trigger_effect(m_ctx, request.attacker,
+                                    card::Ability::FireShaConvert))
                 sc.damage_type = card::DamageType::Fire;
 
             run_sha_phase(sc, ShaPhase::OnTarget);
@@ -579,7 +717,7 @@ namespace tkw
             run_sha_phase(sc, ShaPhase::Respond);
             if (!sc.responded)
                 sc.responded = request_response(
-                    ctx, ai, target, card::ResponseKind::Jink,
+                    m_ctx, m_ai, request.target, card::ResponseKind::Jink,
                     {sc.sha.def_id, sc.attacker, sc.amount});
 
             if (sc.responded)
@@ -590,13 +728,14 @@ namespace tkw
                 run_sha_phase(sc, ShaPhase::PreDamage);
                 if (sc.prevented)
                     return;
-                CombatResolver(ctx, ai).deal_damage(
-                    target, DamageSpec::Builder{}
-                                .source(attacker)
-                                .damage_val(amount + sc.damage_bonus)
-                                .damage_type(sc.damage_type)
-                                .ignore_armor(sc.ignore_armor)
-                                .build());
+                CombatResolver(m_ctx, m_ai).deal_damage(
+                    request.target,
+                    DamageSpec::Builder{}
+                        .source(request.attacker)
+                        .damage_val(request.damage_val + sc.damage_bonus)
+                        .damage_type(sc.damage_type)
+                        .ignore_armor(sc.ignore_armor)
+                        .build());
                 run_sha_phase(sc, ShaPhase::OnHit);
             }
         }
