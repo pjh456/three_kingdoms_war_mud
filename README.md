@@ -1,8 +1,9 @@
 # 三国杀式卡牌对局引擎（tkw）
 
-三国杀式卡牌对局引擎：C++20 header-only 引擎 + `tkw` 命令行/REPL，牌表数据驱动
-（`resources/` 下的 JSON）。AI 与真人混坐对局：判定 → 摸牌 → 出牌（杀/锦囊/装备）→
-弃牌，结算伤害、濒死救场与阵亡，可一键跑完整局，也可进 REPL 逐回合参与。
+三国杀式卡牌对局引擎：C++20 引擎（`.hpp` 声明 + `.cpp` 定义，每模块一个静态库）+
+`tkw` 命令行/REPL，牌表数据驱动（`resources/` 下的 JSON）。AI 与真人混坐对局：判定
+→ 摸牌 → 出牌（杀/锦囊/装备）→ 弃牌，结算伤害、濒死救场与阵亡，可一键跑完整局，
+也可进 REPL 逐回合参与。
 
 ## 构建与测试
 
@@ -25,6 +26,29 @@ ctest --test-dir build        # 运行全部测试
 - `build/` 是构建产物，不入库。
 - 下文示例中 `tkw` 均指 `./build/src/tkw`，且在仓库根目录执行（默认牌表路径
   `resources/` 相对当前工作目录）。
+
+## 接口文档（Doxygen）
+
+API 文档由 Doxygen 从 `src/**/*.hpp` 生成，配置在 `docs/doxygen/`。依赖：
+
+- `doxygen`（必需）；
+- `graphviz`（必需，`HAVE_DOT=YES` 用于生成继承/协作类图）。
+
+Arch Linux 安装：
+
+```sh
+sudo pacman -S doxygen graphviz
+```
+
+在仓库根目录生成 HTML（`Doxyfile` 的相对路径按当前工作目录解析，必须从根目录执行）：
+
+```sh
+doxygen docs/doxygen/Doxyfile   # 产物 build/docs/html/index.html
+```
+
+配置启用了 `WARN_AS_ERROR=YES`：任何文档警告都会让命令失败，零警告才算通过。
+推送 `main` 后由 `.github/workflows/docs.yml` 自动重建并发布到 GitHub Pages：
+<https://pjh456.github.io/three_kingdoms_war_mud/>
 
 ## 快速开始
 
@@ -339,8 +363,8 @@ tkw --hero P0=zhangfei repl         # 或进 REPL：new --hero P0=zhangfei --pla
 ```
 three_kingdoms_war_mud/
 ├── CMakeLists.txt          # 顶层：C++20、TKW_ENABLE_TESTS / TKW_ENABLE_TUI 开关
-├── src/                    # 引擎（header-only，INTERFACE 库）
-│   ├── main.cpp            #   CLI 入口（src 下唯一 .cpp）
+├── src/                    # 引擎：每模块一个 tkw_* 静态库（.hpp 声明 + .cpp 定义）
+│   ├── main.cpp            #   CLI 入口（链接各 tkw_* 静态库）
 │   ├── cli/  io/  config/  #   命令树 / 文件读写 / 资源加载
 │   ├── card/  entity/  event/  # 卡牌域 / 实体域 / 事件总线
 │   ├── game/               #   对局五层 core/query/resolve/flow/ai（严格单向依赖）
