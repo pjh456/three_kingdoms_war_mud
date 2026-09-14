@@ -287,6 +287,9 @@ TEST_CASE("tui render: single panels keep board fields and viewer hand")
 
     const std::string hand = render_one(tkw::tui::detail::render_hand(snap));
     CHECK(hand.find("1. 杀") != std::string::npos);
+    // 花色符号在部分字体占两格，点数前留空格避免与符号粘连。
+    CHECK(hand.find("♠ 7") != std::string::npos);
+    CHECK(hand.find("♠7") == std::string::npos);
 }
 
 TEST_CASE("tui render: board marks chained seats")

@@ -182,7 +182,7 @@ namespace tkw
                     const auto &card = viewer->hand.cards[i];
                     std::string line = std::to_string(i + 1) + ". " +
                                        card.display_name + "  " +
-                                       suit_glyph(card.suit) +
+                                       suit_glyph(card.suit) + " " +
                                        std::to_string(card.number);
                     rows.push_back(ftxui::text(line));
                 }
