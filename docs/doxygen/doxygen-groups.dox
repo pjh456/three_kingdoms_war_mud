@@ -1,8 +1,10 @@
 /**
  * @defgroup tkw_root tkw 对局引擎
- * @brief 三国杀式卡牌对局引擎：header-only C++20 引擎 + CLI/TUI 前端。
+ * @brief 三国杀式卡牌对局引擎：C++20（每模块 `tkw_*` `STATIC` 库）+ CLI/TUI 前端。
  *
- * 模块按依赖方向组织，稳定阅读顺序从 util 起，经支撑域到 game 四层，最后前端。
+ * 引擎按模块构建为 `tkw_*` `STATIC` 库（由 `.hpp` 声明 + `.cpp` 定义），
+ * `tkw_game`/`tkw_core` 为 `INTERFACE` 聚合层；模块按依赖方向组织，
+ * 稳定阅读顺序从 util 起，经支撑域到 game 四层，最后前端。
  */
 
 /**

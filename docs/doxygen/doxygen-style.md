@@ -8,7 +8,7 @@
 
 - **只改注释。** 不得改动任何代码 token：标识符、类型、参数、默认值、`#include`、
   字符串字面量、预处理指令、`constexpr` 数值、`enum` 顺序一律不动。
-- **不得新增/删除文件**，不得新增 `.cpp`（引擎是 header-only）。
+- **不得新增/删除文件**，不得新增 `.cpp`（各模块是 `.hpp` + `.cpp` 的 `tkw_*` 静态库）。
 - **不得运行 `cmake`/编译/`ctest`/`git commit`**。收尾由编排者单点构建。
 - **不得改 `CMakeLists.txt`、`docs/doxygen/Doxyfile`、`docs/doxygen/`**。
 - 注释语言：**中文**（与仓库现有文风一致）；标识符、Doxygen 标签名保持英文。
