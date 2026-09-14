@@ -22,9 +22,14 @@
 - 可以一键跑完整局，也可以进 REPL 逐回合自己操作。
 - 还有一个可选的全屏终端界面（TUI）。
 
-## 怎么装、怎么跑
+## 要求
 
-需要：支持 C++20 的编译器、CMake ≥ 3.21、Ninja、Git。
+- 支持 C++20 的编译器
+- CMake ≥ 3.21
+- Ninja
+- Git
+
+## 构建
 
 第三方库是 git 子模块，而且是两层结构，必须递归拉取：
 
@@ -47,7 +52,7 @@ ctest --test-dir build --output-on-failure   # 跑测试，可选
 - 只在仓库根目录运行。默认牌表 `resources/` 相对当前目录解析。
 - 资源与存档的相对路径都相对启动时的工作目录。
 
-## 怎么玩
+## 玩法
 
 ### AI 局
 
@@ -102,7 +107,7 @@ REPL 里的常用命令：
 
 事件日志：真人局默认开启，全 AI 局默认关闭。`--verbose` / `--no-verbose` 可覆盖。回合开头会打印 `—— 回合 N：<玩家> ——`。真人局里对手的摸牌只显示「未知牌」。
 
-## 可选：全屏终端界面（TUI）
+## 终端界面（TUI）
 
 TUI 默认关闭。想用就单独构建：
 
@@ -140,7 +145,7 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 
 其他：TUI 事件日志恒开，没有 `--verbose` / `--no-verbose`。退出时若有进行中的会话会自动存档，退出信息写到 stderr。Windows/MSVC 下的 TUI 未经验证（Windows + MinGW 实测能构建并启动）。
 
-## 命令速查表
+## 命令
 
 | 命令 | 别名 | 说明 |
 |---|---|---|
@@ -160,7 +165,7 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 | `load <file>` | `l` | 加载存档 |
 | `repl` | — | 进入交互模式（`?` 查看命令，`quit` 退出） |
 
-## 公共选项
+## 选项
 
 | 选项 | 说明 |
 |---|---|
@@ -188,7 +193,7 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 - `--human` 只在真正跑对局的命令生效；`audit`、`cards`、`decks`、`heroes`、`rules`、`simulate` 会明确拒绝。
 - 别名：`run` / `r`、`status` / `st`、`save` / `w`、`load` / `l`。
 
-## 规则速查
+## 规则
 
 | 项 | 值 |
 |---|---|
@@ -215,7 +220,7 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 
 界面里的「回合数」是按每个角色执行一次回合计数，不是全体各动一次才加 1。
 
-## 内置牌表
+## 牌表
 
 仓库自带两副牌表：
 
@@ -255,7 +260,7 @@ tkw --hero P0=zhangfei deal 2 1   # P0 用张飞
 - 若武将含引擎尚未实现的技能，建局时会打印中文警告，不会静默当成无技能。
 - 没有 `heroes.json` 的自定义牌表照常可玩，武将回落无名座位。
 
-## 存档说明
+## 存档
 
 - `save <file>`（别名 `w`）/ `load <file>`（别名 `l`）手动存读。
 - 存档是 JSON。写入是原子替换（先写临时文件再改名）。读取时全部校验通过才落子。
