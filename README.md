@@ -298,4 +298,3 @@ tkw --deck resources/junzheng repl   # 再 load save.json
 - 界面里不显示角色的性别。雌雄双股剑按双方性别判定，但你看不到对方性别。
 - 不指定 `--hero` 时座位是无名角色；此时性别按座位奇偶占位（P0 男、P1 女…），并非真实设定。
 - 军争篇牌表没有武将数据，切过去就没有武将可用。
-- TUI 在 Windows/MSVC 下未经验证。
