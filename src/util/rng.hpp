@@ -9,6 +9,7 @@
 #define INCLUDE_TKW_UTIL_RNG_HPP
 
 #include <cstdint>
+#include <ios>
 #include <random>
 #include <sstream>
 #include <string>
@@ -61,7 +62,16 @@ namespace tkw
         {
             std::istringstream is(state.data);
             std::mt19937 restored;
-            is >> restored;
+            // 非法文本在部分标准库（MSVC）抛 failure 而非只置 failbit；
+            // 两种情形都按「data 非法」处理，失败时引擎保持原状。
+            try
+            {
+                is >> restored;
+            }
+            catch (const std::ios_base::failure &)
+            {
+                return false;
+            }
             if (is.fail())
                 return false;
             engine_ = restored;
