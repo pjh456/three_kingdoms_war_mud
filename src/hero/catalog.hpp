@@ -194,38 +194,38 @@ namespace tkw
              * @brief  O(1) 按武将 id 查询（经内部索引）。
              * @param[in] id 武将 id。
              * @return 定义指针；`None` = 未收录。
-             * @retval Some 指针指向内部 `defs`，生命周期同本目录。
+             * @retval Some 指针指向内部 `m_defs`，生命周期同本目录。
              * @retval None 目录中无此 id。
              */
             Option<const HeroDef *> find(const std::string &id) const;
 
             /**
              * @brief  收录的定义数。
-             * @return `defs` 中的定义条数。
+             * @return `m_defs` 中的定义条数。
              */
-            std::size_t size() const noexcept { return defs.size(); }
+            std::size_t size() const noexcept { return m_defs.size(); }
 
             /**
              * @brief  是否为空。
              * @return `true` = 目录未收录任何武将。
              */
-            bool empty() const noexcept { return defs.empty(); }
+            bool empty() const noexcept { return m_defs.empty(); }
 
             /**
              * @brief  按 `heroes.json` 引用顺序迭代。
              * @return 指向首元素的迭代器。
              */
-            auto begin() const noexcept { return defs.begin(); }
+            auto begin() const noexcept { return m_defs.begin(); }
 
             /**
              * @brief  迭代尾标。
              * @return 尾后迭代器。
              */
-            auto end() const noexcept { return defs.end(); }
+            auto end() const noexcept { return m_defs.end(); }
 
         private:
-            std::vector<HeroDef> defs; /**< heroes.json 引用顺序 */
-            std::unordered_map<std::string, std::size_t> index; /**< id → defs 下标 */
+            std::vector<HeroDef> m_defs; /**< heroes.json 引用顺序 */
+            std::unordered_map<std::string, std::size_t> m_index; /**< id → m_defs 下标 */
         };
 
         /**

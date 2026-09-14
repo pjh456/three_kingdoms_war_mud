@@ -146,14 +146,14 @@ namespace tkw
         }  // namespace detail
 
         HeroCatalog::HeroCatalog(HeroCatalog &&other) noexcept
-            : defs(std::move(other.defs)), index(std::move(other.index))
+            : m_defs(std::move(other.m_defs)), m_index(std::move(other.m_index))
         {
         }
 
         HeroCatalog &HeroCatalog::operator=(HeroCatalog &&other) noexcept
         {
-            defs = std::move(other.defs);
-            index = std::move(other.index);
+            m_defs = std::move(other.m_defs);
+            m_index = std::move(other.m_index);
             return *this;
         }
 
@@ -177,7 +177,7 @@ namespace tkw
                         cfg::ConfigErrorKind::TypeMismatch, std::string(ip));
                 const std::string hid(*id_s);
 
-                if (catalog.index.find(hid) != catalog.index.end())
+                if (catalog.m_index.find(hid) != catalog.m_index.end())
                     return cfg::fail<void>(
                         cfg::ConfigErrorKind::InvalidValue,
                         std::string(ip) + " 重复引用武将 " + hid);
@@ -195,8 +195,8 @@ namespace tkw
                     return cfg::fail<void>(
                         cfg::ConfigErrorKind::InvalidValue, file + ".id");
 
-                catalog.index.emplace(hid, catalog.defs.size());
-                catalog.defs.push_back(std::move(def).unwrap());
+                catalog.m_index.emplace(hid, catalog.m_defs.size());
+                catalog.m_defs.push_back(std::move(def).unwrap());
                 return cfg::ConfigResult<void>::Ok();
             });
             if (er.is_err())
@@ -215,10 +215,10 @@ namespace tkw
 
         Option<const HeroDef *> HeroCatalog::find(const std::string &id) const
         {
-            auto it = index.find(id);
-            if (it == index.end())
+            auto it = m_index.find(id);
+            if (it == m_index.end())
                 return Option<const HeroDef *>::None();
-            return Option<const HeroDef *>::Some(&defs[it->second]);
+            return Option<const HeroDef *>::Some(&m_defs[it->second]);
         }
 
         std::string display_hero_name(
