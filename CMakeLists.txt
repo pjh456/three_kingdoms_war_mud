@@ -18,6 +18,18 @@ endif()
 option(TKW_ENABLE_TESTS "Compile three_kingdoms_war tests" ON)
 option(TKW_ENABLE_TUI "构建基于 FTXUI 的可选终端界面 tkw-tui" OFF)
 
+# 可选 ccache 编译缓存：默认 OFF 时零行为变化；CI 已在 configure 步以环境变量
+# CMAKE_CXX_COMPILER_LAUNCHER 注入 ccache，与本开关互不冲突。
+option(TKW_USE_CCACHE "使用 ccache 缓存编译结果" OFF)
+if(TKW_USE_CCACHE)
+    find_program(TKW_CCACHE_PROGRAM ccache)
+    if(NOT TKW_CCACHE_PROGRAM)
+        message(FATAL_ERROR "TKW_USE_CCACHE=ON 但未找到 ccache，请先安装并加入 PATH")
+    endif()
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${TKW_CCACHE_PROGRAM}")
+    set(CMAKE_C_COMPILER_LAUNCHER "${TKW_CCACHE_PROGRAM}")
+endif()
+
 add_subdirectory(thirdparty/pjh_result)
 add_subdirectory(thirdparty/pjh_json)
 add_subdirectory(thirdparty/pjh_platform)
