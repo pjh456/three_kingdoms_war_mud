@@ -20,7 +20,6 @@
 
 #include "event/event.hpp"
 #include "event/handler.hpp"
-#include "util/macro.hpp"
 
 namespace tkw
 {
@@ -142,10 +141,6 @@ namespace tkw
             if (slots.empty())
                 listeners.erase(it);
         }
-
-    public:
-        // 默认构造空总线；`DEFAULT_CONSTRUCTOR` 同时生成拷贝/移动语义。
-        DEFAULT_CONSTRUCTOR(CommonEventBus)
 
     public:
         /**

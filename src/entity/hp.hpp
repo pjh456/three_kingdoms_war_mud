@@ -12,8 +12,6 @@
 #include <algorithm>
 #include <functional>
 
-#include "util/macro.hpp"
-
 namespace tkw
 {
     namespace entity
@@ -33,8 +31,6 @@ namespace tkw
             std::function<void(int, int, int)> m_on_change;  // (old_cur, cur, max)
 
         public:
-            DEFAULT_CONSTRUCTOR(Hp)
-
             /**
              * @brief  构造初始满血血条。
              * @param[in] initial 初始体力，同时作为上限；`cur = max = initial`。

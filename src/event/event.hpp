@@ -11,8 +11,6 @@
 #include <cstdint>
 #include <string_view>
 
-#include "util/macro.hpp"
-
 namespace tkw
 {
     template <typename T>
@@ -26,17 +24,18 @@ namespace tkw
     class Event
     {
         friend class CommonEventBus<Event>;
-        DEFINE_ATTRIBUTE(uint64_t, sequence);
 
     private:
-        void set_sequence(uint64_t seq) noexcept { sequence = seq; }
+        std::uint64_t m_sequence = 0; /**< 全局发布序号；发布前为 0。 */
+
+        void set_sequence(std::uint64_t seq) noexcept { m_sequence = seq; }
 
     public:
         /**
          * @brief 构造事件，序号初始化为 0。
-         * @post  `sequence` 为 0；发布后由总线赋值为全局序号。
+         * @post  `m_sequence` 为 0；发布后由总线赋值为全局序号。
          */
-        Event() : sequence(0) {}
+        Event() = default;
 
         /** @brief 虚析构：保证经基类指针销毁派生事件。 */
         virtual ~Event() = default;
@@ -47,6 +46,12 @@ namespace tkw
          * @note   派生类经 `DEFINE_EVENT_END` 覆盖为各自的类型名。
          */
         virtual std::string_view type_tag() const noexcept { return "Event"; }
+
+        /**
+         * @brief  返回全局发布序号。
+         * @return 该事件被 `CommonEventBus::publish` 时分配的单调递增序号；未发布为 0。
+         */
+        std::uint64_t get_sequence() const noexcept { return m_sequence; }
     };
 }
 
