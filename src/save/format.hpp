@@ -3,6 +3,11 @@
  * @brief  存档格式常量与枚举 ↔ 文本映射。
  * @details 版本常量按实际用到的格式特性递增；枚举与文本的双向映射必须保持稳定，
  *          否则旧存档无法读入。
+ * @note  本文件的 `suit_name`/`suit_from`、`gender_name`/`gender_from`、
+ *        `mode_name`/`mode_from` 是**存档文本契约**：一经发布不得改语义，改动
+ *        须提升相应版本常量并兼容旧档（见 `@details`）。资源 JSON（`card`/`hero`
+ *        侧加载表）与 CLI/TUI 输入文本值域相同，但分属独立契约，不得合并；改
+ *        值域须分别同步 `resources/`、`cli`/`tui` 解析点。
  * @ingroup tkw_save
  */
 

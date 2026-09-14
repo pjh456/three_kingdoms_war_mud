@@ -169,6 +169,10 @@ namespace tkw
                             names.push_back(m.first);
                         return names;
                     });
+                // CLI 输入文本契约：`--mode` 的值域由下方 mapping/completer
+                // 定义。与存档文本（`save::mode_name`/`mode_from`）分属独立契约，
+                // 不得合并。新增模式须同步本 mapping/completer、
+                // `src/tui/command.cpp` 的 `mode_from` 与 `save/format.{hpp,cpp}`。
                 cmd.option<fixed_string("mode")>(
                        "--mode",
                        "对局模式：brawl 乱斗 / identity 身份局（默认 brawl；identity 需 4–8 人）")

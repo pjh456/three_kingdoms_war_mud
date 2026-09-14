@@ -48,6 +48,12 @@ namespace tkw
             cfg::ConfigResult<CardCopy> parse_card_copy(
                 const json::Json &item, std::string_view ip)
             {
+                // 资源 JSON schema 契约：`cards/*.json` 的 `"suit"` 字段值域由
+                // 下方映射表定义，非法值加载失败。与存档文本
+                // （`save::suit_name`/`suit_from`）取值相同，但分属两个独立稳定
+                // 契约：此处是可编辑的资源数据格式，存档文本冻结在
+                // `save/format.hpp`；不得合并。改值域须同步全部
+                // `resources/<deck>/cards/*.json` 与 `save/format.{hpp,cpp}`。
                 auto suit = require_enum<Suit>(
                     item, "suit", ip,
                     {{"spade", Suit::Spade}, {"club", Suit::Club},

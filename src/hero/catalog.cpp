@@ -84,6 +84,11 @@ namespace tkw
                         cfg::ConfigErrorKind::TypeMismatch,
                         cfg::field_path(path, "gender"));
 
+                // 资源 JSON schema 契约：`heroes/*.json` 的 `"gender"` 字段值域
+                // 由下方分支定义，非法值加载失败。与存档文本
+                // （`save::gender_name`/`gender_from`）取值相同，但分属两个独立
+                // 稳定契约，不得合并。改值域须同步全部
+                // `resources/<deck>/heroes/*.json` 与 `save/format.{hpp,cpp}`。
                 entity::Gender g = entity::Gender::Male;
                 if (*s == "male")
                     g = entity::Gender::Male;

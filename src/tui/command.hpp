@@ -138,6 +138,9 @@ namespace tkw
              * @param[in]  name 选项值（`brawl`/`identity`）。
              * @param[out] out  命中时写入模式。
              * @return 命中返回 true；未命中返回 false 且不写 `out`。
+             * @note  与 `src/cli/commands.cpp` 的 `--mode` 映射同为输入文本契约，
+             *        两处须保持一致；与存档文本（`save::mode_name`/`mode_from`）
+             *        分属独立契约，不得合并。
              */
             bool mode_from(std::string_view name, tkw::game::GameMode &out);
 
