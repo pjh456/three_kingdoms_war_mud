@@ -121,7 +121,7 @@ namespace tkw
 
                 /**
                  * @brief 打印当前决策窗口的输入用法（`?`/`help` 触发）。
-                 * @param tip 用法正文，不含「用法：」前缀。
+                 * @param[in] tip 用法正文，不含「用法：」前缀。
                  * @note 只打印窗口语法，不打印任何卡牌效果文案（那由
                  *       `card <序号>` 负责）；不改变窗口返回契约。
                  */
@@ -184,8 +184,8 @@ namespace tkw
 
                 /**
                  * @brief 候选是否属于对手手牌、需向决策者遮挡内容。
-                 * @param req   当前决策请求。
-                 * @param index 候选的 0 基下标。
+                 * @param[in] req   当前决策请求。
+                 * @param[in] index 候选的 0 基下标。
                  * @return 仅 PickCard 的手牌候选返回 true；缺少分区标签时防御性
                  *         返回 true（平行数组缺口不得导致漏遮）。
                  * @note 装备区/判定区为明置信息，其余决策类别的候选均为决策者
@@ -198,10 +198,10 @@ namespace tkw
                  * @brief 处理窗口内 `card <序号>`：打印该候选牌的效果文案。
                  * @tparam Candidates 候选容器类型。
                  * @tparam DefIdOf    从候选元素取卡牌定义 id 的一元函数。
-                 * @param req        当前决策请求。
-                 * @param token      序号 token。
-                 * @param candidates 候选容器，序号与窗口打印的 1 基编号一致。
-                 * @param def_id_of  候选 → 定义 id 投影。
+                 * @param[in] req        当前决策请求。
+                 * @param[in] token      序号 token。
+                 * @param[in] candidates 候选容器，序号与窗口打印的 1 基编号一致。
+                 * @param[in] def_id_of  候选 → 定义 id 投影。
                  * @note 序号非法时打印统一范围提示；合法时打印该牌效果文案，
                  *       但对手手牌候选只打印遮挡提示，不泄漏牌名与效果文案。
                  *       各路径都不改变候选与窗口状态，调用点继续循环。
@@ -341,9 +341,9 @@ namespace tkw
 
                 /**
                  * @brief 借刀杀人候选的受害者是否为决策者本人。
-                 * @param req    当前出牌决策请求。
-                 * @param act    待判定的合法动作。
-                 * @param holder 出参：命中时写入持武器者 id（targets[0]）。
+                 * @param[in]  req    当前出牌决策请求。
+                 * @param[in]  act    待判定的合法动作。
+                 * @param[out] holder 出参：命中时写入持武器者 id（targets[0]）。
                  * @return 是则 true；非借刀/非双目标/受害者非本人则 false。
                  * @note 只读，不改变候选与输入；用于出牌窗口的后果提示。
                  */

@@ -291,8 +291,8 @@ namespace tkw
 
         /**
          * @brief 容错扫描牌堆的机制名原文：未知机制名不报错，交给调用方判定。
-         * @param store     资源目录句柄。
-         * @param deck_name 牌堆资源名（通常 "deck"）。
+         * @param[in] store     资源目录句柄。
+         * @param[in] deck_name 牌堆资源名（通常 "deck"）。
          * @return Ok 为按 deck 序的逐卡机制原文；Err 为文件缺失/非法 JSON/
          *         deck 结构错误/字段类型不符（detail 带路径），与严格加载同级。
          * @note 只读 id/name/effect.kind/abilities 的字符串原文，不校验枚举值，
