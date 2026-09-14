@@ -2,6 +2,14 @@
 # tkw-tui 与 tui_tests，默认配置的 tkw/引擎目标不链 Threads。
 find_package(Threads REQUIRED)
 
+# 通用基础域：随机源实现（`Rng` 接口与 `rng.hpp` 声明在头，定义在 rng.cpp）。
+# 仅依赖标准库，故无第三方链接。
+add_library(tkw_util STATIC
+    util/rng.cpp
+)
+
+target_include_directories(tkw_util PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_library(tkw_io STATIC
     io/file.cpp
 )
@@ -30,7 +38,7 @@ add_library(tkw_card INTERFACE)
 
 target_include_directories(tkw_card INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(tkw_card INTERFACE tkw_config pjh_json)
+target_link_libraries(tkw_card INTERFACE tkw_config pjh_json tkw_util)
 
 # 武将支撑域：值类型/目录加载，复用 entity::Gender；game 层向下引用，武将域不引用 game。
 add_library(tkw_hero INTERFACE)
@@ -48,7 +56,7 @@ add_library(tkw_game_core INTERFACE)
 target_include_directories(tkw_game_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(tkw_game_core INTERFACE tkw_entity tkw_card tkw_hero
-                                               tkw_event pjh_result)
+                                               tkw_event pjh_result tkw_util)
 
 add_library(tkw_game_query INTERFACE)
 
@@ -70,7 +78,7 @@ target_include_directories(tkw_game_flow INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(tkw_game_flow INTERFACE tkw_game_core tkw_game_query
                                               tkw_game_resolve tkw_card tkw_entity
-                                              tkw_event pjh_result)
+                                              tkw_event pjh_result tkw_util)
 
 add_library(tkw_game_ai INTERFACE)
 

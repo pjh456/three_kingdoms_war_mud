@@ -3,6 +3,7 @@
  * @brief  随机源抽象：把引擎从 `std::mt19937` 解绑，便于注入确定性/可记录的序列。
  * @details 接口暴露 `next()`（32 位均匀）与 `save_state`/`load_state`（存档续档用）；
  *          洗牌等消费方用 `uniform_below` 做拒绝采样，保证无取模偏差。
+ *          定义见 `rng.cpp`。
  * @ingroup tkw_util
  */
 
@@ -10,12 +11,8 @@
 #define INCLUDE_TKW_UTIL_RNG_HPP
 
 #include <cstdint>
-#include <ios>
 #include <random>
-#include <sstream>
-#include <stdexcept>
 #include <string>
-#include <string_view>
 
 namespace tkw
 {
@@ -70,24 +67,19 @@ namespace tkw
          * @brief  以种子构造。
          * @param[in] seed 初始种子。
          */
-        explicit SeededRng(std::uint32_t seed) : m_engine(seed) {}
+        explicit SeededRng(std::uint32_t seed);
 
         /**
          * @brief  取自 `mt19937` 的下一个值。
          * @return 底层引擎产生的 32 位无符号整数。
          */
-        std::uint32_t next() override { return m_engine(); }
+        std::uint32_t next() override;
 
         /**
          * @brief  导出 `mt19937` 当前状态。
          * @return 序列化后的状态快照。
          */
-        RngState save_state() const override
-        {
-            std::ostringstream os;
-            os << m_engine;
-            return RngState{os.str()};
-        }
+        RngState save_state() const override;
 
         /**
          * @brief  恢复 `mt19937` 引擎状态。
@@ -97,30 +89,7 @@ namespace tkw
          * @retval false `state.data` 非法，引擎保持原状。
          * @note   非法文本的异常类型各标准库不同，此处统一归为失败。
          */
-        bool load_state(const RngState &state) override
-        {
-            std::istringstream is(state.data);
-            std::mt19937 restored;
-            // 非法文本的处理各标准库不同：libstdc++ 抛 ios_base::failure，
-            // MSVC 抛 invalid_argument，也有实现只置 failbit。
-            // 全部归为「data 非法」，失败时引擎保持原状。
-            try
-            {
-                is >> restored;
-            }
-            catch (const std::ios_base::failure &)
-            {
-                return false;
-            }
-            catch (const std::invalid_argument &)
-            {
-                return false;
-            }
-            if (is.fail())
-                return false;
-            m_engine = restored;
-            return true;
-        }
+        bool load_state(const RngState &state) override;
 
     private:
         std::mt19937 m_engine;
@@ -132,19 +101,7 @@ namespace tkw
      * @param[in]     bound 上界（开区间）；`bound <= 1` 时恒返回 0。
      * @return 落在 [0, bound) 的均匀随机数。
      */
-    inline std::uint32_t uniform_below(Rng &rng, std::uint32_t bound)
-    {
-        if (bound <= 1)
-            return 0;
-        const std::uint64_t range = std::uint64_t{1} << 32;
-        const std::uint64_t limit = range - (range % bound);
-        std::uint64_t x = 0;
-        do
-        {
-            x = rng.next();
-        } while (x >= limit);
-        return static_cast<std::uint32_t>(x % bound);
-    }
+    std::uint32_t uniform_below(Rng &rng, std::uint32_t bound);
 }
 
 #endif  // INCLUDE_TKW_UTIL_RNG_HPP
