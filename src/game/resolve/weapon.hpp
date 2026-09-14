@@ -237,13 +237,8 @@ namespace tkw
          * @retval Some 该手牌副本。
          * @retval None 无真杀手牌。
          */
-        inline Option<card::Card> find_sha_in_hand(
-            const GameContext &ctx, const std::string &player)
-        {
-            return StateQuery::find_hand_card_matching(
-                ctx, player, [](const card::CardDef &def)
-                { return is_response_def(def, card::ResponseKind::Sha); });
-        }
+        Option<card::Card> find_sha_in_hand(
+            const GameContext &ctx, const std::string &player);
 
         /**
          * @brief 弃置目标 count 张牌（寒冰剑）。
@@ -257,26 +252,9 @@ namespace tkw
          *       `apply_equip_lost`。
          * @note 候选仅目标手牌与装备区：判定区延时锦囊不可被寒冰剑取走。
          */
-        inline int discard_target_cards(
+        int discard_target_cards(
             GameContext &ctx, DecisionSource &ai,
-            const std::string &attacker, const std::string &target, int count)
-        {
-            int discarded = 0;
-            for (int i = 0; i < count; ++i)
-            {
-                const auto picked = ai.pick_card_from_target(
-                    ctx, attacker, target, PickCardScope::HandEquip);
-                if (picked.is_none())
-                    break;
-                const auto chosen = StateOps(ctx).resolve_target_pick(target, picked.unwrap());
-                if (chosen.is_none())
-                    break;
-                if (StateOps(ctx).remove_any_and_discard(target, chosen.unwrap().instance_id)
-                        .is_some())
-                    ++discarded;
-            }
-            return discarded;
-        }
+            const std::string &attacker, const std::string &target, int count);
 
         /**
          * @brief 卡牌定义是否为坐骑（麒麟弓预检与弃置共用）。
@@ -285,14 +263,7 @@ namespace tkw
          * @retval true  装备槽为 `OffensiveHorse` 或 `DefensiveHorse`。
          * @retval false 非装备或无装备定义。
          */
-        inline bool is_horse_def(const card::CardDef &def)
-        {
-            if (def.equip.is_none())
-                return false;
-            const auto slot = def.equip.unwrap().slot;
-            return slot == card::EquipSlot::OffensiveHorse ||
-                   slot == card::EquipSlot::DefensiveHorse;
-        }
+        bool is_horse_def(const card::CardDef &def);
 
         /**
          * @brief 目标装备区是否有坐骑（麒麟弓无马时不询问发动）。
@@ -300,16 +271,7 @@ namespace tkw
          * @param[in] target 查询的实体 id。
          * @return 至少一件坐骑时为 true；否则 false。
          */
-        inline bool target_has_horse(const GameContext &ctx, const std::string &target)
-        {
-            for (const auto &c : ctx.cards->equip(target))
-            {
-                const auto def = ctx.catalog->find(c.def_id);
-                if (def.is_some() && is_horse_def(*def.unwrap()))
-                    return true;
-            }
-            return false;
-        }
+        bool target_has_horse(const GameContext &ctx, const std::string &target);
 
         /**
          * @brief 目标装备区的全部坐骑（装备区顺序，供麒麟弓选弃与预检共用）。
@@ -317,18 +279,8 @@ namespace tkw
          * @param[in] target 查询的实体 id。
          * @return 坐骑牌副本列表（装备区顺序）；无则为空。
          */
-        inline std::vector<card::Card> target_horses(
-            const GameContext &ctx, const std::string &target)
-        {
-            std::vector<card::Card> out;
-            for (const auto &c : ctx.cards->equip(target))
-            {
-                const auto def = ctx.catalog->find(c.def_id);
-                if (def.is_some() && is_horse_def(*def.unwrap()))
-                    out.push_back(c);
-            }
-            return out;
-        }
+        std::vector<card::Card> target_horses(
+            const GameContext &ctx, const std::string &target);
 
         /**
          * @brief 雌雄双股剑：唯一异性目标时由目标二选一。
@@ -340,50 +292,14 @@ namespace tkw
          *       引用无效）即视为选择令使用者摸一张，非空且牌存在则弃置该牌；
          *       目标实际弃哪张牌由决策源决定（人可 pass）。
          */
-        inline void hook_cixiong(ShaContext &sc)
-        {
-            // 仅唯一目标触发（方天多目标杀不触发）
-            if (sc.target_count != 1)
-                return;
-            const auto attacker = sc.ctx.entities->find(sc.attacker);
-            const auto target = sc.ctx.entities->find(sc.target);
-            if (attacker.is_none() || target.is_none())
-                return;
-            // 同性不触发
-            if (attacker.unwrap()->get_gender() == target.unwrap()->get_gender())
-                return;
-
-            // 使用者可选：拒绝则不弃不摸
-            if (!sc.ai.trigger_effect(sc.ctx, sc.attacker, card::Ability::Cixiong))
-                return;
-
-            // 目标有手牌：弃一张，或（空/无效选择）令使用者摸一张
-            if (sc.ctx.cards->hand_size(sc.target) > 0)
-            {
-                const auto discards = sc.ai.choose_discards(
-                    sc.ctx, sc.target, 1, DiscardReason::CixiongChoice);
-                for (const auto &id : discards)
-                {
-                    if (StateOps(sc.ctx).remove_and_discard(sc.target, id).is_some())
-                        return;
-                    break;
-                }
-            }
-
-            // 无手牌或目标选择放弃弃牌：使用者摸一张牌
-            StateOps(sc.ctx).apply_draw(sc.attacker, 1);
-        }
+        void hook_cixiong(ShaContext &sc);
 
         /**
          * @brief 仁王盾：黑色的杀对你无效（青釭剑可穿透，虚拟杀不适用）。
          * @param[in,out] sc 杀结算上下文；命中黑色真杀时置 `blocked`。
          * @note 虚拟杀无花色，黑杀判定短路；青釭剑无视防具时穿透。
          */
-        inline void hook_renwang(ShaContext &sc)
-        {
-            if (!sc.ignore_armor && !sc.virtual_sha && StateQuery::is_black_suit(sc.sha.suit))
-                sc.blocked = true;
-        }
+        void hook_renwang(ShaContext &sc);
 
         /**
          * @brief 藤甲：普通杀（含丈八虚拟杀）对你无效；火焰伤害 +1。
@@ -392,23 +308,7 @@ namespace tkw
          * @note 青釭剑无视防具：无效与火焰脆弱一并穿透；雷电与决斗不受影响。
          *       锁定技，无决策窗口。
          */
-        inline void hook_tengjia(ShaContext &sc)
-        {
-            // 青釭剑穿透：藤甲不生效，普通杀照常命中且火焰不加伤
-            if (sc.ignore_armor)
-                return;
-
-            // 普通杀无效（含丈八两张当杀的虚拟杀）
-            if (sc.damage_type == card::DamageType::Normal)
-            {
-                sc.blocked = true;
-                return;
-            }
-
-            // 火焰伤害 +1
-            if (sc.damage_type == card::DamageType::Fire)
-                sc.damage_bonus += 1;
-        }
+        void hook_tengjia(ShaContext &sc);
 
         /**
          * @brief 需打出闪时的八卦阵判定：目标可选发动，红色判定视为打出闪。
@@ -421,23 +321,8 @@ namespace tkw
          * @post 判定牌已消费并发布判定语义的弃置事件。
          * @note 只消费判定牌并发判定弃置事件；是否实际出闪由调用方决定。
          */
-        inline bool trigger_bagua_jink(
-            GameContext &ctx, DecisionSource &ai, const std::string &target)
-        {
-            if (!ai.trigger_effect(ctx, target, card::Ability::JudgementJink))
-                return false;
-            const card::CardDef *armor =
-                EquipQuery::find_equipment(ctx, target, card::Ability::JudgementJink);
-            if (!armor || armor->judge.is_none())
-                return false;
-            auto judge = StateOps(ctx).perform_judgement();
-            if (judge.is_none())
-                return false;
-            const card::Card judge_card = std::move(judge).unwrap();
-            StateOps(ctx).discard_and_emit(target, judge_card, DiscardKind::Judgement);
-            return StateQuery::judge_result(armor->judge.unwrap(), judge_card) ==
-                   card::JudgeAction::Jink;
-        }
+        bool trigger_bagua_jink(
+            GameContext &ctx, DecisionSource &ai, const std::string &target);
 
         /**
          * @brief 八卦阵：需出闪时可判定，判定描述来自装备数据。
@@ -445,13 +330,7 @@ namespace tkw
          * @note 目标可选择发动（卡面「可进行判定」）：拒绝则跳过判定，
          *       由后续响应窗口决定是否出闪。青釭剑无视防具时不发动。
          */
-        inline void hook_bagua(ShaContext &sc)
-        {
-            if (sc.ignore_armor || sc.responded)
-                return;
-            if (trigger_bagua_jink(sc.ctx, sc.ai, sc.target))
-                sc.responded = true;
-        }
+        void hook_bagua(ShaContext &sc);
 
         /**
          * @brief 青龙偃月刀：目标打出闪后可再对同一目标使用一张杀。
@@ -459,32 +338,7 @@ namespace tkw
          * @note 续杀须攻击方手牌有真杀且可选发动；续杀消费该杀并发布打出事件，
          *       递归结算同目标。
          */
-        inline void hook_qinglong(ShaContext &sc)
-        {
-            if (!sc.ai.trigger_effect(
-                    sc.ctx, sc.attacker, card::Ability::ExtraShaAfterJink))
-                return;
-            auto extra = find_sha_in_hand(sc.ctx, sc.attacker);
-            if (extra.is_none())
-                return;
-            auto removed =
-                sc.ctx.cards->remove_from_hand(sc.attacker, extra.unwrap().instance_id);
-            if (removed.is_some())
-            {
-                card::Card extra_card = std::move(removed).unwrap();
-                sc.ctx.cards->discard(extra_card);
-                // 打出的牌只发打出事件；进弃牌堆是打出的必然后果，不另发弃置事件
-                emit_card_played(sc.ctx, sc.attacker, extra_card);
-            }
-            ShaResolver(sc.ctx, sc.ai).resolve_sha(
-                ShaRequest::Builder{}
-                    .attacker(sc.attacker)
-                    .sha(extra.unwrap())
-                    .target(sc.target)
-                    .damage_val(sc.amount)
-                    .damage_type(sc.damage_type)
-                    .build());
-        }
+        void hook_qinglong(ShaContext &sc);
 
         /**
          * @brief 贯石斧：目标打出闪后可弃两张牌令杀依然命中。
@@ -492,35 +346,7 @@ namespace tkw
          * @note 弃满两张才能发动：攻击方手牌不足 2 张不发动（不询问、不弃牌、
          *       不强制命中）；实际弃不满 2 张（含幽灵引用）不强制命中。
          */
-        inline void hook_guanshi(ShaContext &sc)
-        {
-            // 发动前置：手牌不足两张付不起代价，直接不发动
-            if (sc.ctx.cards->hand_size(sc.attacker) <
-                static_cast<std::size_t>(rules_of(sc.ctx).two_card_cost))
-                return;
-
-            if (!sc.ai.trigger_effect(
-                    sc.ctx, sc.attacker, card::Ability::DiscardTwoForceDamage))
-                return;
-
-            const auto discards = sc.ai.choose_discards(
-                sc.ctx, sc.attacker, rules_of(sc.ctx).two_card_cost,
-                DiscardReason::AbilityCost);
-
-            // 只计数实际弃成功的牌，封顶 two_card_cost 张
-            int discarded = 0;
-            for (const auto &id : discards)
-            {
-                if (discarded == rules_of(sc.ctx).two_card_cost)
-                    break;
-                if (StateOps(sc.ctx).remove_and_discard(sc.attacker, id).is_some())
-                    ++discarded;
-            }
-
-            // 弃满两张才强制命中，否则杀仍视为被闪
-            if (discarded == rules_of(sc.ctx).two_card_cost)
-                sc.responded = false;
-        }
+        void hook_guanshi(ShaContext &sc);
 
         /**
          * @brief 寒冰剑：防止伤害改为弃置目标两张牌。
@@ -529,37 +355,14 @@ namespace tkw
          *       不弃牌、不免伤；判定区不计入代价，延时锦囊不可取）；实际弃不满
          *       2 张（含幽灵引用）不免伤。
          */
-        inline void hook_hanbing(ShaContext &sc)
-        {
-            // 发动前置：可选区（手牌+装备）不足两张付不起代价，直接不发动
-            if (sc.ctx.cards->hand_size(sc.target) +
-                    sc.ctx.cards->equip_size(sc.target) <
-                static_cast<std::size_t>(rules_of(sc.ctx).two_card_cost))
-                return;
-
-            if (!sc.ai.trigger_effect(
-                    sc.ctx, sc.attacker, card::Ability::DamageAsDiscard))
-                return;
-
-            const int discarded = discard_target_cards(
-                sc.ctx, sc.ai, sc.attacker, sc.target,
-                rules_of(sc.ctx).two_card_cost);
-
-            // 弃满两张才免伤，否则伤害照常落地
-            if (discarded == rules_of(sc.ctx).two_card_cost)
-                sc.prevented = true;
-        }
+        void hook_hanbing(ShaContext &sc);
 
         /**
          * @brief 古锭刀：目标没有手牌时，此杀伤害 +1。
          * @param[in,out] sc 杀结算上下文；目标无手牌时累加 `damage_bonus`。
          * @note 锁定技，无决策窗口；方天多目标杀逐目标判定（各看自身手牌数）。
          */
-        inline void hook_guding(ShaContext &sc)
-        {
-            if (sc.ctx.cards->hand_size(sc.target) == 0)
-                sc.damage_bonus += 1;
-        }
+        void hook_guding(ShaContext &sc);
 
         /**
          * @brief 麒麟弓：造成伤害后，目标装备区有坐骑时询问攻击方是否弃置其一。
@@ -567,37 +370,7 @@ namespace tkw
          * @note 无坐骑不询问（避免空操作）；由使用者选弃哪一匹，决策源返回
          *       None 或引用不在候选中时回落首个（已发动则必弃一张）。
          */
-        inline void hook_qilin(ShaContext &sc)
-        {
-            if (!target_has_horse(sc.ctx, sc.target))
-                return;
-
-            if (!sc.ai.trigger_effect(
-                    sc.ctx, sc.attacker, card::Ability::DiscardHorseOnDamage))
-                return;
-
-            // 候选为目标的全部坐骑（装备区顺序），攻击方从中选一张
-            const auto horses = target_horses(sc.ctx, sc.target);
-            if (horses.empty())
-                return;
-            std::string chosen = horses.front().instance_id;
-            const auto picked = sc.ai.pick_from_revealed(
-                sc.ctx, sc.attacker, horses, RevealSource::Qilin);
-            if (picked.is_some())
-                for (const auto &h : horses)
-                    if (h.instance_id == picked.unwrap().instance_id)
-                    {
-                        chosen = h.instance_id;
-                        break;
-                    }
-
-            auto removed = sc.ctx.cards->remove_from_equip(sc.target, chosen);
-            if (removed.is_some())
-            {
-                card::Card card = std::move(removed).unwrap();
-                StateOps(sc.ctx).discard_and_emit(sc.target, card);
-            }
-        }
+        void hook_qilin(ShaContext &sc);
 
         // ── 管线 ────────────────────────────────────────────────────────
 
@@ -625,23 +398,7 @@ namespace tkw
          * @brief 全部装备钩子（新增武器 = 加一行）。
          * @return 进程内静态钩子表引用；顺序即规则执行顺序。
          */
-        inline const std::vector<ShaHook> &sha_hook_table()
-        {
-            static const std::vector<ShaHook> table = {
-                {card::Ability::Cixiong, ShaPhase::OnTarget, true, hook_cixiong},
-                {card::Ability::BlackShaImmune, ShaPhase::Armor, false, hook_renwang},
-                {card::Ability::VineArmor, ShaPhase::Armor, false, hook_tengjia},
-                {card::Ability::JudgementJink, ShaPhase::Respond, false, hook_bagua},
-                {card::Ability::ExtraShaAfterJink, ShaPhase::PostJink, true,
-                 hook_qinglong},
-                {card::Ability::DiscardTwoForceDamage, ShaPhase::PostJink, true,
-                 hook_guanshi},
-                {card::Ability::DamageAsDiscard, ShaPhase::PreDamage, true, hook_hanbing},
-                {card::Ability::GudingBlade, ShaPhase::PreDamage, true, hook_guding},
-                {card::Ability::DiscardHorseOnDamage, ShaPhase::OnHit, true, hook_qilin},
-            };
-            return table;
-        }
+        const std::vector<ShaHook> &sha_hook_table();
 
         /**
          * @brief 执行某插桩点上所有已装备能力的钩子。
@@ -649,17 +406,7 @@ namespace tkw
          * @param[in]     phase 要执行的插桩点。
          * @post 挂在该阶段且持有对应能力者已按注册序执行钩子。
          */
-        inline void run_sha_phase(ShaContext &sc, ShaPhase phase)
-        {
-            for (const auto &h : sha_hook_table())
-            {
-                if (h.phase != phase)
-                    continue;
-                const std::string &owner = h.attacker_side ? sc.attacker : sc.target;
-                if (EquipQuery::has_ability(sc.ctx, owner, h.ability))
-                    h.fn(sc);
-            }
-        }
+        void run_sha_phase(ShaContext &sc, ShaPhase phase);
 
         /**
          * @brief 需打出闪的共用响应入口：先跑八卦阵判定，未视为闪再开真闪响应窗。
@@ -674,71 +421,9 @@ namespace tkw
          *       （当前仅八卦阵）由此对两者一致生效；无对应防具的目标不会被询问。
          *       新增 Respond 阶段目标侧被动时，若也应作用于万箭，须同时接入本入口。
          */
-        inline bool request_jink(
+        bool request_jink(
             GameContext &ctx, DecisionSource &ai, const std::string &target,
-            const ResponsePrompt &prompt)
-        {
-            // 有对应防具才询问发动，避免对未装备者多开触发窗口
-            if (EquipQuery::has_ability(ctx, target, card::Ability::JudgementJink) &&
-                trigger_bagua_jink(ctx, ai, target))
-                return true;
-
-            // 无装备生效：开真闪响应窗口（打出真闪）
-            return request_response(
-                ctx, ai, target, card::ResponseKind::Jink, prompt);
-        }
-
-        inline void ShaResolver::resolve_sha(const ShaRequest &request)
-        {
-            ShaContext sc{m_ctx, m_ai, request.sha, request.attacker,
-                          request.target, request.damage_val};
-            sc.ignore_armor =
-                EquipQuery::has_ability(m_ctx, request.attacker, card::Ability::IgnoreArmor);
-            sc.target_count = request.target_count;
-            sc.virtual_sha = request.virtual_sha;
-            sc.damage_type = request.damage_type;
-            // 加成初值先落位，钩子（藤甲火焰脆弱等）在 Armor 阶段累加
-            sc.damage_bonus = request.damage_bonus;
-
-            // 朱雀羽扇：普通杀使用时可转为火焰伤害。非锁定技、可放弃、无每回合
-            // 限制；火杀/雷杀属性非普通，不询问（只能转化普通杀）
-            if (sc.damage_type == card::DamageType::Normal &&
-                EquipQuery::has_ability(m_ctx, request.attacker, card::Ability::FireShaConvert) &&
-                m_ai.trigger_effect(m_ctx, request.attacker,
-                                    card::Ability::FireShaConvert))
-                sc.damage_type = card::DamageType::Fire;
-
-            run_sha_phase(sc, ShaPhase::OnTarget);
-
-            run_sha_phase(sc, ShaPhase::Armor);
-            if (sc.blocked)
-                return;
-
-            run_sha_phase(sc, ShaPhase::Respond);
-            if (!sc.responded)
-                sc.responded = request_response(
-                    m_ctx, m_ai, request.target, card::ResponseKind::Jink,
-                    {sc.sha.def_id, sc.attacker, sc.amount});
-
-            if (sc.responded)
-                run_sha_phase(sc, ShaPhase::PostJink);
-
-            if (!sc.responded)
-            {
-                run_sha_phase(sc, ShaPhase::PreDamage);
-                if (sc.prevented)
-                    return;
-                CombatResolver(m_ctx, m_ai).deal_damage(
-                    request.target,
-                    DamageSpec::Builder{}
-                        .source(request.attacker)
-                        .damage_val(request.damage_val + sc.damage_bonus)
-                        .damage_type(sc.damage_type)
-                        .ignore_armor(sc.ignore_armor)
-                        .build());
-                run_sha_phase(sc, ShaPhase::OnHit);
-            }
-        }
+            const ResponsePrompt &prompt);
     }
 }
 
