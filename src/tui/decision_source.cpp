@@ -192,20 +192,6 @@ namespace tkw
                 return title;
             }
 
-            const char *reason_text(tkw::game::DiscardReason reason)
-            {
-                switch (reason)
-                {
-                case tkw::game::DiscardReason::TurnLimit:
-                    return "手牌超上限";
-                case tkw::game::DiscardReason::AbilityCost:
-                    return "装备能力代价";
-                case tkw::game::DiscardReason::CixiongChoice:
-                    return "雌雄双股剑（可放弃）";
-                }
-                return "弃牌";
-            }
-
             bool is_self_target_borrowed_sword(
                 const tkw::game::ai::DecisionRequest &req,
                 const tkw::game::LegalAction &act, std::string &holder)
@@ -508,9 +494,10 @@ namespace tkw
             }
             case DecisionKind::Discard:
             {
-                panel.title = "弃牌（" +
-                              std::string(detail::reason_text(req.discard_reason)) +
-                              "，需弃 " + std::to_string(req.count) + " 张）";
+                panel.title =
+                    "弃牌（" +
+                    std::string(tkw::game::discard_reason_text(req.discard_reason)) +
+                    "，需弃 " + std::to_string(req.count) + " 张）";
                 panel.multi = true;
                 panel.toggle = true;
                 panel.need_count = req.count;

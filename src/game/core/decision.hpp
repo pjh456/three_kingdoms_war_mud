@@ -42,6 +42,28 @@ namespace tkw
         };
 
         /**
+         * @brief  弃牌原因 → 中文文案。
+         * @details 弃牌窗口（REPL 与 TUI 面板）展示的稳定文案唯一事实源；新增原因值须
+         *          同步本函数，避免各前端各写一份造成静默漂移。
+         * @param[in] reason 弃牌原因。
+         * @return 对应中文文案；未知名回落「弃牌」。
+         * @post  不改变任何状态。
+         */
+        inline constexpr const char *discard_reason_text(DiscardReason reason)
+        {
+            switch (reason)
+            {
+            case DiscardReason::TurnLimit:
+                return "手牌超上限";
+            case DiscardReason::AbilityCost:
+                return "装备能力代价";
+            case DiscardReason::CixiongChoice:
+                return "雌雄双股剑（可放弃）";
+            }
+            return "弃牌";
+        }
+
+        /**
          * @brief 出牌阶段的回合上下文（只读）：让决策源知道当前回合角色与
          *        已用「杀」次数，无需自行维护跨调用状态。
          */

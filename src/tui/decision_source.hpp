@@ -144,13 +144,6 @@ namespace tkw
                 const tkw::game::ai::DecisionRequest &req);
 
             /**
-             * @brief  弃牌原因 → 中文文案（与真人窗口同口径）。
-             * @param[in] reason 弃牌原因。
-             * @return 中文文案。
-             */
-            const char *reason_text(tkw::game::DiscardReason reason);
-
-            /**
              * @brief  借刀杀人候选的受害者是否为决策者本人。
              * @param[in]  req    决策请求；只读目录与使用者。
              * @param[in]  act    候选合法动作。

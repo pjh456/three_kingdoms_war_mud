@@ -305,8 +305,6 @@ namespace tkw
                  */
                 static std::string counter_title(const DecisionRequest &req);
 
-                static const char *reason_text(DiscardReason reason);
-
                 /**
                  * @brief  从装备区反查携带该能力的装备名；查不到回落「装备能力」。
                  * @param[in] req 触发类决策请求（含观察装备与目标能力）。

@@ -326,20 +326,6 @@ namespace tkw
                 return title;
             }
 
-            const char *HumanDecider::reason_text(DiscardReason reason)
-            {
-                switch (reason)
-                {
-                case DiscardReason::TurnLimit:
-                    return "手牌超上限";
-                case DiscardReason::AbilityCost:
-                    return "装备能力代价";
-                case DiscardReason::CixiongChoice:
-                    return "雌雄双股剑（可放弃）";
-                }
-                return "弃牌";
-            }
-
             std::string HumanDecider::ability_name(const DecisionRequest &req)
             {
                 if (req.catalog)
@@ -707,7 +693,8 @@ namespace tkw
                 for (;;)
                 {
                     m_out << "[" << req.actor << "] 弃牌（"
-                         << reason_text(req.discard_reason) << "，需弃 "
+                         << game::discard_reason_text(req.discard_reason)
+                         << "，需弃 "
                          << req.count << " 张）：\n";
                     print_view(req);
                     print_options(req, req.options);
