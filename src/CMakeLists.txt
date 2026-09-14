@@ -130,6 +130,7 @@ add_library(tkw_game_ai STATIC
     game/ai/decider_base.cpp
     game/ai/simple.cpp
     game/ai/aggressive.cpp
+    game/ai/human.cpp
 )
 
 target_include_directories(tkw_game_ai PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

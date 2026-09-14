@@ -64,52 +64,7 @@ namespace tkw
                  * @return 玩家选择；EOF 或放弃时返回空选择。
                  * @post 不修改对局状态；仅向 `m_out` 写提示并消费 `m_in`。
                  */
-                DecisionChoice decide(const DecisionRequest &request) override
-                {
-                    switch (request.kind)
-                    {
-                    case DecisionKind::Play:
-                        return decide_play(request);
-                    case DecisionKind::Response:
-                        if (!request.legal.empty())
-                            return decide_response_pair(request);
-                        if (request.options.empty())
-                        {
-                            m_out << "无可用响应牌。\n";
-                            return DecisionChoice{};
-                        }
-                        return decide_choose_id(
-                            request, response_title(request, false));
-                    case DecisionKind::Peach:
-                        if (request.options.empty())
-                        {
-                            m_out << "无可用救场牌。\n";
-                            return DecisionChoice{};
-                        }
-                        return decide_choose_id(
-                            request,
-                            "濒死救场（濒死者: " + request.dying + "）");
-                    case DecisionKind::Counter:
-                        if (request.options.empty())
-                        {
-                            m_out << "无可用无懈可击。\n";
-                            return DecisionChoice{};
-                        }
-                        return decide_choose_id(request, counter_title(request));
-                    case DecisionKind::Trigger:
-                        return decide_trigger(request);
-                    case DecisionKind::PickCard:
-                        return decide_pick(request, "选择目标区域的牌", true);
-                    case DecisionKind::PickRevealed:
-                        return decide_pick(
-                            request, reveal_title(request),
-                            request.reveal_source ==
-                                RevealSource::FireAttackDiscard);
-                    case DecisionKind::Discard:
-                        return decide_discard(request);
-                    }
-                    return DecisionChoice{};
-                }
+                DecisionChoice decide(const DecisionRequest &request) override;
 
             private:
                 std::istream &m_in;
@@ -123,14 +78,7 @@ namespace tkw
                  * @retval false 输入流结束或读取失败。
                  * @post 失败时 `line` 内容不保证。
                  */
-                bool read_line(std::string &line)
-                {
-                    if (!std::getline(m_in, line))
-                        return false;
-                    if (!line.empty() && line.back() == '\r')
-                        line.pop_back();
-                    return true;
-                }
+                bool read_line(std::string &line);
 
                 /**
                  * @brief  按空白切分一行；空行返回空 token 列表。
@@ -138,24 +86,7 @@ namespace tkw
                  * @return 以空白分隔的 token 列表（空行时为空）。
                  * @post 不改变任何状态。
                  */
-                static std::vector<std::string> tokenize(const std::string &line)
-                {
-                    std::vector<std::string> out;
-                    std::size_t i = 0;
-                    while (i < line.size())
-                    {
-                        while (i < line.size() &&
-                               std::isspace(static_cast<unsigned char>(line[i])))
-                            ++i;
-                        const std::size_t start = i;
-                        while (i < line.size() &&
-                               !std::isspace(static_cast<unsigned char>(line[i])))
-                            ++i;
-                        if (i > start)
-                            out.push_back(line.substr(start, i - start));
-                    }
-                    return out;
-                }
+                static std::vector<std::string> tokenize(const std::string &line);
 
                 /**
                  * @brief 读取一行并切词：EOF/读失败返回 None；空行打印换行后
@@ -167,20 +98,7 @@ namespace tkw
                  *       非法输入的重提示与序号解析留在调用点，各决策保留其
                  *       特有返回语义。
                  */
-                Option<std::vector<std::string>> read_tokens()
-                {
-                    std::string line;
-                    if (!read_line(line))
-                    {
-                        m_out << "\n输入已结束，按放弃处理。\n";
-                        return Option<std::vector<std::string>>::None();
-                    }
-
-                    auto tokens = tokenize(line);
-                    if (tokens.empty())
-                        m_out << "\n";
-                    return Option<std::vector<std::string>>::Some(std::move(tokens));
-                }
+                Option<std::vector<std::string>> read_tokens();
 
                 /**
                  * @brief  该行是否为窗口内帮助请求（`?` / `help`）。
@@ -223,19 +141,7 @@ namespace tkw
                  * @post 不改变对局状态。
                  */
                 static bool parse_index(
-                    const std::string &token, std::size_t count, int &out)
-                {
-                    int value = 0;
-                    const char *first = token.data();
-                    const char *last = token.data() + token.size();
-                    const auto result = std::from_chars(first, last, value);
-                    if (result.ec != std::errc() || result.ptr != last)
-                        return false;
-                    if (value < 1 || value > static_cast<int>(count))
-                        return false;
-                    out = value;
-                    return true;
-                }
+                    const std::string &token, std::size_t count, int &out);
 
                 /**
                  * @brief  把某个区域渲染成「卡名/卡名」；空区域回落「无」。
@@ -246,19 +152,7 @@ namespace tkw
                  */
                 static std::string zone_names(
                     const DecisionRequest &req,
-                    const std::vector<card::Card> &zone)
-                {
-                    if (zone.empty())
-                        return "无";
-                    std::string out;
-                    for (std::size_t i = 0; i < zone.size(); ++i)
-                    {
-                        if (i > 0)
-                            out += "/";
-                        out += card::display_name(req.catalog, zone[i].def_id);
-                    }
-                    return out;
-                }
+                    const std::vector<card::Card> &zone);
 
                 /**
                  * @brief 打印决策者视角的局面摘要：己方体力/完整手牌/装备/判定，
@@ -269,19 +163,7 @@ namespace tkw
                  *       角色手牌只出数量，绝不展开牌面内容。
                  * @note 纯展示，不改变候选与输入语法；每次重提示都会重绘。
                  */
-                void print_view(const DecisionRequest &req)
-                {
-                    const auto &v = req.view;
-                    m_out << "[" << v.self << "] 体力 " << v.self_hp << "/"
-                         << v.self_max_hp << "  手牌 " << zone_names(req, v.hand)
-                         << "  装备 " << zone_names(req, v.equip) << "  判定 "
-                         << zone_names(req, v.judge) << "\n";
-                    for (const auto &e : v.others)
-                        m_out << e.id << " 体力 " << e.hp << "/" << e.max_hp
-                             << "  手牌 " << e.hand_size << "  装备 "
-                             << zone_names(req, e.equip) << "  距离 " << e.distance
-                             << "\n";
-                }
+                void print_view(const DecisionRequest &req);
 
                 /**
                  * @brief 打印单张候选牌的效果文案（数据源 CardDef.text）。
@@ -291,18 +173,7 @@ namespace tkw
                  * @note 文案缺失时打印「（无说明）」占位；只读查询，不改状态。
                  */
                 void print_card_text(
-                    const DecisionRequest &req, const std::string &def_id)
-                {
-                    std::string text = "（无说明）";
-                    if (req.catalog)
-                    {
-                        const auto def = req.catalog->find(def_id);
-                        if (def.is_some() && !def.unwrap()->text.empty())
-                            text = def.unwrap()->text;
-                    }
-                    m_out << card::display_name(req.catalog, def_id) << "：" << text
-                         << "\n";
-                }
+                    const DecisionRequest &req, const std::string &def_id);
 
                 /** @brief 对手手牌候选项在候选列表中的遮挡占位文本。 */
                 static constexpr const char *kHiddenHandPlaceholder = "（未知手牌）";
@@ -321,14 +192,7 @@ namespace tkw
                  *       自己可见的牌，一律返回 false。此谓词是候选遮挡的唯一判据。
                  */
                 static bool is_hidden_option(
-                    const DecisionRequest &req, std::size_t index)
-                {
-                    if (req.kind != DecisionKind::PickCard)
-                        return false;
-                    if (index >= req.zone_labels.size())
-                        return true;
-                    return req.zone_labels[index] == card::Zone::Hand;
-                }
+                    const DecisionRequest &req, std::size_t index);
 
                 /**
                  * @brief 处理窗口内 `card <序号>`：打印该候选牌的效果文案。
@@ -369,20 +233,7 @@ namespace tkw
                  * @return 手/装/判对应标签；其余返回空串。
                  * @post 不改变任何状态。
                  */
-                static const char *zone_tag(card::Zone zone)
-                {
-                    switch (zone)
-                    {
-                    case card::Zone::Hand:
-                        return "[手]";
-                    case card::Zone::Equip:
-                        return "[装]";
-                    case card::Zone::Judge:
-                        return "[判]";
-                    default:
-                        return "";
-                    }
-                }
+                static const char *zone_tag(card::Zone zone);
 
                 /**
                  * @brief 打印 1 基编号的牌候选列表。
@@ -396,23 +247,7 @@ namespace tkw
                  */
                 void print_options(
                     const DecisionRequest &req,
-                    const std::vector<card::Card> &options)
-                {
-                    const bool has_zones = req.zone_labels.size() == options.size();
-                    for (std::size_t i = 0; i < options.size(); ++i)
-                    {
-                        m_out << "  " << (i + 1) << ") ";
-                        if (has_zones)
-                            m_out << zone_tag(req.zone_labels[i]) << " ";
-                        if (is_hidden_option(req, i))
-                        {
-                            m_out << kHiddenHandPlaceholder << "\n";
-                            continue;
-                        }
-                        m_out << card::display_name(req.catalog, options[i].def_id)
-                             << " " << options[i].instance_id << "\n";
-                    }
-                }
+                    const std::vector<card::Card> &options);
 
                 /**
                  * @brief  打印重提示分隔行与具体原因，并附 `?` 出口，保留「输入无效」标识。
@@ -443,27 +278,7 @@ namespace tkw
                  * @return 窗口标题文案。
                  * @post 不改变任何状态。
                  */
-                std::string response_title(const DecisionRequest &req, bool pair)
-                {
-                    const bool jink =
-                        req.response_kind == card::ResponseKind::Jink;
-                    const std::string need =
-                        pair ? "需打出两张手牌当杀"
-                             : (jink ? "需打出闪" : "需打出杀");
-                    if (req.response_source.empty())
-                        return pair ? "响应（杀）：打出两张手牌当杀"
-                                    : "响应（" + need + "）";
-
-                    std::string title =
-                        "响应（来源: " + req.response_user + " 的 " +
-                        card::display_name(req.catalog, req.response_source) +
-                        "，" + need;
-                    if (req.response_damage > 0)
-                        title += "；不出将受到 " +
-                                 std::to_string(req.response_damage) + " 点伤害";
-                    title += "）";
-                    return title;
-                }
+                std::string response_title(const DecisionRequest &req, bool pair);
 
                 /**
                  * @brief  亮牌窗口标题：按来源结算分别渲染五谷丰登/麒麟弓/火攻。
@@ -471,21 +286,7 @@ namespace tkw
                  * @return 窗口标题文案。
                  * @post 不改变任何状态。
                  */
-                static std::string reveal_title(const DecisionRequest &req)
-                {
-                    switch (req.reveal_source)
-                    {
-                    case RevealSource::Qilin:
-                        return "麒麟弓：选择目标坐骑";
-                    case RevealSource::FireAttackReveal:
-                        return "火攻：展示一张手牌";
-                    case RevealSource::FireAttackDiscard:
-                        return "火攻：弃一张同花色手牌（可放弃）";
-                    case RevealSource::Wugu:
-                        break;
-                    }
-                    return "五谷丰登亮牌（每名角色依次选一张）";
-                }
+                static std::string reveal_title(const DecisionRequest &req);
 
                 /**
                  * @brief  装备能力一句话效果（只读展示，不打印卡牌 text）。
@@ -493,43 +294,7 @@ namespace tkw
                  * @return 能力效果文案；未知能力回落「装备能力」。
                  * @post 不改变任何状态。
                  */
-                static const char *ability_hint(card::Ability ability)
-                {
-                    switch (ability)
-                    {
-                    case card::Ability::NoShaLimit:
-                        return "出杀不受次数限制";
-                    case card::Ability::IgnoreArmor:
-                        return "无视目标的防具";
-                    case card::Ability::Cixiong:
-                        return "杀唯一异性目标时可令其弃一张手牌或令你摸一张";
-                    case card::Ability::ExtraShaAfterJink:
-                        return "杀被闪后可再出一张杀";
-                    case card::Ability::TwoCardsAsSha:
-                        return "两张手牌可当一张杀";
-                    case card::Ability::DiscardTwoForceDamage:
-                        return "弃两张牌令此杀依然造成伤害";
-                    case card::Ability::MultiTargetSha:
-                        return "杀为最后一张手牌时可额外指定目标";
-                    case card::Ability::DiscardHorseOnDamage:
-                        return "造成伤害后可弃置目标一匹坐骑";
-                    case card::Ability::DamageAsDiscard:
-                        return "可弃置目标两张牌以防止此伤害";
-                    case card::Ability::JudgementJink:
-                        return "需出闪时可判定，红色结果视为闪";
-                    case card::Ability::BlackShaImmune:
-                        return "黑色杀对你无效";
-                    case card::Ability::VineArmor:
-                        return "普通杀与南蛮/万箭对你无效，火焰伤害 +1";
-                    case card::Ability::GudingBlade:
-                        return "杀的目标没有手牌时此伤害 +1";
-                    case card::Ability::SilverLion:
-                        return "单次受到的伤害至多 1 点；失去此装备回复 1 点体力";
-                    case card::Ability::FireShaConvert:
-                        return "普通杀可当具火焰伤害的杀使用（可放弃）";
-                    }
-                    return "装备能力";
-                }
+                static const char *ability_hint(card::Ability ability);
 
                 /**
                  * @brief 无懈窗口提示标题：锦囊使用者（判定窗口使用者不可考 →
@@ -538,49 +303,9 @@ namespace tkw
                  * @return 窗口标题文案。
                  * @post 不改变任何状态。
                  */
-                static std::string counter_title(const DecisionRequest &req)
-                {
-                    std::string title = "无懈可击窗口";
-                    if (req.counter_user.empty())
-                    {
-                        title += "（延时锦囊判定";
-                        if (!req.counter_trick.empty())
-                            title += "：" + card::display_name(
-                                                 req.catalog, req.counter_trick);
-                        title += "）";
-                    }
-                    else
-                    {
-                        title += "（使用者: " + req.counter_user;
-                        if (!req.counter_trick.empty())
-                            title += " 的 " + card::display_name(
-                                                 req.catalog, req.counter_trick);
-                        title += "）";
-                    }
-                    for (std::size_t i = 0; i < req.counter_targets.size(); ++i)
-                    {
-                        if (i > 0)
-                            title += ",";
-                        else
-                            title += "目标: ";
-                        title += req.counter_targets[i];
-                    }
-                    return title;
-                }
+                static std::string counter_title(const DecisionRequest &req);
 
-                static const char *reason_text(DiscardReason reason)
-                {
-                    switch (reason)
-                    {
-                    case DiscardReason::TurnLimit:
-                        return "手牌超上限";
-                    case DiscardReason::AbilityCost:
-                        return "装备能力代价";
-                    case DiscardReason::CixiongChoice:
-                        return "雌雄双股剑（可放弃）";
-                    }
-                    return "弃牌";
-                }
+                static const char *reason_text(DiscardReason reason);
 
                 /**
                  * @brief  从装备区反查携带该能力的装备名；查不到回落「装备能力」。
@@ -588,23 +313,7 @@ namespace tkw
                  * @return 装备名或「装备能力」。
                  * @post 不改变任何状态。
                  */
-                static std::string ability_name(const DecisionRequest &req)
-                {
-                    if (req.catalog)
-                    {
-                        for (const auto &c : req.view.equip)
-                        {
-                            const auto def = req.catalog->find(c.def_id);
-                            if (def.is_none())
-                                continue;
-                            const auto &d = *def.unwrap();
-                            for (const auto ability : d.abilities)
-                                if (ability == req.ability)
-                                    return card::display_name(d);
-                        }
-                    }
-                    return "装备能力";
-                }
+                static std::string ability_name(const DecisionRequest &req);
 
                 /**
                  * @brief  武将触发技一句话效果（只读展示；非触发技回落通用文案）。
@@ -612,23 +321,7 @@ namespace tkw
                  * @return 技能效果文案或「武将技能」。
                  * @post 不改变任何状态。
                  */
-                static const char *hero_skill_hint(hero::HeroSkill skill)
-                {
-                    switch (skill)
-                    {
-                    case hero::HeroSkill::FanKui:
-                        return "受到伤害后，可获得伤害来源一张牌";
-                    case hero::HeroSkill::PaoXiao:
-                    case hero::HeroSkill::WuSheng:
-                    case hero::HeroSkill::YingZi:
-                    case hero::HeroSkill::MaShu:
-                    case hero::HeroSkill::QiCai:
-                    case hero::HeroSkill::LongDan:
-                    case hero::HeroSkill::QingGuo:
-                        return "武将技能";
-                    }
-                    return "武将技能";
-                }
+                static const char *hero_skill_hint(hero::HeroSkill skill);
 
                 /**
                  * @brief  触发窗技能名：武将触发技取技能中文名，装备能力取装备名。
@@ -636,12 +329,7 @@ namespace tkw
                  * @return 技能名或装备名。
                  * @post 不改变任何状态。
                  */
-                static std::string trigger_name(const DecisionRequest &req)
-                {
-                    if (req.hero_trigger)
-                        return hero::display_skill_name(req.hero_skill);
-                    return ability_name(req);
-                }
+                static std::string trigger_name(const DecisionRequest &req);
 
                 /**
                  * @brief  触发窗一句话提示：按装备能力/武将触发技分流。
@@ -649,12 +337,7 @@ namespace tkw
                  * @return 技能/能力效果文案。
                  * @post 不改变任何状态。
                  */
-                static std::string trigger_hint(const DecisionRequest &req)
-                {
-                    if (req.hero_trigger)
-                        return hero_skill_hint(req.hero_skill);
-                    return ability_hint(req.ability);
-                }
+                static std::string trigger_hint(const DecisionRequest &req);
 
                 /**
                  * @brief 借刀杀人候选的受害者是否为决策者本人。
@@ -666,22 +349,7 @@ namespace tkw
                  */
                 static bool is_self_target_borrowed_sword(
                     const DecisionRequest &req, const LegalAction &act,
-                    std::string &holder)
-                {
-                    if (!req.catalog || act.targets.size() != 2 ||
-                        act.targets[1] != req.actor)
-                        return false;
-
-                    const auto def = req.catalog->find(act.card.def_id);
-                    if (def.is_none() || def.unwrap()->effect.is_none())
-                        return false;
-                    if (def.unwrap()->effect.unwrap().kind !=
-                        card::CardEffectKind::BorrowedSword)
-                        return false;
-
-                    holder = act.targets[0];
-                    return true;
-                }
+                    std::string &holder);
 
                 /**
                  * @brief  出牌窗口：渲染合法动作并读取 `play <序号>` / `pass`。
@@ -689,93 +357,7 @@ namespace tkw
                  * @return 选中的动作；`None` = 结束出牌阶段或 EOF。
                  * @post 不改变对局状态；仅读写流。
                  */
-                DecisionChoice decide_play(const DecisionRequest &req)
-                {
-                    DecisionChoice out;
-                    if (req.legal.empty())
-                        return out;
-
-                    for (;;)
-                    {
-                        m_out << "[" << req.actor << "] 出牌阶段：\n";
-                        print_view(req);
-                        for (std::size_t i = 0; i < req.legal.size(); ++i)
-                        {
-                            const auto &act = req.legal[i];
-                            m_out << "  " << (i + 1) << ") "
-                                 << card::display_name(req.catalog, act.card.def_id)
-                                 << " " << act.card.instance_id;
-                            if (act.converted_sha)
-                                m_out << "（当杀）";
-                            if (!act.second_instance_id.empty())
-                                m_out << " + " << act.second_instance_id;
-                            if (!act.targets.empty())
-                            {
-                                m_out << " -> ";
-                                for (std::size_t j = 0; j < act.targets.size(); ++j)
-                                {
-                                    if (j > 0)
-                                        m_out << ",";
-                                    m_out << act.targets[j];
-                                }
-                            }
-                            if (act.recast)
-                                m_out << "（重铸：弃置并摸一张）";
-                            std::string holder;
-                            if (is_self_target_borrowed_sword(req, act, holder))
-                                m_out << "（警告：" << holder
-                                     << " 将对你出杀，可能致你受伤或阵亡）";
-                            m_out << "\n";
-                        }
-                        m_out << "输入 play <序号> 或 pass（" << kCardHint
-                             << "）：" << std::flush;
-
-                        const auto input = read_tokens();
-                        if (input.is_none())
-                            return out;
-
-                        const auto &tokens = input.unwrap();
-                        if (tokens.empty())
-                            continue;
-                        if (tokens.size() == 1 && tokens[0] == "pass")
-                            return out;
-                        if (tokens.size() == 2 && tokens[0] == "card")
-                        {
-                            show_card_or_hint(
-                                req, tokens[1], req.legal,
-                                [](const LegalAction &a) -> const std::string &
-                                { return a.card.def_id; });
-                            continue;
-                        }
-                        if (is_help(tokens))
-                        {
-                            print_help(
-                                "输入 play <序号> 出牌（可连续出牌），"
-                                "pass 结束出牌阶段。");
-                            continue;
-                        }
-
-                        int index = 0;
-                        if (tokens.size() == 2 && tokens[0] == "play")
-                        {
-                            if (parse_index(tokens[1], req.legal.size(), index))
-                            {
-                                const auto &act =
-                                    req.legal[static_cast<std::size_t>(index - 1)];
-                                out.instance_id = Option<std::string>::Some(
-                                    act.card.instance_id);
-                                out.targets = act.targets;
-                                out.second_instance_id = act.second_instance_id;
-                                out.recast = act.recast;
-                                out.converted_sha = act.converted_sha;
-                                return out;
-                            }
-                            print_invalid(index_hint(req.legal.size()));
-                            continue;
-                        }
-                        print_invalid("请输入 play <序号> 或 pass。");
-                    }
-                }
+                DecisionChoice decide_play(const DecisionRequest &req);
 
                 /**
                  * @brief  单张手牌选择（响应/救桃/无懈）：`play <序号>` 或 `pass`。
@@ -787,59 +369,7 @@ namespace tkw
                  * @post 不改变对局状态；仅读写流。
                  */
                 DecisionChoice decide_choose_id(
-                    const DecisionRequest &req, const std::string &title)
-                {
-                    DecisionChoice out;
-                    if (req.options.empty())
-                        return out;
-
-                    for (;;)
-                    {
-                        m_out << "[" << req.actor << "] " << title << "：\n";
-                        print_view(req);
-                        print_options(req, req.options);
-                        m_out << "输入 play <序号> 或 pass（" << kCardHint
-                             << "）：" << std::flush;
-
-                        const auto input = read_tokens();
-                        if (input.is_none())
-                            return out;
-
-                        const auto &tokens = input.unwrap();
-                        if (tokens.empty())
-                            continue;
-                        if (tokens.size() == 1 && tokens[0] == "pass")
-                            return out;
-                        if (tokens.size() == 2 && tokens[0] == "card")
-                        {
-                            show_card_or_hint(
-                                req, tokens[1], req.options,
-                                [](const card::Card &c) -> const std::string &
-                                { return c.def_id; });
-                            continue;
-                        }
-                        if (is_help(tokens))
-                        {
-                            print_help("输入 play <序号> 打出该牌，pass 放弃。");
-                            continue;
-                        }
-
-                        int index = 0;
-                        if (tokens.size() == 2 && tokens[0] == "play")
-                        {
-                            if (parse_index(tokens[1], req.options.size(), index))
-                            {
-                                out.instance_id = Option<std::string>::Some(
-                                    req.options[static_cast<std::size_t>(index - 1)]
-                                        .instance_id);
-                                return out;
-                            }
-                            print_invalid(index_hint(req.options.size()));
-                            continue;
-                        }
-                        print_invalid("请输入 play <序号> 或 pass。");
-                    }
-                }
+                    const DecisionRequest &req, const std::string &title);
 
                 /**
                  * @brief 杀响应窗口、两张手牌当杀（丈八蛇矛）：手牌编号渲染，
@@ -851,74 +381,7 @@ namespace tkw
                  * @post 不改变对局状态；仅读写流。
                  * @note 读取失败（EOF）按放弃处理并立即返回，绝不重提示。
                  */
-                DecisionChoice decide_response_pair(const DecisionRequest &req)
-                {
-                    DecisionChoice out;
-                    const auto &hand = req.view.hand;
-                    if (hand.size() < 2)
-                        return out;
-
-                    for (;;)
-                    {
-                        m_out << "[" << req.actor << "] "
-                             << response_title(req, true) << "：\n";
-                        print_view(req);
-                        for (std::size_t i = 0; i < hand.size(); ++i)
-                            m_out << "  " << (i + 1) << ") "
-                                 << card::display_name(req.catalog, hand[i].def_id)
-                                 << " " << hand[i].instance_id << "\n";
-                        m_out << "输入 play <序号> + <序号> 或 pass（"
-                             << kCardHint << "）：" << std::flush;
-
-                        const auto input = read_tokens();
-                        if (input.is_none())
-                            return out;
-
-                        const auto &tokens = input.unwrap();
-                        if (tokens.empty())
-                            continue;
-                        if (tokens.size() == 1 && tokens[0] == "pass")
-                            return out;
-                        if (tokens.size() == 2 && tokens[0] == "card")
-                        {
-                            show_card_or_hint(
-                                req, tokens[1], hand,
-                                [](const card::Card &c) -> const std::string &
-                                { return c.def_id; });
-                            continue;
-                        }
-                        if (is_help(tokens))
-                        {
-                            print_help(
-                                "输入 play <序号> + <序号> 打出两张手牌当杀，"
-                                "pass 放弃。");
-                            continue;
-                        }
-
-                        if (tokens.size() == 4 && tokens[0] == "play" &&
-                            tokens[2] == "+")
-                        {
-                            int first = 0, second = 0;
-                            if (!parse_index(tokens[1], hand.size(), first) ||
-                                !parse_index(tokens[3], hand.size(), second))
-                            {
-                                print_invalid(index_hint(hand.size()));
-                                continue;
-                            }
-                            if (first == second)
-                            {
-                                print_invalid("两张牌的序号不能相同。");
-                                continue;
-                            }
-                            out.instance_id = Option<std::string>::Some(
-                                hand[static_cast<std::size_t>(first - 1)].instance_id);
-                            out.second_instance_id =
-                                hand[static_cast<std::size_t>(second - 1)].instance_id;
-                            return out;
-                        }
-                        print_invalid("请输入 play <序号> + <序号> 或 pass。");
-                    }
-                }
+                DecisionChoice decide_response_pair(const DecisionRequest &req);
 
                 /**
                  * @brief 从牌池选一张：`pick <序号>`（allow_pass 时或 `pass`）。
@@ -934,75 +397,7 @@ namespace tkw
                  */
                 DecisionChoice decide_pick(
                     const DecisionRequest &req, const std::string &title,
-                    bool allow_pass)
-                {
-                    DecisionChoice out;
-                    if (req.options.empty())
-                        return out;
-
-                    for (;;)
-                    {
-                        m_out << "[" << req.actor << "] " << title;
-                        if (!req.target.empty())
-                            m_out << "（目标: " << req.target << "）";
-                        m_out << "：\n";
-                        print_view(req);
-                        print_options(req, req.options);
-                        if (allow_pass)
-                            m_out << "输入 pick <序号> 或 pass（" << kCardHint
-                                 << "）：" << std::flush;
-                        else
-                            m_out << "输入 pick <序号>（" << kCardHint
-                                 << "）：" << std::flush;
-
-                        const auto input = read_tokens();
-                        if (input.is_none())
-                            return out;
-
-                        const auto &tokens = input.unwrap();
-                        if (tokens.empty())
-                            continue;
-                        if (tokens.size() == 1 && tokens[0] == "pass")
-                        {
-                            if (allow_pass)
-                                return out;
-                            print_invalid("请输入 pick <序号>。");
-                            continue;
-                        }
-                        if (tokens.size() == 2 && tokens[0] == "card")
-                        {
-                            show_card_or_hint(
-                                req, tokens[1], req.options,
-                                [](const card::Card &c) -> const std::string &
-                                { return c.def_id; });
-                            continue;
-                        }
-                        if (is_help(tokens))
-                        {
-                            print_help(
-                                allow_pass
-                                    ? "输入 pick <序号> 选择，pass 放弃。"
-                                    : "输入 pick <序号> 选择（必须选一张）。");
-                            continue;
-                        }
-
-                        int index = 0;
-                        if (tokens.size() == 2 && tokens[0] == "pick")
-                        {
-                            if (parse_index(tokens[1], req.options.size(), index))
-                            {
-                                out.option_index = Option<std::size_t>::Some(
-                                    static_cast<std::size_t>(index - 1));
-                                return out;
-                            }
-                            print_invalid(index_hint(req.options.size()));
-                            continue;
-                        }
-                        print_invalid(
-                            allow_pass ? "请输入 pick <序号> 或 pass。"
-                                       : "请输入 pick <序号>。");
-                    }
-                }
+                    bool allow_pass);
 
                 /**
                  * @brief  弃牌窗口：渲染手牌并读取 `discard <序号>...`（雌雄可选 `pass`）。
@@ -1010,110 +405,7 @@ namespace tkw
                  * @return 要弃置的牌实例 id 列表；空列表表示放弃或 EOF。
                  * @post 不改变对局状态；仅读写流。
                  */
-                DecisionChoice decide_discard(const DecisionRequest &req)
-                {
-                    DecisionChoice out;
-                    if (req.count <= 0)
-                        return out;
-
-                    // 雌雄双股剑二选一：放弃弃牌即令使用者摸一张
-                    const bool can_pass =
-                        req.discard_reason == DiscardReason::CixiongChoice;
-
-                    for (;;)
-                    {
-                        m_out << "[" << req.actor << "] 弃牌（"
-                             << reason_text(req.discard_reason) << "，需弃 "
-                             << req.count << " 张）：\n";
-                        print_view(req);
-                        print_options(req, req.options);
-                        if (can_pass)
-                            m_out << "输入 discard <序号> ... 或 pass（放弃弃牌；"
-                                 << kCardHint << "）：" << std::flush;
-                        else
-                            m_out << "输入 discard <序号> ...（" << kCardHint
-                                 << "）：" << std::flush;
-
-                        const auto input = read_tokens();
-                        if (input.is_none())
-                            return out;  // EOF：空选择，交由引擎报数量不足
-
-                        const auto &tokens = input.unwrap();
-                        if (tokens.empty())
-                            continue;
-                        if (can_pass && tokens.size() == 1 && tokens[0] == "pass")
-                            return out;
-                        if (tokens.size() == 2 && tokens[0] == "card")
-                        {
-                            show_card_or_hint(
-                                req, tokens[1], req.options,
-                                [](const card::Card &c) -> const std::string &
-                                { return c.def_id; });
-                            continue;
-                        }
-                        if (is_help(tokens))
-                        {
-                            print_help(
-                                "输入 discard <序号> ... 弃置 " +
-                                std::to_string(req.count) + " 张牌" +
-                                (can_pass ? "；pass 放弃弃牌。" : "。"));
-                            continue;
-                        }
-                        if (!can_pass && tokens.size() == 1 &&
-                            tokens[0] == "pass")
-                        {
-                            print_invalid(
-                                "弃牌阶段不能 pass：需弃 " +
-                                std::to_string(req.count) +
-                                " 张，请输入 discard <序号> ...。");
-                            continue;
-                        }
-                        if (tokens[0] != "discard")
-                        {
-                            print_invalid(
-                                "请输入 discard <序号> ...（需弃 " +
-                                std::to_string(req.count) + " 张）。");
-                            continue;
-                        }
-                        if (tokens.size() !=
-                            static_cast<std::size_t>(req.count) + 1)
-                        {
-                            print_invalid(
-                                "需弃 " + std::to_string(req.count) +
-                                " 张牌，请给出 " + std::to_string(req.count) +
-                                " 个序号。");
-                            continue;
-                        }
-
-                        std::vector<std::size_t> chosen;
-                        bool valid = true;
-                        for (std::size_t i = 1; i < tokens.size() && valid; ++i)
-                        {
-                            int index = 0;
-                            if (!parse_index(tokens[i], req.options.size(), index))
-                            {
-                                print_invalid(index_hint(req.options.size()));
-                                valid = false;
-                                break;
-                            }
-                            const auto pos = static_cast<std::size_t>(index - 1);
-                            if (std::find(chosen.begin(), chosen.end(), pos) !=
-                                chosen.end())
-                            {
-                                print_invalid("序号不能重复。");
-                                valid = false;
-                                break;
-                            }
-                            chosen.push_back(pos);
-                        }
-                        if (!valid)
-                            continue;
-
-                        for (const auto pos : chosen)
-                            out.discards.push_back(req.options[pos].instance_id);
-                        return out;
-                    }
-                }
+                DecisionChoice decide_discard(const DecisionRequest &req);
 
                 /**
                  * @brief  触发窗口：渲染技能名并读取 `y` / `n`。
@@ -1121,40 +413,7 @@ namespace tkw
                  * @return `accepted` 置位的决策；EOF 时为不发动。
                  * @post 不改变对局状态；仅读写流。
                  */
-                DecisionChoice decide_trigger(const DecisionRequest &req)
-                {
-                    DecisionChoice out;
-                    for (;;)
-                    {
-                        print_view(req);
-                        m_out << "[" << req.actor << "] 发动 " << trigger_name(req)
-                             << "（" << trigger_hint(req) << "）？(y/n)（"
-                             << kHelpHint << "）：" << std::flush;
-
-                        const auto input = read_tokens();
-                        if (input.is_none())
-                            return out;  // EOF：不发动
-
-                        const auto &tokens = input.unwrap();
-                        if (tokens.empty())
-                            continue;
-                        if (is_help(tokens))
-                        {
-                            print_help("输入 y 发动，n 不发动。");
-                            continue;
-                        }
-                        if (tokens.size() == 1 &&
-                            (tokens[0] == "y" || tokens[0] == "yes"))
-                        {
-                            out.accepted = true;
-                            return out;
-                        }
-                        if (tokens.size() == 1 &&
-                            (tokens[0] == "n" || tokens[0] == "no"))
-                            return out;
-                        print_invalid("请输入 y 或 n。");
-                    }
-                }
+                DecisionChoice decide_trigger(const DecisionRequest &req);
             };
 
             /**
