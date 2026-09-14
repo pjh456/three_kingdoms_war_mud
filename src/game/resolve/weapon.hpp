@@ -590,9 +590,13 @@ namespace tkw
                 run_sha_phase(sc, ShaPhase::PreDamage);
                 if (sc.prevented)
                     return;
-                deal_damage(
-                    ctx, ai, attacker, target, amount + sc.damage_bonus,
-                    sc.damage_type, sc.ignore_armor);
+                CombatResolver(ctx, ai).deal_damage(
+                    target, DamageSpec::Builder{}
+                                .source(attacker)
+                                .damage_val(amount + sc.damage_bonus)
+                                .damage_type(sc.damage_type)
+                                .ignore_armor(sc.ignore_armor)
+                                .build());
                 run_sha_phase(sc, ShaPhase::OnHit);
             }
         }

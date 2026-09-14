@@ -1,7 +1,7 @@
 /**
  * @file combat.hpp
  * @brief 战斗流程：伤害 → 濒死救场（桃）→ 死亡声明与击杀奖惩。
- * @details 这是 entity/event.hpp 注释里「由 combat 发布」的职责归属：
+ * @details 战斗流程的状态变化集中于此：
  *          - hp 扣到非正 → 进入濒死：从当前回合角色起按座位序轮询打桃
  *            （无回合上下文时回落濒死者起）；
  *          - 一轮无人可救/不救 → 死亡：区域牌弃置、发布 EntityDiedEvent、移除实体；
@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "card/catalog.hpp"
@@ -38,6 +39,133 @@ namespace tkw
 {
     namespace game
     {
+        /**
+         * @brief 一次伤害结算的只读事实。
+         * @details 把来源、伤害量、属性与两个结算开关归为一个值，调用方按名给出
+         *          字段，不再依赖实参位置。需要按条件分步组装时用 `Builder`。
+         * @note `indirect` 表示该伤害不再触发连环传导；`ignore_armor` 表示本次
+         *       结算跳过防具对伤害量的修正（青釭剑结算窗）。
+         */
+        struct DamageSpec
+        {
+            std::string source;              /**< 伤害来源实体 id；空 = 无来源。 */
+            int damage_val = 0;              /**< 伤害量。 */
+            card::DamageType damage_type = card::DamageType::Normal; /**< 伤害属性。 */
+            bool ignore_armor = false;       /**< 是否无视防具。 */
+            bool indirect = false;           /**< 是否间接伤害（不再传导）。 */
+
+            class Builder; /**< 链式构造器；定义见下。 */
+        };
+
+        /**
+         * @brief `DamageSpec` 的链式构造器（可选字段按需设置）。
+         * @details 每个设置方法名与所设字段同名：调用什么就是设置什么。
+         */
+        class DamageSpec::Builder
+        {
+        public:
+            /**
+             * @brief  设置伤害来源。
+             * @param[in] source 来源实体 id；空串 = 无来源。
+             * @return 本构造器，供链式调用。
+             */
+            Builder &source(std::string source)
+            {
+                m_spec.source = std::move(source);
+                return *this;
+            }
+
+            /**
+             * @brief  设置伤害量。
+             * @param[in] damage_val 伤害量。
+             * @return 本构造器，供链式调用。
+             */
+            Builder &damage_val(int damage_val)
+            {
+                m_spec.damage_val = damage_val;
+                return *this;
+            }
+
+            /**
+             * @brief  设置伤害属性。
+             * @param[in] damage_type 伤害属性。
+             * @return 本构造器，供链式调用。
+             */
+            Builder &damage_type(card::DamageType damage_type)
+            {
+                m_spec.damage_type = damage_type;
+                return *this;
+            }
+
+            /**
+             * @brief  设置是否无视防具。
+             * @param[in] value 为 `true` 时本次伤害跳过防具修正（青釭剑结算窗）。
+             * @return 本构造器，供链式调用。
+             */
+            Builder &ignore_armor(bool value)
+            {
+                m_spec.ignore_armor = value;
+                return *this;
+            }
+
+            /**
+             * @brief  设置是否为间接伤害。
+             * @param[in] value 为 `true` 时该伤害不再触发连环传导。
+             * @return 本构造器，供链式调用。
+             */
+            Builder &indirect(bool value)
+            {
+                m_spec.indirect = value;
+                return *this;
+            }
+
+            /**
+             * @brief  产出组装好的伤害事实。
+             * @return 组装完成的值。
+             */
+            DamageSpec build() const { return m_spec; }
+
+        private:
+            DamageSpec m_spec; /**< 组装中的值。 */
+        };
+
+        /**
+         * @brief 伤害结算操作类：以对局上下文与决策源为依赖，收敛战斗流程。
+         * @details 把「扣血 → 濒死救场 → 死亡与击杀奖惩 → 连环传导」的入口收敛为
+         *          成员函数，构造一次即可在整段结算中复用同一组依赖。
+         * @warning 本类**不拥有** `ctx`/`ai`：二者须比本对象存活更久，且不得跨局
+         *          复用。
+         * @see   DamageSpec
+         */
+        class CombatResolver
+        {
+        public:
+            /**
+             * @brief  绑定对局上下文与决策源。
+             * @param[in,out] ctx 对局上下文；本对象只持引用。
+             * @param[in,out] ai  决策源；濒死救场与受伤触发技继续经它询问。
+             */
+            CombatResolver(GameContext &ctx, DecisionSource &ai)
+                : m_ctx(ctx), m_ai(ai)
+            {
+            }
+
+            /**
+             * @brief  造成伤害（战斗流程入口）。
+             * @param[in] target 受伤实体 id；不存在时直接返回。
+             * @param[in] spec   本次伤害的只读事实（来源/量/属性/开关）。
+             * @post   目标 hp 已扣减；进入濒死则已完成救场/死亡/击杀奖惩；非间接
+             *         属性伤害命中横置目标时已按快照完成传导。
+             * @note   白银狮子上限在全部加成累加之后施加，对每次伤害实例独立生效；
+             *         连环传导不递归。
+             */
+            void deal_damage(const std::string &target, const DamageSpec &spec);
+
+        private:
+            GameContext &m_ctx;   /**< 对局上下文（引用，非拥有）。 */
+            DecisionSource &m_ai; /**< 决策源（引用，非拥有）。 */
+        };
+
         /**
          * @brief 玩家手牌中是否有可作濒死救场的牌。
          * @param[in] ctx     只读上下文。
@@ -268,77 +396,55 @@ namespace tkw
             int amount, card::DamageType type,
             const std::vector<std::string> &chain_targets);
 
-        /**
-         * @brief 造成伤害（流程入口）：扣血 → 濒死判定 → 死亡与击杀奖惩。
-         * @param[in] ctx          对局上下文。
-         * @param[in] ai           决策源；濒死救场与受伤触发技使用。
-         * @param[in] source       伤害来源（空串 = 无来源如闪电；为存活玩家时按模式
-         *                         与角色发奖惩）。
-         * @param[in] target       受伤实体 id；不存在时直接返回。
-         * @param[in] amount       伤害量（经防具上限等修正后落地）。
-         * @param[in] type         伤害属性（默认普通；火焰/雷电透传到受伤事件）。
-         * @param[in] ignore_armor 本次伤害是否无视防具（青釭剑结算窗）：为真时白银
-         *                         狮子的伤害上限不生效。
-         * @param[in] indirect     是否间接伤害（连环传导）：为真时本伤害不再触发新
-         *                         的传导。
-         * @post 目标 hp 已扣减；若进入濒死则已完成救场/死亡/击杀奖惩；非间接属性
-         *       伤害命中横置目标时已按快照完成传导。
-         * @note 白银狮子上限在全部加成（酒/藤甲/古锭刀）累加之后施加，对每一次
-         *       伤害实例独立生效。
-         * @note 连环：非间接的属性伤害命中横置目标时，先快照其余横置者（座位序、
-         *       从目标下家环绕）并重置目标，待原伤害完整结算（含濒死/死亡）后按
-         *       快照依次传导同来源、同属性、同实际伤害值；传导不递归。
-         */
-        inline void deal_damage(
-            GameContext &ctx, DecisionSource &ai, const std::string &source,
-            const std::string &target, int amount,
-            card::DamageType type = card::DamageType::Normal,
-            bool ignore_armor = false, bool indirect = false)
+        inline void CombatResolver::deal_damage(
+            const std::string &target, const DamageSpec &spec)
         {
-            const auto e = ctx.entities->find(target);
+            const auto e = m_ctx.entities->find(target);
             if (e.is_none())
                 return;
 
             // 连环起点：非间接的正属性伤害命中横置目标。先快照其余横置者
             // （原伤害结算前，死亡/移除不影响名单），再重置目标本身
             const bool chain_origin =
-                !indirect && amount > 0 && is_elemental_damage(type) &&
-                e.unwrap()->get_chained();
+                !spec.indirect && spec.damage_val > 0 &&
+                is_elemental_damage(spec.damage_type) && e.unwrap()->get_chained();
             std::vector<std::string> chain_targets;
             if (chain_origin)
             {
                 for (const auto &id :
-                     ctx.entities->order_from(ctx.entities->next(target)))
-                    if (id != target && is_chained(ctx, id))
+                     m_ctx.entities->order_from(m_ctx.entities->next(target)))
+                    if (id != target && is_chained(m_ctx, id))
                         chain_targets.push_back(id);
                 e.unwrap()->set_chained(false);
             }
 
             // 白银狮子：单次伤害至多 1 点；青釭剑结算窗内无视防具则不封顶
-            if (!ignore_armor && amount > 1 &&
-                has_ability(ctx, target, card::Ability::SilverLion))
+            int amount = spec.damage_val;
+            if (!spec.ignore_armor && amount > 1 &&
+                has_ability(m_ctx, target, card::Ability::SilverLion))
                 amount = 1;
 
             const int applied =
-                e.unwrap()->take_damage(source, amount, indirect, type);
+                e.unwrap()->take_damage(spec.source, amount, spec.indirect, spec.damage_type);
 
             // 伤害落定后的武将触发技：早于濒死判定（致死不豁免）
-            run_after_damage_skills(ctx, ai, target, source, applied);
+            run_after_damage_skills(m_ctx, m_ai, target, spec.source, applied);
 
             if (e.unwrap()->get_hp() > 0)
             {
                 if (chain_origin)
                     propagate_chain_damage(
-                        ctx, ai, source, applied, type, chain_targets);
+                        m_ctx, m_ai, spec.source, applied, spec.damage_type, chain_targets);
                 return;
             }
 
-            const bool died = resolve_dying(ctx, ai, target);
-            if (died && !source.empty())
-                apply_kill_effect(ctx, source, target);
+            const bool died = resolve_dying(m_ctx, m_ai, target);
+            if (died && !spec.source.empty())
+                apply_kill_effect(m_ctx, spec.source, target);
 
             if (chain_origin)
-                propagate_chain_damage(ctx, ai, source, applied, type, chain_targets);
+                propagate_chain_damage(
+                    m_ctx, m_ai, spec.source, applied, spec.damage_type, chain_targets);
         }
 
         inline void propagate_chain_damage(
@@ -352,8 +458,38 @@ namespace tkw
                 if (e.is_none() || !e.unwrap()->get_chained())
                     continue;
                 e.unwrap()->set_chained(false);
-                deal_damage(ctx, ai, source, t, amount, type, false, true);
+                CombatResolver(ctx, ai).deal_damage(
+                    t, DamageSpec::Builder{}
+                           .source(source)
+                           .damage_val(amount)
+                           .damage_type(type)
+                           .indirect(true)
+                           .build());
             }
+        }
+
+        /**
+         * @brief 造成伤害（便捷转发）。
+         * @details 等价于 `CombatResolver(ctx, ai).deal_damage(target, spec)`；
+         *          保留以兼容既有调用点与测试。
+         * @param[in,out] ctx          对局上下文。
+         * @param[in,out] ai           决策源。
+         * @param[in]     source       伤害来源（空串 = 无来源）。
+         * @param[in]     target       受伤实体 id。
+         * @param[in]     amount       伤害量。
+         * @param[in]     type         伤害属性。
+         * @param[in]     ignore_armor 是否无视防具。
+         * @param[in]     indirect     是否间接伤害。
+         * @see CombatResolver::deal_damage
+         */
+        inline void deal_damage(
+            GameContext &ctx, DecisionSource &ai, const std::string &source,
+            const std::string &target, int amount,
+            card::DamageType type = card::DamageType::Normal,
+            bool ignore_armor = false, bool indirect = false)
+        {
+            CombatResolver(ctx, ai).deal_damage(
+                target, DamageSpec{source, amount, type, ignore_armor, indirect});
         }
     }
 }

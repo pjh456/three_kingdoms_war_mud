@@ -149,8 +149,12 @@ namespace tkw
 
             case card::JudgeAction::Damage:
                 discard_and_emit(ctx, player, delayed_card);
-                deal_damage(ctx, ai, "", player, def.judge.unwrap().amount,
-                            def.judge.unwrap().damage_type);
+                CombatResolver(ctx, ai)
+                    .deal_damage(
+                        player, DamageSpec::Builder{}
+                                    .damage_val(def.judge.unwrap().amount)
+                                    .damage_type(def.judge.unwrap().damage_type)
+                                    .build());
                 return TurnResult<DelayedOutcome>::Ok(
                     DelayedOutcome::LightningStruck);
 

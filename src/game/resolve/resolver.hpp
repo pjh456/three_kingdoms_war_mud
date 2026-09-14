@@ -221,7 +221,12 @@ namespace tkw
                             : request_jink(e.ctx, e.ai, t, prompt);
                     }
                     if (!responded)
-                        deal_damage(e.ctx, e.ai, e.player, t, e.eff.amount);
+                        CombatResolver(e.ctx, e.ai)
+                            .deal_damage(
+                                t, DamageSpec::Builder{}
+                                       .source(e.player)
+                                       .damage_val(e.eff.amount)
+                                       .build());
                 }
                 return GameResult<void>::Ok();
             }
@@ -338,7 +343,12 @@ namespace tkw
                             e.ctx, e.ai, defender, "",
                             {e.def.id, e.player, e.eff.amount}))
                     {
-                        deal_damage(e.ctx, e.ai, attacker, defender, e.eff.amount);
+                        CombatResolver(e.ctx, e.ai)
+                            .deal_damage(
+                                defender, DamageSpec::Builder{}
+                                              .source(attacker)
+                                              .damage_val(e.eff.amount)
+                                              .build());
                         return GameResult<void>::Ok();
                     }
                     std::swap(attacker, defender);
@@ -542,7 +552,13 @@ namespace tkw
                 int amount = e.eff.amount;
                 if (has_ability(e.ctx, target, card::Ability::VineArmor))
                     amount += 1;
-                deal_damage(e.ctx, e.ai, e.player, target, amount, e.eff.damage_type);
+                CombatResolver(e.ctx, e.ai)
+                    .deal_damage(
+                        target, DamageSpec::Builder{}
+                                    .source(e.player)
+                                    .damage_val(amount)
+                                    .damage_type(e.eff.damage_type)
+                                    .build());
                 return GameResult<void>::Ok();
             }
 
