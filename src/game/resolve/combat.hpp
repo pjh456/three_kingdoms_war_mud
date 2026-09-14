@@ -1,14 +1,15 @@
 /**
  * @file combat.hpp
  * @brief 战斗流程：伤害 → 濒死救场（桃）→ 死亡声明与击杀奖惩。
- * @note 这是 entity/event.hpp 注释里「由 combat 发布」的职责归属：
- *       - hp 扣到非正 → 进入濒死：从当前回合角色起按座位序轮询打桃
- *         （无回合上下文时回落濒死者起）；
- *       - 一轮无人可救/不救 → 死亡：区域牌弃置、发布 EntityDiedEvent、移除实体；
- *       - 击杀奖惩：乱斗按通用规则给击杀者发奖励，身份局按死者角色与击杀者
- *         身份结算（击杀反贼发奖励；主公击杀忠臣弃光其手牌与装备；其余无奖）。
+ * @details 这是 entity/event.hpp 注释里「由 combat 发布」的职责归属：
+ *          - hp 扣到非正 → 进入濒死：从当前回合角色起按座位序轮询打桃
+ *            （无回合上下文时回落濒死者起）；
+ *          - 一轮无人可救/不救 → 死亡：区域牌弃置、发布 EntityDiedEvent、移除实体；
+ *          - 击杀奖惩：乱斗按通用规则给击杀者发奖励，身份局按死者角色与击杀者
+ *            身份结算（击杀反贼发奖励；主公击杀忠臣弃光其手牌与装备；其余无奖）。
  * @note 无武将技能：能作濒死救场牌的只有资源标记 rescue（救任意人）或
  *       self_rescue（仅濒死者本人，如酒）的牌。
+ * @ingroup tkw_game_resolve
  */
 
 #ifndef INCLUDE_TKW_GAME_COMBAT_HPP
@@ -39,7 +40,12 @@ namespace tkw
     {
         /**
          * @brief 玩家手牌中是否有可作濒死救场的牌。
-         * @param is_self 该玩家是否为濒死者本人：救自己时酒（self_rescue）也可用。
+         * @param[in] ctx     只读上下文。
+         * @param[in] player  被查询的实体 id。
+         * @param[in] is_self 该玩家是否为濒死者本人：救自己时酒（self_rescue）也可用。
+         * @return 有可救场牌时为 true；否则 false。
+         * @retval true  手牌中至少一张满足当前救者身份的救援标记。
+         * @retval false 手牌为空或无符合标记的牌。
          */
         inline bool has_rescue(
             const GameContext &ctx, const std::string &player, bool is_self)
@@ -50,7 +56,16 @@ namespace tkw
                 { return can_rescue_def(def, is_self); });
         }
 
-        /** @brief 消耗玩家指定的救场牌（按救者身份校验）；失败返回 false。 */
+        /**
+         * @brief 消耗玩家指定的救场牌（按救者身份校验）。
+         * @param[in] ctx         对局上下文。
+         * @param[in] player      救者实体 id。
+         * @param[in] instance_id 选中的手牌 instance_id。
+         * @param[in] is_self     救者是否为濒死者本人（决定酒是否可用）。
+         * @return 成功消费时为 true；否则 false。
+         * @retval true  该牌满足救场标记，已移出手牌并按响应语义弃置。
+         * @retval false 选择非法或牌不满足身份条件；状态不变。
+         */
         inline bool consume_rescue(
             GameContext &ctx, const std::string &player,
             const std::string &instance_id, bool is_self)
@@ -63,7 +78,14 @@ namespace tkw
                 .is_some();
         }
 
-        /** @brief 死亡清场：手牌/装备/判定区全部置入弃牌堆，移除实体并发布死亡事件。 */
+        /**
+         * @brief 死亡清场：区域牌全部置入弃牌堆，移除实体并发布死亡事件。
+         * @param[in] ctx    对局上下文。
+         * @param[in] player 死亡实体 id。
+         * @post 该实体手牌/装备/判定区全部进入弃牌堆、逐个发布弃置事件；发布
+         *       `EntityDiedEvent` 并从实体表移除该 id。
+         * @note 已移除或未知 id 时按空处理（不报错）。
+         */
         inline void declare_death(GameContext &ctx, const std::string &player)
         {
             for (const auto &c : ctx.cards->discard_all(player))
@@ -76,9 +98,15 @@ namespace tkw
 
         /**
          * @brief 濒死救场：hp ≤ 0 时从当前回合角色起按座位序轮询打桃。
+         * @param[in] ctx   对局上下文。
+         * @param[in] ai    决策源；逐救者询问是否出桃/酒。
+         * @param[in] dying 濒死实体 id。
+         * @return 濒死者最终是否死亡。
+         * @retval true  死亡：无人相救或轮次耗尽，`declare_death` 已执行。
+         * @retval false 救回：hp > 0。
+         * @post 救回时已消费相应救场牌并回血；死亡时区域牌已弃置、实体已移除。
          * @note 起点取 ctx.turn_player；为空或该角色已离场时回落濒死者，
          *       以保留 execute_turn 外直接调用的语义。
-         * @return true = 死亡；false = 救回（hp > 0）。
          */
         inline bool resolve_dying(
             GameContext &ctx, DecisionSource &ai, const std::string &dying)
@@ -140,7 +168,10 @@ namespace tkw
 
         /**
          * @brief 弃光某玩家的手牌与装备（逐张移除并发布弃置事件）。
-         * @param player 被弃牌玩家。
+         * @param[in] ctx    对局上下文。
+         * @param[in] player 被弃牌玩家。
+         * @post 该玩家手牌与装备区清空，逐张进入弃牌堆并发弃置事件；装备区失去
+         *       时联动 `apply_equip_lost`。
          * @note 不含判定区：判定区多是他人置入的延时锦囊，不属于「手牌与装备」。
          */
         inline void discard_hand_and_equip(GameContext &ctx, const std::string &player)
@@ -170,8 +201,10 @@ namespace tkw
 
         /**
          * @brief 击杀奖惩：乱斗给击杀者通用奖励，身份局按角色结算。
-         * @param source 伤害来源（空串或已不在场 = 无奖惩）。
-         * @param target 死亡角色。
+         * @param[in] ctx    对局上下文。
+         * @param[in] source 伤害来源（空串或已不在场 = 无奖惩）。
+         * @param[in] target 死亡角色。
+         * @post 有奖惩时来源摸 `kill_reward` 张，或主公的来源被弃光手牌与装备。
          * @note 身份局：击杀反贼给来源摸 kill_reward 张；主公击杀忠臣弃光其手牌
          *       与装备（不含判定区）；主公/内奸/未知角色无奖励。
          *       奖励摸牌在事件日志中带「击杀奖励」标签。
@@ -204,7 +237,13 @@ namespace tkw
             }
         }
 
-        /** @brief 是否为连环传导会触发的属性伤害（火/雷；普通不触发）。 */
+        /**
+         * @brief 是否为连环传导会触发的属性伤害（火/雷；普通不触发）。
+         * @param[in] type 伤害属性。
+         * @return 火或雷时为 true；普通为 false。
+         * @retval true  `DamageType::Fire` 或 `DamageType::Thunder`。
+         * @retval false 普通或其他属性。
+         */
         inline bool is_elemental_damage(card::DamageType type)
         {
             return type == card::DamageType::Fire ||
@@ -213,7 +252,13 @@ namespace tkw
 
         /**
          * @brief 连环传导：对快照中的其余横置者逐个以间接伤害结算。
-         * @param chain_targets 原伤害结算前按座位序快照的横置者 id。
+         * @param[in] ctx           对局上下文。
+         * @param[in] ai            决策源；传导伤害的濒死/技能流程继续用。
+         * @param[in] source        伤害来源实体 id（空串 = 无来源）。
+         * @param[in] amount        实际传导伤害量。
+         * @param[in] type          伤害属性（火/雷）。
+         * @param[in] chain_targets 原伤害结算前按座位序快照的横置者 id。
+         * @post 名单中仍在场且仍横置者各受一次间接伤害并重置连环状态。
          * @note 每个受传导者先重置再结算；传导伤害为间接伤害，不再触发下一轮
          *       传导（官方「经由连环传导的伤害不能再次被传导」）。前序结算中
          *       死亡/已重置者跳过，保证每个受传导者恰受一次。
@@ -225,11 +270,19 @@ namespace tkw
 
         /**
          * @brief 造成伤害（流程入口）：扣血 → 濒死判定 → 死亡与击杀奖惩。
-         * @param source 伤害来源（空串 = 无来源如闪电；为存活玩家时按模式与角色发奖惩）。
-         * @param type 伤害属性（默认普通；火焰/雷电透传到受伤事件）。
-         * @param ignore_armor 本次伤害是否无视防具（青釭剑结算窗）：为真时白银狮子
-         *        的伤害上限不生效。
-         * @param indirect 是否间接伤害（连环传导）：为真时本伤害不再触发新的传导。
+         * @param[in] ctx          对局上下文。
+         * @param[in] ai           决策源；濒死救场与受伤触发技使用。
+         * @param[in] source       伤害来源（空串 = 无来源如闪电；为存活玩家时按模式
+         *                         与角色发奖惩）。
+         * @param[in] target       受伤实体 id；不存在时直接返回。
+         * @param[in] amount       伤害量（经防具上限等修正后落地）。
+         * @param[in] type         伤害属性（默认普通；火焰/雷电透传到受伤事件）。
+         * @param[in] ignore_armor 本次伤害是否无视防具（青釭剑结算窗）：为真时白银
+         *                         狮子的伤害上限不生效。
+         * @param[in] indirect     是否间接伤害（连环传导）：为真时本伤害不再触发新
+         *                         的传导。
+         * @post 目标 hp 已扣减；若进入濒死则已完成救场/死亡/击杀奖惩；非间接属性
+         *       伤害命中横置目标时已按快照完成传导。
          * @note 白银狮子上限在全部加成（酒/藤甲/古锭刀）累加之后施加，对每一次
          *       伤害实例独立生效。
          * @note 连环：非间接的属性伤害命中横置目标时，先快照其余横置者（座位序、

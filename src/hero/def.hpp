@@ -1,11 +1,12 @@
 /**
- * @file def.hpp
- * @brief 武将域值类型：技能封闭枚举 + 不可变 HeroDef（武将定义）。
- * @note 本文件不含任何 JSON 解析（归 catalog.hpp）。HeroDef 是纯值类型：
- *       解析器产出后即独立于 Document 生命周期，可直接值拷贝/比较。
- * @note skills 是「配置数据 ↔ 代码语义」的接缝：JSON 技能名在加载期解析为
- *       枚举，未知技能名直接 InvalidValue 失败；行为实现状态见
- *       game/core/effect.hpp 的 hero_skill_traits，本支撑域只承载数据。
+ * @file   def.hpp
+ * @brief  武将域值类型：技能封闭枚举 `HeroSkill` + 不可变 `HeroDef`。
+ * @details 本文件不含任何 JSON 解析（归 `catalog.hpp`）。`HeroDef` 是纯值类型：
+ *          解析器产出后即独立于 `Document` 生命周期，可直接值拷贝/比较。
+ * @note   `skills` 是「配置数据 ↔ 代码语义」的接缝：JSON 技能名在加载期解析为
+ *         枚举，未知技能名直接 `InvalidValue` 失败；行为实现状态见
+ *         `game/core/effect.hpp` 的 `hero_skill_traits`，本支撑域只承载数据。
+ * @ingroup tkw_hero
  */
 
 #ifndef INCLUDE_TKW_HERO_DEF_HPP
@@ -50,12 +51,13 @@ namespace tkw
             std::vector<HeroSkill> skills; /**< 技能列表（引用序） */
             std::string text;              /**< 技能文案（仅展示） */
 
-            bool operator==(const HeroDef &) const = default;
+            bool operator==(const HeroDef &) const = default; /**< 逐字段相等；@return 全等。 */
         };
 
         /**
-         * @brief 武将展示名：name 非空取 name，否则回落 id。
-         * @return 引用指向 def 自身字段（name 或 id），生命周期同 def。
+         * @brief  武将展示名：`name` 非空取 `name`，否则回落 `id`。
+         * @param[in] def 武将定义。
+         * @return 引用指向 `def` 自身字段（`name` 或 `id`），生命周期同 `def`。
          */
         inline const std::string &display_hero_name(const HeroDef &def) noexcept
         {

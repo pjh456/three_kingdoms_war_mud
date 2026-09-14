@@ -1,9 +1,10 @@
 /**
  * @file effect.hpp
- * @brief 效果类别与装备能力的属性表及卡牌响应分类谓词：CardEffectKind 的「能否结算 /
- *        可否主动打出 / 是否杀 / 是否需选目标牌」、Ability 的实现状态集中一处，
- *        消除散落的 switch。
- * @note 新增效果/能力只需在对应表加一行（效果另需补 resolve_play 结算分支）。
+ * @brief 效果类别与装备能力的静态属性表及卡牌响应分类谓词。
+ * @details 集中 `CardEffectKind` 的「能否结算 / 可否主动打出 / 是否杀 / 是否
+ *          需选目标牌」、`Ability` 与武将技能的实现状态，消除散落的 switch。
+ * @note 新增效果/能力只需在对应表加一行（效果另需补 `resolve_play` 结算分支）。
+ * @ingroup tkw_game_core
  */
 
 #ifndef INCLUDE_TKW_GAME_EFFECT_HPP
@@ -27,7 +28,11 @@ namespace tkw
             bool target_card = false; /**< 是否需从目标区域选牌（拆/顺） */
         };
 
-        /** @brief 效果类别 → 属性。未知值一律取默认（未实现/不可主动）。 */
+        /**
+         * @brief  效果类别 → 属性。
+         * @param[in] k 效果类别。
+         * @return 该类别的静态属性；未知值取默认（未实现/不可主动）。
+         */
         inline constexpr EffectTraits effect_traits(card::CardEffectKind k)
         {
             using E = card::CardEffectKind;
@@ -61,7 +66,11 @@ namespace tkw
             bool implemented = false; /**< 引擎是否已实现该能力结算 */
         };
 
-        /** @brief 装备能力 → 属性。未知值一律取默认（未实现）。 */
+        /**
+         * @brief  装备能力 → 属性。
+         * @param[in] a 装备能力。
+         * @return 该能力的静态属性；未知值取默认（未实现）。
+         */
         inline constexpr AbilityTraits ability_traits(card::Ability a)
         {
             using A = card::Ability;
@@ -87,7 +96,11 @@ namespace tkw
             return {};
         }
 
-        /** @brief 装备能力引擎尚未实现（牌堆审计用）。 */
+        /**
+         * @brief  装备能力引擎尚未实现（牌堆审计用）。
+         * @param[in] a 装备能力。
+         * @return 未实现时为 true。
+         */
         inline constexpr bool is_unimplemented_ability(card::Ability a)
         {
             return !ability_traits(a).implemented;
@@ -99,7 +112,11 @@ namespace tkw
             bool implemented = false; /**< 引擎是否已实现该技能结算 */
         };
 
-        /** @brief 武将技能 → 属性。未知值一律取默认（未实现）。 */
+        /**
+         * @brief  武将技能 → 属性。
+         * @param[in] s 武将技能。
+         * @return 该技能的静态属性；未知值取默认（未实现）。
+         */
         inline constexpr HeroSkillTraits hero_skill_traits(hero::HeroSkill s)
         {
             using H = hero::HeroSkill;
@@ -125,40 +142,65 @@ namespace tkw
             return {};
         }
 
-        /** @brief 武将技能引擎尚未实现（武将审计用）。 */
+        /**
+         * @brief  武将技能引擎尚未实现（武将审计用）。
+         * @param[in] s 武将技能。
+         * @return 未实现时为 true。
+         */
         inline constexpr bool is_unimplemented_skill(hero::HeroSkill s)
         {
             return !hero_skill_traits(s).implemented;
         }
 
-        /** @brief 可主动打出且引擎能结算（resolve_play 接受）。 */
+        /**
+         * @brief  可主动打出且引擎能结算（`resolve_play` 接受）。
+         * @param[in] k 效果类别。
+         * @return 已实现且可主动打出时为 true。
+         */
         inline constexpr bool is_settleable_kind(card::CardEffectKind k)
         {
             const auto t = effect_traits(k);
             return t.implemented && t.active;
         }
 
-        /** @brief 本应可主动打出但引擎尚未实现（牌堆审计用）。 */
+        /**
+         * @brief  本应可主动打出但引擎尚未实现（牌堆审计用）。
+         * @param[in] k 效果类别。
+         * @return 可主动打出但未实现时为 true。
+         */
         inline constexpr bool is_unimplemented_active_kind(card::CardEffectKind k)
         {
             const auto t = effect_traits(k);
             return t.active && !t.implemented;
         }
 
-        /** @brief 该效果是否为「杀」。 */
+        /**
+         * @brief  该效果是否为「杀」。
+         * @param[in] k 效果类别。
+         * @return 属于「杀」时为 true。
+         */
         inline constexpr bool is_sha_kind(card::CardEffectKind k)
         {
             return effect_traits(k).sha;
         }
 
-        /** @brief 该定义是否为「延时锦囊」（锦囊、有判定描述、无主动效果）。 */
+        /**
+         * @brief  该定义是否为「延时锦囊」。
+         * @param[in] def 卡牌定义。
+         * @return 锦囊、有判定描述且无主动效果时为 true。
+         */
         inline bool is_delayed_trick(const card::CardDef &def)
         {
             return def.type == card::CardType::Trick && def.effect.is_none() &&
                    def.judge.is_some();
         }
 
-        /** @brief 该定义是否可作为指定响应牌（杀=effect.kind==Damage，闪==Jink）。 */
+        /**
+         * @brief  该定义是否可作为指定响应牌。
+         * @param[in] def  卡牌定义。
+         * @param[in] kind 响应牌类别（杀 = effect.kind == Damage，闪 = Jink）。
+         * @return 可作为该响应牌时为 true；无主动效果时为 false。
+         */
         inline bool is_response_def(const card::CardDef &def, card::ResponseKind kind)
         {
             if (def.effect.is_none())
@@ -174,21 +216,30 @@ namespace tkw
             return false;
         }
 
-        /** @brief 该定义是否可作濒死救场牌（数据标记 rescue，不再认 id）。 */
+        /**
+         * @brief  该定义是否可作濒死救场牌。
+         * @param[in] def 卡牌定义。
+         * @return 数据标记 `rescue` 为 true 时成立（不再认 id）。
+         */
         inline bool is_rescue_def(const card::CardDef &def)
         {
             return def.rescue;
         }
 
-        /** @brief 该定义是否仅能救自己（数据标记 self_rescue，如酒）。 */
+        /**
+         * @brief  该定义是否仅能救自己。
+         * @param[in] def 卡牌定义。
+         * @return 数据标记 `self_rescue` 为 true 时成立（如酒）。
+         */
         inline bool is_self_rescue_def(const card::CardDef &def)
         {
             return def.self_rescue;
         }
 
         /**
-         * @brief 该定义能否作为一次濒死救场牌。
-         * @param is_self saver 是否为濒死者本人。
+         * @brief  该定义能否作为一次濒死救场牌。
+         * @param[in] def     卡牌定义。
+         * @param[in] is_self saver 是否为濒死者本人。
          * @return rescue 牌（桃）对任意 saver 成立；self_rescue 牌（酒）仅对
          *         濒死者本人成立。
          */
@@ -197,7 +248,11 @@ namespace tkw
             return is_rescue_def(def) || (is_self && is_self_rescue_def(def));
         }
 
-        /** @brief 该定义是否可作无懈响应牌（数据标记 counter，不再认 id）。 */
+        /**
+         * @brief  该定义是否可作无懈响应牌。
+         * @param[in] def 卡牌定义。
+         * @return 数据标记 `counter` 为 true 时成立（不再认 id）。
+         */
         inline bool is_counter_def(const card::CardDef &def)
         {
             return def.counter;
@@ -213,10 +268,12 @@ namespace tkw
         };
 
         /**
-         * @brief 按卡牌定义分类出牌阶段的打出路径。
-         * @note 纯静态分类（只看定义）：先装备、再延时锦囊、后有无主动效果；
-         *       「杀」是状态规则（依赖回合上下文），保持正交谓词 is_sha_kind，
-         *       不作第 5 个分类值。
+         * @brief  按卡牌定义分类出牌阶段的打出路径。
+         * @param[in] def 卡牌定义。
+         * @return 该定义对应的打出路径分类。
+         * @note  纯静态分类（只看定义）：先装备、再延时锦囊、后有无主动效果；
+         *        「杀」是状态规则（依赖回合上下文），保持正交谓词
+         *        `is_sha_kind`，不作第 5 个分类值。
          */
         inline PlayClass classify_action(const card::CardDef &def)
         {

@@ -1,3 +1,10 @@
+/**
+ * @file   error.hpp
+ * @brief  配置层错误类型与模块级 `Result` 别名。
+ * @details 统一表示资源加载与字段提取的失败原因，detail 携带人类可读上下文。
+ * @ingroup tkw_config
+ */
+
 #ifndef INCLUDE_TKW_CONFIG_ERROR_HPP
 #define INCLUDE_TKW_CONFIG_ERROR_HPP
 
@@ -17,27 +24,33 @@ namespace tkw
          */
         enum class ConfigErrorKind : std::uint8_t
         {
-            FileNotFound, /**< 资源文件不存在 */
-            IoFailed,     /**< 文件 I/O 失败（非常规文件/无权限/其他） */
-            ParseError,   /**< JSON 解析失败（detail 带字节 offset） */
-            MissingField, /**< 必填字段缺失 */
-            TypeMismatch, /**< 字段类型不符 */
-            InvalidValue, /**< 字段值非法（未知枚举/越界；通常由域模块判定） */
+            FileNotFound, /**< 资源文件不存在。 */
+            IoFailed,     /**< 文件 I/O 失败（非常规文件/无权限/其他）。 */
+            ParseError,   /**< JSON 解析失败（detail 带字节 offset）。 */
+            MissingField, /**< 必填字段缺失。 */
+            TypeMismatch, /**< 字段类型不符。 */
+            InvalidValue, /**< 字段值非法（未知枚举/越界；通常由域模块判定）。 */
         };
 
         /**
-         * @brief 配置错误值：类别 + 上下文（文件路径或字段路径，如 "cards[3].damage"）。
+         * @brief 配置错误值：类别 + 上下文（文件路径或字段路径，如 `cards[3].damage`）。
          */
         struct ConfigError
         {
-            ConfigErrorKind kind = ConfigErrorKind::ParseError;
-            std::string detail;
+            ConfigErrorKind kind = ConfigErrorKind::ParseError; /**< 错误类别。 */
+            std::string detail; /**< 上下文文本：文件路径或字段路径。 */
 
+            /**
+             * @brief  比较两个错误值是否等价。
+             * @return `true` 表示 `kind` 与 `detail` 均相等。
+             */
             bool operator==(const ConfigError &) const = default;
         };
 
         /**
-         * @brief 模块级 Result 别名：错误槽固定为 ConfigError。
+         * @brief  模块级 Result 别名：错误槽固定为 `ConfigError`。
+         * @tparam T 成功时的值类型。
+         * @see    ConfigError
          */
         template <typename T>
         using ConfigResult = Result<T, ConfigError>;

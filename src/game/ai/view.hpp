@@ -1,7 +1,9 @@
 /**
- * @file view.hpp
- * @brief AiView：从某名玩家视角抽取的紧凑、只读局面观察。
- * @note 纯函数，不持有状态；决策只依赖它 + TurnContext，保证可回放/可存档。
+ * @file   view.hpp
+ * @brief  AiView：从某名玩家视角抽取的紧凑、只读局面观察。
+ * @details 纯函数构造，不持有状态；决策只依赖它 + TurnContext，保证可回放/可存档。
+ *          本层属只读 AI：只拷贝必要数据，不引用也不修改对局内部容器。
+ * @ingroup tkw_game_ai
  */
 
 #ifndef INCLUDE_TKW_GAME_VIEW_HPP
@@ -27,13 +29,13 @@ namespace tkw
             /** @brief 对手视角条目（手牌仅可见数量，装备/判定区明置）。 */
             struct EnemyView
             {
-                std::string id;
-                int seat = 0;
-                int hp = 0;
-                int max_hp = 0;
-                int hand_size = 0;
-                int equip_count = 0;
-                bool has_weapon = false;
+                std::string id;              /**< 对手玩家 id */
+                int seat = 0;                /**< 座位号 */
+                int hp = 0;                  /**< 当前体力 */
+                int max_hp = 0;              /**< 体力上限 */
+                int hand_size = 0;           /**< 手牌数量（内容不可见） */
+                int equip_count = 0;         /**< 装备区牌数 */
+                bool has_weapon = false;     /**< 装备区是否含武器 */
                 int distance = 0;          /**< 自己到该角色的调整后距离 */
                 bool in_attack_range = false; /**< 自己能否用杀够到 */
                 std::vector<card::Card> equip; /**< 装备区（明置，副本） */
@@ -44,10 +46,10 @@ namespace tkw
             /** @brief 己方视角的完整观察。 */
             struct AiView
             {
-                std::string self;
-                int self_seat = 0;
-                int self_hp = 0;
-                int self_max_hp = 0;
+                std::string self;      /**< 自己玩家 id */
+                int self_seat = 0;     /**< 自己座位号 */
+                int self_hp = 0;       /**< 自己当前体力 */
+                int self_max_hp = 0;   /**< 自己体力上限 */
                 std::vector<card::Card> hand;  /**< 自己的手牌（副本） */
                 std::vector<card::Card> equip; /**< 自己的装备区（副本） */
                 std::vector<card::Card> judge;  /**< 自己的判定区（副本） */
@@ -58,9 +60,11 @@ namespace tkw
 
             /**
              * @brief 取某角色在观察中的角色；自己走 self_role，其他走 others 条目。
-             * @param view 观察。
-             * @param id 玩家 id。
+             * @param[in] view 观察。
+             * @param[in] id   玩家 id。
              * @return 命中返回对应角色；不在观察中返回 Role::None。
+             * @retval Role::None `id` 既非自己也不在 `others` 中。
+             * @post 本接口不改变任何状态。
              */
             inline Role role_in_view(const AiView &view, const std::string &id)
             {
@@ -72,7 +76,13 @@ namespace tkw
                 return Role::None;
             }
 
-            /** @brief 构造 player 的观察（拷贝必要数据，不引用对局内部容器）。 */
+            /**
+             * @brief 构造 player 的观察（拷贝必要数据，不引用对局内部容器）。
+             * @param[in] ctx    只读容器视图（不含 EventBus/Rng）。
+             * @param[in] player 观察者玩家 id。
+             * @return `player` 视角的紧凑观察副本。
+             * @post 不改变对局状态；返回值为独立副本，调用方可保留。
+             */
             inline AiView make_view(const ReadOnlyContext &ctx, const std::string &player)
             {
                 AiView v;

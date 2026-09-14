@@ -1,12 +1,15 @@
 /**
- * @file catalog.hpp
- * @brief 卡牌目录：deck.json + cards/<id>.json 的加载与语义校验。
- * @note 语义校验归本域（config 只管「文件 → Document」，见 resource.hpp 注记）：
- *       - deck.json 引用一张卡 → 按 <root>/cards/<id>.json 加载单卡文件；
- *       - 未知 effect.kind / scope / suit / equip 等在加载时立即 InvalidValue
- *         失败（detail 为字段路径，如 "cards/sha.json.effect.kind"）；
- *       - 文件内 id 必须等于文件名（deck 引用方），不一致即数据事故。
- * @note 加载完成后不持有 Document：全部解析成 CardDef 值类型，Document 即弃。
+ * @file   catalog.hpp
+ * @brief  卡牌目录：`deck.json` + `cards/<id>.json` 的加载与语义校验。
+ * @details 语义校验归本域（`config` 只管「文件 → `Document`」，见 `resource.hpp`
+ *          注记）：
+ *          - `deck.json` 引用一张卡 → 按 `<root>/cards/<id>.json` 加载单卡文件；
+ *          - 未知 `effect.kind` / `scope` / `suit` / `equip` 等在加载时立即
+ *            `InvalidValue` 失败（detail 为字段路径，如
+ *            `"cards/sha.json.effect.kind"`）；
+ *          - 文件内 `id` 必须等于文件名（deck 引用方），不一致即数据事故。
+ * @note   加载完成后不持有 `Document`：全部解析成 `CardDef` 值类型，`Document` 即弃。
+ * @ingroup tkw_card
  */
 
 #ifndef INCLUDE_TKW_CARD_CATALOG_HPP
@@ -34,7 +37,11 @@ namespace tkw
 
         namespace detail
         {
-            /** @brief subtype 封闭集合（空串 = 未分类，合法）。 */
+            /**
+             * @brief  判断 `subtype` 是否属于封闭集合。
+             * @param[in] s 待校验的 subtype 文本。
+             * @return `true` = 空串或已登记的 subtype。
+             */
             inline bool is_valid_subtype(std::string_view s)
             {
                 return s.empty() || s == "attack" || s == "dodge" || s == "heal" ||
@@ -42,21 +49,21 @@ namespace tkw
                        s == "armor" || s == "horse";
             }
 
-            /** scope 字段封闭五值集：effect/judge 解析共用的单一表源。 */
+            /** @brief scope 字段封闭六值集：effect/judge 解析共用的单一表源。 */
             inline constexpr std::initializer_list<std::pair<std::string_view, Scope>>
                 scope_table{{"self", Scope::Self}, {"one_other", Scope::OneOther},
                              {"all_others", Scope::AllOthers}, {"all", Scope::All},
                              {"one_or_two", Scope::OneOrTwo},
                              {"any_one", Scope::AnyOne}};
 
-            /** damage_type 字段封闭三值集：effect/judge 解析共用的单一表源。 */
+            /** @brief damage_type 字段封闭三值集：effect/judge 解析共用的单一表源。 */
             inline constexpr
                 std::initializer_list<std::pair<std::string_view, DamageType>>
                     damage_type_table{{"normal", DamageType::Normal},
                                       {"fire", DamageType::Fire},
                                       {"thunder", DamageType::Thunder}};
 
-            /** effect.kind 封闭名表：严格解析与名称查询共用的单一表源。 */
+            /** @brief effect.kind 封闭名表：严格解析与名称查询共用的单一表源。 */
             inline constexpr
                 std::initializer_list<std::pair<std::string_view, CardEffectKind>>
                     effect_kind_table{{"damage", CardEffectKind::Damage},
@@ -73,7 +80,7 @@ namespace tkw
                                       {"chain", CardEffectKind::Chain},
                                       {"fire_attack", CardEffectKind::FireAttack}};
 
-            /** abilities 封闭名表：严格解析与名称查询共用的单一表源。 */
+            /** @brief abilities 封闭名表：严格解析与名称查询共用的单一表源。 */
             inline constexpr
                 std::initializer_list<std::pair<std::string_view, Ability>>
                     ability_table{{"no_sha_limit", Ability::NoShaLimit},
@@ -92,7 +99,16 @@ namespace tkw
                                   {"silver_lion", Ability::SilverLion},
                                   {"fire_sha_convert", Ability::FireShaConvert}};
 
-            /** 字符串 → 封闭枚举：未知值报 InvalidValue（detail = 字段路径）。 */
+            /**
+             * @brief  字符串 → 封闭枚举。
+             * @tparam E 目标枚举类型。
+             * @param[in] s     待查表文本。
+             * @param[in] path  字段路径，用于失败定位。
+             * @param[in] table 名表；与严格解析共用。
+             * @return 解析结果。
+             * @retval Ok 命中 `table` 中的键。
+             * @retval Err(InvalidValue) 未命中，detail = `path`。
+             */
             template <typename E>
             cfg::ConfigResult<E> enum_value(
                 std::string_view s, std::string_view path,
@@ -104,7 +120,19 @@ namespace tkw
                 return cfg::fail<E>(cfg::ConfigErrorKind::InvalidValue, std::string(path));
             }
 
-            /** 必填字符串字段 → 枚举。缺失/类型不符 → Missing/TypeMismatch。 */
+            /**
+             * @brief  必填字符串字段 → 枚举。
+             * @tparam E 目标枚举类型。
+             * @param[in] obj   所属 JSON 对象。
+             * @param[in] key   字段名。
+             * @param[in] path  容器路径。
+             * @param[in] table 名表。
+             * @return 解析结果。
+             * @retval Ok 字段存在、为字符串且命中名表。
+             * @retval Err(MissingField) 字段缺失。
+             * @retval Err(TypeMismatch) 字段非字符串。
+             * @retval Err(InvalidValue) 字符串未命中名表。
+             */
             template <typename E>
             cfg::ConfigResult<E> require_enum(
                 const json::Json &obj, std::string_view key, std::string_view path,
@@ -116,7 +144,18 @@ namespace tkw
                 return enum_value<E>(s.unwrap(), cfg::field_path(path, key), table);
             }
 
-            /** 可选字符串字段 → 枚举：缺失回落 None；类型不符仍失败。 */
+            /**
+             * @brief  可选字符串字段 → 枚举。
+             * @tparam E 目标枚举类型。
+             * @param[in] obj   所属 JSON 对象。
+             * @param[in] key   字段名。
+             * @param[in] path  容器路径。
+             * @param[in] table 名表。
+             * @return 枚举包装；字段缺失时为 `None`。
+             * @retval Ok 字段缺失或成功解析（`Some`）。
+             * @retval Err(TypeMismatch) 容器非对象或字段非字符串。
+             * @retval Err(InvalidValue) 字符串未命中名表。
+             */
             template <typename E>
             cfg::ConfigResult<Option<E>> opt_enum(
                 const json::Json &obj, std::string_view key, std::string_view path,
@@ -140,7 +179,16 @@ namespace tkw
                 return cfg::ConfigResult<Option<E>>::Ok(Option<E>::Some(r.unwrap()));
             }
 
-            /** 可选对象字段：缺失回落 None；类型不符仍失败。 */
+            /**
+             * @brief  可选对象字段：缺失回落 `None`。
+             * @param[in] obj  所属 JSON 对象。
+             * @param[in] key  字段名。
+             * @param[in] path 容器路径。
+             * @return 指向子对象的只读指针；字段缺失时为 `None`。
+             * @retval Ok 字段缺失（`None`）或为对象（`Some`）。
+             * @retval Err(TypeMismatch) 容器非对象或字段非对象。
+             * @warning 返回指针指向 `obj` 内部，生命周期不得超过 `obj`。
+             */
             inline cfg::ConfigResult<Option<const json::Json *>> opt_object(
                 const json::Json &obj, std::string_view key, std::string_view path)
             {
@@ -160,7 +208,14 @@ namespace tkw
                     Option<const json::Json *>::Some(&v));
             }
 
-            /** 解析单个副本：suit + number（点数须在 1..13）。 */
+            /**
+             * @brief  解析单个副本：`suit` + `number`。
+             * @param[in] item 副本对象。
+             * @param[in] ip   该副本的容器路径。
+             * @return 花色点数副本。
+             * @retval Ok 字段齐全且 `number` 在 1~13。
+             * @retval Err(MissingField/TypeMismatch/InvalidValue) 按字段定位失败。
+             */
             inline cfg::ConfigResult<CardCopy> parse_card_copy(
                 const json::Json &item, std::string_view ip)
             {
@@ -183,7 +238,17 @@ namespace tkw
                     CardCopy{suit.unwrap(), static_cast<int>(n)});
             }
 
-            /** 解析 effect 对象。 */
+            /**
+             * @brief  解析 `effect` 对象。
+             * @param[in] obj  effect 对象。
+             * @param[in] path 容器路径。
+             * @return 卡牌主动效果。
+             * @retval Ok `kind` 及该 kind 所需字段均合法。
+             * @retval Err(MissingField/TypeMismatch/InvalidValue) 按字段定位失败。
+             * @note   校验 kind 专属不变量：`Damage` 类 amount > 0，
+             *         `Draw`/`DiscardTarget` count > 0，`Steal` count/range > 0，
+             *         `FireAttack` 须显式火焰伤，`Chain` 须显式 `scope`。
+             */
             inline cfg::ConfigResult<CardEffect> parse_card_effect(
                 const json::Json &obj, std::string_view path)
             {
@@ -279,7 +344,14 @@ namespace tkw
                 return cfg::ConfigResult<CardEffect>::Ok(std::move(eff));
             }
 
-            /** 解析 equip 对象。 */
+            /**
+             * @brief  解析 `equip` 对象。
+             * @param[in] obj  equip 对象。
+             * @param[in] path 容器路径。
+             * @return 装备参数。
+             * @retval Ok `slot` 合法且可选 `range` 合法。
+             * @retval Err(MissingField/TypeMismatch/InvalidValue) 按字段定位失败。
+             */
             inline cfg::ConfigResult<CardEquip> parse_card_equip(
                 const json::Json &obj, std::string_view path)
             {
@@ -302,7 +374,15 @@ namespace tkw
                 return cfg::ConfigResult<CardEquip>::Ok(std::move(eq));
             }
 
-            /** 解析 judge 对象（延时锦囊/防具判定：条件 + 成功/失败动作）。 */
+            /**
+             * @brief  解析 `judge` 对象（延时锦囊/防具判定）。
+             * @param[in] obj  judge 对象。
+             * @param[in] path 容器路径。
+             * @return 判定描述（条件 + 成功/失败动作）。
+             * @retval Ok 必填 `trigger`/`success` 合法，可选字段合法。
+             * @retval Err(MissingField/TypeMismatch/InvalidValue) 按字段定位失败；
+             *         `Damage` 动作要求 amount > 0。
+             */
             inline cfg::ConfigResult<JudgeEffect> parse_judge(
                 const json::Json &obj, std::string_view path)
             {
@@ -373,7 +453,15 @@ namespace tkw
                 return cfg::ConfigResult<JudgeEffect>::Ok(std::move(j));
             }
 
-            /** 解析 abilities 数组（缺省 = 空；未知能力报 InvalidValue）。 */
+            /**
+             * @brief  解析 `abilities` 数组。
+             * @param[in] root 单卡顶层对象。
+             * @param[in] path 容器路径。
+             * @return 能力列表；字段缺失时为空列表。
+             * @retval Ok 字段缺失或逐项均命中能力名表。
+             * @retval Err(TypeMismatch) `abilities` 非数组或元素非字符串。
+             * @retval Err(InvalidValue) 某个能力名未登记。
+             */
             inline cfg::ConfigResult<std::vector<Ability>> parse_abilities(
                 const json::Json &root, std::string_view path)
             {
@@ -411,8 +499,12 @@ namespace tkw
             }
 
             /**
-             * @brief 解析单卡文件（root = 文件顶层对象）。
-             * @param path 容器路径（如 "cards/sha.json"），用于拼错误字段路径。
+             * @brief  解析单卡文件。
+             * @param[in] root 文件顶层对象。
+             * @param[in] path 容器路径（如 `"cards/sha.json"`），用于拼错误字段路径。
+             * @return 卡牌定义。
+             * @retval Ok 必填字段齐全、可选字段合法、文件内 `id` 与引用名一致。
+             * @retval Err(MissingField/TypeMismatch/InvalidValue) 按字段定位失败。
              */
             inline cfg::ConfigResult<CardDef> parse_card_def(
                 const json::Json &root, std::string_view path)
@@ -530,9 +622,12 @@ namespace tkw
         }
 
         /**
-         * @brief effect.kind 原文 → 效果类别。
-         * @return None 表示名表无此机制（未知/未实现机制）。
-         * @note 与严格解析共用同一名表，避免名↔枚举映射漂移。
+         * @brief  `effect.kind` 原文 → 效果类别。
+         * @param[in] name `effect.kind` 原文。
+         * @return 效果类别；`None` 表示名表无此机制（未知/未实现）。
+         * @retval Some 命中 `detail::effect_kind_table`。
+         * @retval None 未登记。
+         * @note   与严格解析共用同一名表，避免名↔枚举映射漂移。
          */
         inline Option<CardEffectKind> effect_kind_from_name(std::string_view name)
         {
@@ -543,9 +638,12 @@ namespace tkw
         }
 
         /**
-         * @brief abilities 原文 → 装备能力。
-         * @return None 表示名表无此能力（未知/未实现能力）。
-         * @note 与严格解析共用同一名表，避免名↔枚举映射漂移。
+         * @brief  `abilities` 原文 → 装备能力。
+         * @param[in] name 能力原文。
+         * @return 装备能力；`None` 表示名表无此能力（未知/未实现）。
+         * @retval Some 命中 `detail::ability_table`。
+         * @retval None 未登记。
+         * @note   与严格解析共用同一名表，避免名↔枚举映射漂移。
          */
         inline Option<Ability> ability_from_name(std::string_view name)
         {
@@ -558,7 +656,7 @@ namespace tkw
         /** @brief 单卡机制名原文（不做枚举校验，仅供机制审计）。 */
         struct RawMechanisms
         {
-            std::string id;   /**< deck.json 引用的卡 id（= cards/<id>.json 文件名） */
+            std::string id;   /**< `deck.json` 引用的卡 id（= `cards/<id>.json` 文件名）。 */
             std::string name; /**< 卡中文名；JSON 缺失时回落 id */
             Option<std::string> effect_kind =
                 Option<std::string>::None(); /**< effect.kind 原文；无 effect/无 kind 为 None */
@@ -680,12 +778,21 @@ namespace tkw
              * @note 自定义移动会抑制隐式拷贝，故拷贝一并 = default 保留。
              */
             CardDefCatalog() = default;
-            CardDefCatalog(const CardDefCatalog &) = default;
-            CardDefCatalog &operator=(const CardDefCatalog &) = default;
+            CardDefCatalog(const CardDefCatalog &) = default; /**< 拷贝构造。 */
+            CardDefCatalog &operator=(const CardDefCatalog &) = default; /**< 拷贝赋值；@return 自身。 */
+            /**
+             * @brief  移动构造。
+             * @param[in] other 被移动的目录；之后仅可析构或重新赋值。
+             */
             CardDefCatalog(CardDefCatalog &&other) noexcept
                 : defs(std::move(other.defs)), index(std::move(other.index))
             {
             }
+            /**
+             * @brief  移动赋值。
+             * @param[in] other 被移动的目录。
+             * @return 自身引用。
+             */
             CardDefCatalog &operator=(CardDefCatalog &&other) noexcept
             {
                 defs = std::move(other.defs);
@@ -694,10 +801,20 @@ namespace tkw
             }
 
             /**
-             * @brief 从 ResourceStore 加载：先读 <deck_name>.json（牌堆构成），
-             *        再逐个加载 cards/<id>.json。
-             * @return Ok 为目录；Err 为 config 层错误（文件缺失/非法 JSON/
-             *         MissingField/TypeMismatch/InvalidValue，detail 带定位）。
+             * @brief  从 `ResourceStore` 加载：先读 `<deck_name>.json`（牌堆构成），
+             *         再逐个加载 `cards/<id>.json`。
+             * @param[in] store     资源目录句柄。
+             * @param[in] deck_name 牌堆资源名（通常 `"deck"`）。
+             * @return 加载完成的目录。
+             * @retval Ok 定义按 `deck.json` 引用序全部解析并建立 id 索引。
+             * @retval Err(FileNotFound/IoFailed/ParseError) 牌堆或某张单卡文件
+             *         缺失、I/O 失败或 JSON 非法。
+             * @retval Err(MissingField/TypeMismatch/InvalidValue) 字段缺失、类型
+             *         不符、枚举未登记、`id` 与引用名不一致、重复引用或牌堆
+             *         总张数为 0。
+             * @pre   `store` 生命周期覆盖本次调用，且其根目录可读。
+             * @post  成功时全部 `Document` 即弃，仅保留 `CardDef` 值类型；
+             *         失败时不产出部分目录，`store` 不被修改。
              */
             static cfg::ConfigResult<CardDefCatalog> load(
                 const cfg::ResourceStore &store, std::string_view deck_name)
@@ -753,7 +870,13 @@ namespace tkw
                 return cfg::ConfigResult<CardDefCatalog>::Ok(std::move(catalog));
             }
 
-            /** @brief O(1) 按卡牌 id 查询（经内部索引）；不存在时为 None。 */
+            /**
+             * @brief  O(1) 按卡牌 id 查询（经内部索引）。
+             * @param[in] id 卡牌定义 id。
+             * @return 定义指针；`None` = 未收录。
+             * @retval Some 指针指向内部 `defs`，生命周期同本目录。
+             * @retval None 目录中无此 id。
+             */
             Option<const CardDef *> find(const std::string &id) const
             {
                 auto it = index.find(id);
@@ -762,9 +885,16 @@ namespace tkw
                 return Option<const CardDef *>::Some(&defs[it->second]);
             }
 
+            /**
+             * @brief  收录的定义数。
+             * @return `defs` 中的定义条数。
+             */
             std::size_t size() const noexcept { return defs.size(); }
 
-            /** @brief 牌堆物理张数（所有定义副本数之和）。 */
+            /**
+             * @brief  牌堆物理张数（所有定义副本数之和）。
+             * @return 全部 `CardDef.copies` 的张数合计。
+             */
             std::size_t total_copies() const noexcept
             {
                 std::size_t n = 0;
@@ -773,8 +903,16 @@ namespace tkw
                 return n;
             }
 
-            /** @brief 按 deck.json 引用顺序迭代。 */
+            /**
+             * @brief  按 `deck.json` 引用顺序迭代。
+             * @return 指向首元素的迭代器。
+             */
             auto begin() const noexcept { return defs.begin(); }
+
+            /**
+             * @brief  迭代尾标。
+             * @return 尾后迭代器。
+             */
             auto end() const noexcept { return defs.end(); }
 
         private:
@@ -783,8 +921,9 @@ namespace tkw
         };
 
         /**
-         * @brief 卡定义展示名：name 非空取 name，否则回落 id。
-         * @return 引用指向 def 自身字段（name 或 id），生命周期同 def。
+         * @brief  卡定义展示名：`name` 非空取 `name`，否则回落 `id`。
+         * @param[in] def 卡牌定义。
+         * @return 引用指向 `def` 自身字段（`name` 或 `id`），生命周期同 `def`。
          */
         inline const std::string &display_name(const CardDef &def) noexcept
         {
@@ -792,9 +931,11 @@ namespace tkw
         }
 
         /**
-         * @brief 按 id 从目录取展示名。
-         * @return 目录收录且 name 非空 → name；否则回落 def_id 本身（拷贝）。
-         * @note 结果按值返回：目录未收录时返回入参的拷贝，不暴露调用方引用。
+         * @brief  按 id 从目录取展示名。
+         * @param[in] catalog 卡牌目录。
+         * @param[in] def_id  卡牌定义 id。
+         * @return 目录收录且 `name` 非空 → `name`；否则回落 `def_id`（拷贝）。
+         * @note   结果按值返回：目录未收录时返回入参的拷贝，不暴露调用方引用。
          */
         inline std::string display_name(
             const CardDefCatalog &catalog, const std::string &def_id)
@@ -804,8 +945,10 @@ namespace tkw
         }
 
         /**
-         * @brief 目录指针可空（决策请求的目录可选）的展示名。
-         * @return catalog 为空或未收录 → def_id；否则同目录重载。
+         * @brief  目录指针可空（决策请求的目录可选）的展示名。
+         * @param[in] catalog 卡牌目录；可为 `nullptr`。
+         * @param[in] def_id  卡牌定义 id。
+         * @return `catalog` 为空或未收录 → `def_id`；否则同目录重载。
          */
         inline std::string display_name(
             const CardDefCatalog *catalog, const std::string &def_id)

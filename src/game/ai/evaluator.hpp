@@ -1,6 +1,8 @@
 /**
- * @file evaluator.hpp
- * @brief AI 评估函数：牌价值（纯函数）。
+ * @file   evaluator.hpp
+ * @brief  AI 评估函数：牌价值（纯函数）。
+ * @details 只读 `card::CardDef` 返回分值，不依赖对局状态，可回放。
+ * @ingroup tkw_game_ai
  */
 
 #ifndef INCLUDE_TKW_GAME_EVALUATOR_HPP
@@ -15,17 +17,30 @@ namespace tkw
         namespace ai
         {
             // 牌基础价值分档：数值越大越值得留/用；card_value 的返回只引用本处常量。
-            inline constexpr int kCardValueCounter = 55;       /**< 无懈可击（counter 标记） */
-            inline constexpr int kCardValueHeal = 50;          /**< 回复类（桃/桃园） */
-            inline constexpr int kCardValueUtility = 45;       /**< 摸牌/顺/群体伤害/亮牌 */
-            inline constexpr int kCardValueOffense = 40;       /**< 伤害/拆/决斗 */
-            inline constexpr int kCardValueJink = 35;          /**< 闪 */
-            inline constexpr int kCardValueBorrowedSword = 35; /**< 借刀杀人 */
-            inline constexpr int kCardValueHiddenHand = 35;    /**< 隐藏手牌期望价值（无身份，取中档） */
-            inline constexpr int kCardValueEquipment = 30;     /**< 装备 */
-            inline constexpr int kCardValueLow = 10;           /**< 无主动效果/未知效果兜底 */
+            inline constexpr int kCardValueCounter = 55;       /**< 无懈可击（counter 标记）。 */
+            inline constexpr int kCardValueHeal = 50;          /**< 回复类（桃/桃园）。 */
+            inline constexpr int kCardValueUtility = 45;       /**< 摸牌/顺/群体伤害/亮牌。 */
+            inline constexpr int kCardValueOffense = 40;       /**< 伤害/拆/决斗。 */
+            inline constexpr int kCardValueJink = 35;          /**< 闪。 */
+            inline constexpr int kCardValueBorrowedSword = 35; /**< 借刀杀人。 */
+            inline constexpr int kCardValueHiddenHand = 35;    /**< 隐藏手牌期望价值（无身份，取中档）。 */
+            inline constexpr int kCardValueEquipment = 30;     /**< 装备。 */
+            inline constexpr int kCardValueLow = 10;           /**< 无主动效果/未知效果兜底。 */
 
-            /** @brief 单张牌的基础价值（越大越值得留/用）。 */
+            /**
+             * @brief  单张牌的基础价值（越大越值得留/用）。
+             * @param[in] def 卡牌定义。
+             * @return 基础价值分档常量。
+             * @retval kCardValueCounter 无懈可击。
+             * @retval kCardValueHeal    回复类。
+             * @retval kCardValueUtility 摸牌/顺/群体伤害/亮牌。
+             * @retval kCardValueOffense 伤害/拆/决斗。
+             * @retval kCardValueJink    闪。
+             * @retval kCardValueEquipment 装备。
+             * @retval kCardValueLow     其余兜底。
+             * @post 本接口不改变任何状态。
+             * @note 数值唯一事实源为上方 `kCardValue*` 常量。
+             */
             inline int card_value(const card::CardDef &def)
             {
                 using E = card::CardEffectKind;

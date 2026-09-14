@@ -1,8 +1,11 @@
 /**
  * @file rules.hpp
- * @brief 对局规则常量：把散落在各结算函数里的魔法数集中到一处。
- * @note 这是「规则数值」的唯一事实源；引擎函数经 rules_of(ctx) 读取，
- *       测试/CLI 可构造不同 RulesConfig 注入 Game 来调参。
+ * @brief 对局规则数值的唯一事实源。
+ * @details 把散落在各结算函数里的魔法数集中到一处；引擎函数经
+ *          `rules_of(ctx)` 读取，测试/CLI 可构造不同 `RulesConfig` 注入
+ *          `Game` 来调参。
+ * @note 新增规则数值一律加在这里，不要在引擎里写魔法数。
+ * @ingroup tkw_game_core
  */
 
 #ifndef INCLUDE_TKW_GAME_RULES_HPP

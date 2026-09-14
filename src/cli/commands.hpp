@@ -1,9 +1,10 @@
 /**
- * @file commands.hpp
- * @brief CLI 命令树与命令执行体：声明公共选项、注册 12 个命令、共享 Session。
- * @note 与 main.cpp 分离，使命令树可由测试直接构建并驱动 REPL。命令的
- *       action 写标准输出（用户可见），框架侧输出（?/help）走 InteractiveConsole
- *       注入的流。
+ * @file   commands.hpp
+ * @brief  CLI 命令树与命令执行体。
+ * @details 声明公共选项、注册各命令、共享 `Session`；与 `main.cpp` 分离，使命令
+ *          树可由测试直接构建并驱动 REPL。命令的 action 写标准输出（用户可见），
+ *          框架侧输出（`?`/`help`）走 `InteractiveConsole` 注入的流。
+ * @ingroup tkw_cli
  */
 #ifndef INCLUDE_TKW_CLI_COMMANDS_HPP
 #define INCLUDE_TKW_CLI_COMMANDS_HPP
@@ -74,6 +75,9 @@ namespace tkw
         {
             /**
              * @brief 从解析上下文读参数；未出现的选项回落 base。
+             * @param[in] ctx  本行命令的解析上下文。
+             * @param[in] base 未显式提供时的回落基准。
+             * @return 合并后的对局选项。
              * @note REPL 每行命令独立解析，根选项不会自动继承启动命令行的取值，
              *       故 REPL 内建局以启动选项为 base 合并，行内显式选项优先；真人
              *       座位是唯一可清空的累积项，--no-human 显式清空并优先于 --human。
@@ -116,7 +120,11 @@ namespace tkw
                 return opt;
             }
 
-            /** 从解析上下文读参数（无 base：一次性命令使用选项默认值）。 */
+            /**
+             * @brief 从解析上下文读参数（无 base：一次性命令使用选项默认值）。
+             * @param[in] ctx 本行命令的解析上下文。
+             * @return 合并后的对局选项。
+             */
             inline Options options_from(ParseContext &ctx)
             {
                 return options_from(ctx, Options{});
@@ -125,8 +133,8 @@ namespace tkw
             /**
              * @brief 查询/批量命令的选项合并：活动会话牌表优先，无会话回落启动选项；
              *        不继承真人座位。
-             * @param ctx     本行命令的解析上下文。
-             * @param session 当前会话；base 为 REPL 启动选项，deck 为活动会话牌表。
+             * @param[in] ctx     本行命令的解析上下文。
+             * @param[in] session 当前会话；base 为 REPL 启动选项，deck 为活动会话牌表。
              * @return 合并后的 Options：行内显式值优先，否则回落会话/启动默认。
              *         默认 deck 在存在活动会话（active 且 game 非空）时取
              *         session.deck，否则取 session.base.deck，两者均由行内 --deck
@@ -151,8 +159,8 @@ namespace tkw
 
             /**
              * @brief 解析本次命令是否打印事件日志。
-             * @param ctx     本次解析上下文。
-             * @param session 当前会话；携带建局命令确定的日志开关。
+             * @param[in] ctx     本次解析上下文。
+             * @param[in] session 当前会话；携带建局命令确定的日志开关。
              * @return 本行显式提供 --verbose/--no-verbose 时以显式值为准，否则取
              *         会话值。
              * @note REPL 每行独立解析，启动选项不进本行上下文，故未显式提供时
@@ -168,7 +176,7 @@ namespace tkw
 
             /**
              * @brief 建局/一次性跑局时的事件日志默认：真人座位存在且未显式选择过 verbose 时开启。
-             * @param opt 合并后的选项；humans/verbose/verbose_explicit 均已就绪。
+             * @param[in] opt 合并后的选项；humans/verbose/verbose_explicit 均已就绪。
              * @return 显式提供过（含启动 --no-verbose）→ 取显式值；否则真人局为真、
              *         全 AI 局为假。
              * @note 全 AI 路径保持默认关闭以维持批量/回放输出不变；行内 --no-verbose
@@ -183,8 +191,8 @@ namespace tkw
 
             /**
              * @brief 按选项构造 REPL 历史后端：空路径交回框架默认（内存）。
-             * @param path 历史文件路径；空 = 不持久化。
-             * @param err  告警输出流；父目录缺失时写一行中文告警。
+             * @param[in]     path 历史文件路径；空 = 不持久化。
+             * @param[in,out] err  告警输出流；父目录缺失时写一行中文告警。
              * @return FileHistory（父目录存在）或 nullptr（交 InteractiveConsole
              *         回落 InMemoryHistory）。
              * @note FileHistory 路径逐字使用、不建父目录，父目录缺失时写入会
@@ -210,8 +218,8 @@ namespace tkw
 
             /**
              * @brief 在命令上声明标量公共选项（牌堆/人数/手牌/种子/日志/存档/历史/AI 难度/对局模式）。
-             * @param cmd   目标命令：根命令或会读取这些选项的 leaf。
-             * @param rules 玩家数上下限来源。
+             * @param[in] cmd   目标命令：根命令或会读取这些选项的 leaf。
+             * @param[in] rules 玩家数上下限来源。
              * @note pjh_cli 的选项查找沿父链（名与值都取最近声明处），故 leaf 不重
              *       声明也能解析祖先的选项；此处 per-leaf 重声明只为让 leaf 的帮助/
              *       用法行列出这些选项。未显式给的项仍由 options_from 沿父链或会话
@@ -284,7 +292,7 @@ namespace tkw
 
             /**
              * @brief 在根命令上声明可重复的真人座位选项与清空开关。
-             * @param cmd 目标命令；只应传根命令，使父/叶混写累积进同一上下文。
+             * @param[in] cmd 目标命令；只应传根命令，使父/叶混写累积进同一上下文。
              * @note repeatable 选项的值按「最近声明」写入单一上下文，若根与 leaf 各
              *       声明一份，`--human P0 new --human P1` 会分落两处，而读取只取最近
              *       节点，导致 P0 静默丢弃；故仅根声明。leaf 处仍可解析（祖先链查找）。
@@ -313,7 +321,7 @@ namespace tkw
 
             /**
              * @brief 在根命令上声明可重复的武将选择选项。
-             * @param cmd 目标命令；只应传根命令，理由同 declare_human_option。
+             * @param[in] cmd 目标命令；只应传根命令，理由同 declare_human_option。
              * @note 取值形如 `P0=zhangfei`，可重复；不是 negatable，也不提供
              *       --no-hero（武将选择以最近一次显式提供为准）。值补全只列座位
              *       前缀，武将 id 需运行时命中目录，故不做候选静态枚举。仅建局类
@@ -337,9 +345,10 @@ namespace tkw
 
             /**
              * @brief 建局入参：只取装配所需字段（hand/AI/verbose 属会话参数）。
-             * @param opt  命令行选项。
-             * @param mode 参与装配的对局模式；load 占位建局固定 Brawl（模式与角色
+             * @param[in] opt  命令行选项。
+             * @param[in] mode 参与装配的对局模式；load 占位建局固定 Brawl（模式与角色
              *             由存档恢复），其余入口传 opt.mode。
+             * @return 建局入参。
              */
             inline tkw::game::BuildOptions build_options_from(
                 const Options &opt, tkw::game::GameMode mode)
@@ -347,7 +356,11 @@ namespace tkw
                 return tkw::game::BuildOptions{opt.deck, opt.players, opt.seed, mode};
             }
 
-            /** 建局入参：对局模式取 opt.mode。 */
+            /**
+             * @brief 建局入参：对局模式取 opt.mode。
+             * @param[in] opt 命令行选项。
+             * @return 建局入参。
+             */
             inline tkw::game::BuildOptions build_options_from(const Options &opt)
             {
                 return build_options_from(opt, opt.mode);
@@ -378,8 +391,8 @@ namespace tkw
 
             /**
              * @brief 解析可重复 `--hero` 原文为「座位 id → 武将 id」映射。
-             * @param raw     --hero 原始值列表（形如 "P0=zhangfei"）。
-             * @param players 本局玩家数，用于座位下标越界校验与可用座位列表。
+             * @param[in] raw     --hero 原始值列表（形如 "P0=zhangfei"）。
+             * @param[in] players 本局玩家数，用于座位下标越界校验与可用座位列表。
              * @return Ok 为座位到武将的映射；Err 为中文提示（格式/座位/重复）。
              * @note 座位格式固定 `P<非负十进制>`，解析后归一为规范键 `P<下标>`
              *       （`P00` 与 `P0` 等价），使所有等价写法都能被建局按规范座位
@@ -443,8 +456,8 @@ namespace tkw
 
             /**
              * @brief 建局入参（含武将）：解析 --hero 后并入 BuildOptions。
-             * @param opt  命令行选项；heroes 原文与 players 参与解析。
-             * @param mode 参与装配的对局模式。
+             * @param[in] opt  命令行选项；heroes 原文与 players 参与解析。
+             * @param[in] mode 参与装配的对局模式。
              * @return Ok 为建局入参；Err 为 --hero 中文解析错误（由命令层渲染）。
              */
             inline tkw::Result<tkw::game::BuildOptions, std::string>
@@ -461,7 +474,11 @@ namespace tkw
                     std::move(bo));
             }
 
-            /** 建局入参（含武将）：对局模式取 opt.mode。 */
+            /**
+             * @brief 建局入参（含武将）：对局模式取 opt.mode。
+             * @param[in] opt 命令行选项。
+             * @return `Ok` 为建局入参；`Err` 为 --hero 中文解析错误（由命令层渲染）。
+             */
             inline tkw::Result<tkw::game::BuildOptions, std::string>
             build_options_with_heroes(const Options &opt)
             {
@@ -470,8 +487,8 @@ namespace tkw
 
             /**
              * @brief 未实现卡警告文本（不含换行）：清单为空时返回空串。
-             * @param catalog     已严格加载的牌表目录，用于展示名回落。
-             * @param unsupported 引擎未实现的卡 id 列表（game::unsupported_cards 结果）。
+             * @param[in] catalog     已严格加载的牌表目录，用于展示名回落。
+             * @param[in] unsupported 引擎未实现的卡 id 列表（game::unsupported_cards 结果）。
              * @return 「警告: 牌堆含 N 张引擎未实现的卡:」+ 每卡 ` <name>(<id>)`；
              *         unsupported 为空时返回空串。
              * @note 纯文本单点：CLI 警告与 TUI 日志共用，避免两处口径漂移。
@@ -492,7 +509,7 @@ namespace tkw
 
             /**
              * @brief 未实现卡警告纯行（0 或 1 行，不含换行）。
-             * @param catalog 已严格加载的牌表目录；判定经 game::unsupported_cards。
+             * @param[in] catalog 已严格加载的牌表目录；判定经 game::unsupported_cards。
              * @return 目录全部可结算时为空向量，否则单元素向量。
              * @note 纯函数无输出副作用，供 CLI 逐行打印与 TUI 逐行写日志共用。
              */
@@ -507,8 +524,8 @@ namespace tkw
 
             /**
              * @brief 打印牌堆中引擎未实现的卡警告（建局与批量入口共用同一口径）。
-             * @param catalog 已严格加载的牌表目录。
-             * @param err     告警输出流。
+             * @param[in]     catalog 已严格加载的牌表目录。
+             * @param[in,out] err     告警输出流。
              * @note 只覆盖「枚举已存在但结算未实现」；未知机制名在严格加载期即失败，
              *       到不了这里（未知机制的容错审计见 audit）。目录全部可结算时
              *       不输出。建局入口与一次性命令都调用本函数，避免口径漂移。
@@ -523,7 +540,7 @@ namespace tkw
 
             /**
              * @brief 单武将的未实现技能警告文本（不含换行）。
-             * @param def 武将定义。
+             * @param[in] def 武将定义。
              * @return 「警告: 武将 <名> 含引擎未实现的技能: <技能名、…>」；
              *         全部已实现时为空串。
              */
@@ -547,7 +564,7 @@ namespace tkw
 
             /**
              * @brief 已选武将中含引擎未实现技能的警告纯行（0 到多行，不含换行）。
-             * @param game 已建好的对局；按实体所绑武将查目录技能实现状态。
+             * @param[in] game 已建好的对局；按实体所绑武将查目录技能实现状态。
              * @return 每名含未实现技能的武将为一行；全部已实现或无武将时为空。
              * @note 只对实际选中的武将告警：未选中的武将数据（含未实现技能）
              *       不产生默认输出，保证无 --hero 的建局输出逐字节不变。
@@ -574,8 +591,8 @@ namespace tkw
 
             /**
              * @brief 指定武将 id 集合的未实现技能警告纯行（批量入口用）。
-             * @param catalog 武将目录。
-             * @param heroes  座位 id → 武将 id 映射；按 id 去重后逐名判定。
+             * @param[in] catalog 武将目录。
+             * @param[in] heroes  座位 id → 武将 id 映射；按 id 去重后逐名判定。
              * @return 每名含未实现技能的武将为一行；目录未命中时跳过。
              */
             inline std::vector<std::string> unsupported_hero_skills_warning_lines(
@@ -600,7 +617,12 @@ namespace tkw
                 return lines;
             }
 
-            /** @brief 打印已选武将中未实现技能的警告（建局入口共用同一口径）。 */
+            /**
+             * @brief  打印已选武将中未实现技能的警告。
+             * @param[in]     game 已建好的对局；按实体所绑武将查目录技能实现状态。
+             * @param[in,out] err  告警输出流。
+             * @note   建局入口共用同一口径。
+             */
             inline void warn_unsupported_hero_skills(
                 const tkw::game::Game &game, std::ostream &err = std::cerr)
             {
@@ -610,8 +632,8 @@ namespace tkw
 
             /**
              * @brief 玩家数越界 → 用户可见文案。
-             * @param value 实际传入的玩家数。
-             * @param rules 玩家数上下限来源。
+             * @param[in] value 实际传入的玩家数。
+             * @param[in] rules 玩家数上下限来源。
              * @return 「玩家数 N 超出范围 [min, max]」，与选项 --players 的解析期
              *         越界文案同用「超出范围 [min, max]」措辞。
              */
@@ -636,6 +658,8 @@ namespace tkw
 
             /**
              * @brief 校验真人座位：必须是对局中存在的实体且互不重复；空串表示通过。
+             * @param[in] game   本局运行时。
+             * @param[in] humans 待校验的真人座位集合。
              * @return 查无此 id 时返回「真人座位不存在: <id>（可用座位: ...）」；
              *         重复时返回「真人座位重复: <id>（每个座位只能指定一次）」；
              *         全部通过返回空串。
@@ -664,8 +688,8 @@ namespace tkw
 
             /**
              * @brief 不支持真人的命令统一拒绝非空 humans；返回空串表示通过。
-             * @param humans 解析/继承得到的真人座位集合。
-             * @param cmd    命令名，用于给出可复制的替代出口。
+             * @param[in] humans 解析/继承得到的真人座位集合。
+             * @param[in] cmd    命令名，用于给出可复制的替代出口。
              * @return 空串表示通过；否则为带「直接运行 tkw <cmd>」下一步的中文错误。
              */
             inline std::string reject_humans(
@@ -678,13 +702,21 @@ namespace tkw
                        cmd;
             }
 
-            /** AI 难度档 → 命令行/存档值域字符串。 */
+            /**
+             * @brief AI 难度档 → 命令行/存档值域字符串。
+             * @param[in] ai AI 难度档。
+             * @return `"aggressive"` 或 `"simple"`。
+             */
             inline const char *ai_level_name(AiLevel ai)
             {
                 return ai == AiLevel::Aggressive ? "aggressive" : "simple";
             }
 
-            /** 值域字符串 → AI 难度档；未知或空串返回 None，由调用方回落默认档。 */
+            /**
+             * @brief 值域字符串 → AI 难度档。
+             * @param[in] name 值域字符串。
+             * @return 匹配的 `AiLevel`；未知或空串返回 `None`，由调用方回落默认档。
+             */
             inline tkw::Option<AiLevel> ai_level_from(std::string_view name)
             {
                 if (name == "simple")
@@ -697,8 +729,9 @@ namespace tkw
             /**
              * @brief 构造决策源：无真人按难度档取 AI，否则按 actor 路由到交互输入
              *        （真人座位外的回落与全 AI 局同一难度档）。
-             * @param humans 真人座位 id；空 = 全 AI 对局。
-             * @param ai     AI 难度档（决定全 AI 局与真人局回落决策源）。
+             * @param[in] humans 真人座位 id；空 = 全 AI 对局。
+             * @param[in] ai     AI 难度档（决定全 AI 局与真人局回落决策源）。
+             * @return 决策源；无真人时为对应难度档 AI，否则为按座位路由的交互输入。
              */
             inline std::unique_ptr<tkw::game::DecisionSource> make_decision_source(
                 const std::vector<std::string> &humans, AiLevel ai)
@@ -724,7 +757,7 @@ namespace tkw
 
             /**
              * @brief 回合头文本（不含换行）：回合序号 + 当前玩家。
-             * @param session 当前会话进度；turns 为已执行回合数，故本回合 = turns + 1。
+             * @param[in] session 当前会话进度；turns 为已执行回合数，故本回合 = turns + 1。
              * @return 「—— 回合 N：P ——」。
              * @note 纯文本单点：CLI 打印与 TUI 日志共用，保证两处回合头逐字一致。
              */
@@ -737,7 +770,7 @@ namespace tkw
 
             /**
              * @brief 回合头：打印回合序号与当前玩家，使后续事件可归属。
-             * @param session 当前会话进度；turns 为已执行回合数，故下一回合 = turns + 1。
+             * @param[in] session 当前会话进度；turns 为已执行回合数，故下一回合 = turns + 1。
              * @note 仅过程可见（真人默认或 --verbose）时由调用方打印；全 AI 默认
              *       静默路径不得调用，避免污染批量/回放输出。
              */
@@ -748,12 +781,12 @@ namespace tkw
 
             /**
              * @brief 重复 step_session 直到会话结束或达回合上限。
-             * @param ctx     对局运行时；结束判定与逐步推进都作用于其容器。
-             * @param ai      决策源，由调用方按真人/AI 档构造。
-             * @param session 会话进度，原地推进。
-             * @param root    非空时透传给 step_session，在回合失败时写回根因。
-             * @param show_turn_headers 为真时每个回合执行前打印回合头（仅过程可见路径）。
-             * @param failed_actor 非空时每轮调用前写入当前角色；回合失败时留下的即
+             * @param[in,out] ctx     对局运行时；结束判定与逐步推进都作用于其容器。
+             * @param[in,out] ai      决策源，由调用方按真人/AI 档构造。
+             * @param[in,out] session 会话进度，原地推进。
+             * @param[out]    root    非空时透传给 step_session，在回合失败时写回根因。
+             * @param[in]     show_turn_headers 为真时每个回合执行前打印回合头（仅过程可见路径）。
+             * @param[out]    failed_actor 非空时每轮调用前写入当前角色；回合失败时留下的即
              *        失败角色（失败会推进会话，调用方须在推进前捕获）。
              * @return Ok(Finished) 会话结束；Ok(MaxRounds) 达回合上限平局；
              *         Err 其它 LoopError 原样上抛。
@@ -785,7 +818,7 @@ namespace tkw
 
             /**
              * @brief 终局「胜者」行标签：乱斗逐字走 winner_label；身份局按阵营。
-             * @param ctx 已结束对局的运行时上下文。
+             * @param[in] ctx 已结束对局的运行时上下文。
              * @return 乱斗=唯一存活者 id（空串回落「平局（同归于尽）」）；
              *         身份局=主公/反贼/内奸阵营标签。
              * @note 与 game_stats_label 拆开：本函数把空胜者渲染为同归于尽平局，
@@ -802,7 +835,8 @@ namespace tkw
             /**
              * @brief 统计块「胜者」字段：乱斗保持原始 id（空串=显示「无」）；
              *        身份局用阵营标签。
-             * @param ctx 已结束对局的运行时上下文。
+             * @param[in] ctx 已结束对局的运行时上下文。
+             * @return 乱斗=原始胜者 id（空串保持为空）；身份局=阵营标签。
              * @note 乱斗 0 存活时必须回空的原始 id，不能走 game_end_label，否则
              *       统计块会从「胜者: 无」变成「平局（同归于尽）」。
              */
@@ -816,8 +850,8 @@ namespace tkw
 
             /**
              * @brief 把一个牌区渲染为「卡名/卡名」；空区回落「无」。
-             * @param ctx  只读上下文，经目录解析展示名（目录可空则回落 def_id）。
-             * @param zone 待渲染的牌区副本（手牌/装备区/判定区）。
+             * @param[in] ctx  只读上下文，经目录解析展示名（目录可空则回落 def_id）。
+             * @param[in] zone 待渲染的牌区副本（手牌/装备区/判定区）。
              * @return 斜杠分隔的中文展示名；zone 为空返回「无」。
              * @note 纯展示，与决策窗口 zone_names 同口径；装备区/判定区为明置信息
              *       可直接传，手牌仅限己方座位传入，不得用于对手手牌。
@@ -841,7 +875,7 @@ namespace tkw
 
             /**
              * @brief 打印会话状态：无会话 / 进行中 / 已结束三态。
-             * @param s 当前会话；active 为假或 game 为空时只打印「会话: 无」。
+             * @param[in] s 当前会话；active 为假或 game 为空时只打印「会话: 无」。
              * @note 结束态以引擎 session_over（乱斗存活 ≤ 1；身份局主公阵亡或
              *       敌对尽灭）判定，胜者经 game_end_label（乱斗 winner_label，
              *       身份局阵营标签）；仅进行中打印「下一回合」与牌表来源，已达
@@ -952,9 +986,9 @@ namespace tkw
 
             /**
              * @brief 打印回合上限平局行与统计块（循环尾同构两连）。
-             * @param stats 本局统计聚合。
-             * @param game  本局运行时；统计块读取实体体力。
-             * @param turns 已执行回合数。
+             * @param[in] stats 本局统计聚合。
+             * @param[in] game  本局运行时；统计块读取实体体力。
+             * @param[in] turns 已执行回合数。
              * @note 平局无胜者，统计块 winner 传空串（显示「无」）。
              */
             inline void print_max_rounds_draw(
@@ -1073,6 +1107,8 @@ namespace tkw
 
             /**
              * @brief 序列化当前会话（含 AI 档与对局统计）并原子写入文件。
+             * @param[in]     file 目标存档路径。
+             * @param[in,out] s    当前会话。
              * @return Err 无进行中会话 / 写文件失败；成功返回 Ok。
              */
             inline CliResult<void> cmd_save(
@@ -1095,9 +1131,12 @@ namespace tkw
 
             /**
              * @brief 读档并落子到会话：恢复存档 AI 档与统计，verbose 不持久化。
-             * @param ai_explicit   命令行是否显式给了 --ai；显式值覆盖存档 AI 档。
-             * @param hero_explicit 本行是否显式给了 --hero；显式给出时拒绝（武将
-             *                      随存档恢复，无读档换将语义）。
+             * @param[in]     opt           对局选项；提供占位建局的牌表与玩家数。
+             * @param[in]     file          存档路径。
+             * @param[in,out] s             目标会话；成功后原地替换。
+             * @param[in]     ai_explicit   命令行是否显式给了 --ai；显式值覆盖存档 AI 档。
+             * @param[in]     hero_explicit 本行是否显式给了 --hero；显式给出时拒绝（武将
+             *                              随存档恢复，无读档换将语义）。
              * @return Err 显式 --hero / 读文件 / 存档解析 / 真人座位校验失败；成功
              *         返回 Ok。
              * @note 旧档无元数据时 AI 档回落命令行取值、统计为空；未知 AI 文本
@@ -1202,7 +1241,7 @@ namespace tkw
 
             /**
              * @brief 审计牌堆：拒绝真人座位后，把 audit_lines 逐行打印到标准输出。
-             * @param opt 对局选项；仅 --deck 决定被审计的牌表目录。
+             * @param[in] opt 对局选项；仅 --deck 决定被审计的牌表目录。
              * @return Ok；Err 为牌堆加载失败（kind + detail，与建局错误面一致）。
              * @note 打印包装：human 策略留在本层（--human 拒绝文案与退出行为不变），
              *       行构造与加载复用查询纯函数；行序与换行由本层补齐。
@@ -1223,8 +1262,8 @@ namespace tkw
 
             /**
              * @brief 列出牌表：拒绝真人座位后，把 cards_lines 逐行打印到标准输出。
-             * @param opt       对局选项；仅 --deck 决定被读取的牌表目录。
-             * @param show_text 为真时在每卡行末尾附 CardDef.text 效果文案。
+             * @param[in] opt       对局选项；仅 --deck 决定被读取的牌表目录。
+             * @param[in] show_text 为真时在每卡行末尾附 CardDef.text 效果文案。
              * @return Ok；Err 为牌堆加载失败（kind + detail，与建局错误面一致）。
              * @note 打印包装：human 策略留在本层；只读查询不建局、不消耗随机源，
              *       行构造复用查询纯函数，输出逐字节不变。
@@ -1245,7 +1284,7 @@ namespace tkw
 
             /**
              * @brief 可用牌表一览：拒绝真人座位后，把 decks_lines 逐行打印到标准输出。
-             * @param opt 对局选项；仅 deck 作为扫描根目录（位置参数在命令层覆盖）。
+             * @param[in] opt 对局选项；仅 deck 作为扫描根目录（位置参数在命令层覆盖）。
              * @return Ok；Err 为扫描根不存在时的中文加载错误。
              * @note 打印包装：human 策略留在本层；只读扫描不建局、不消耗随机源，
              *       行构造复用查询纯函数。
@@ -1266,7 +1305,7 @@ namespace tkw
 
             /**
              * @brief 可用武将一览：拒绝真人座位后，把 heroes_lines 逐行打印到标准输出。
-             * @param opt 对局选项；仅 deck 作为武将数据根目录（位置参数在命令层覆盖）。
+             * @param[in] opt 对局选项；仅 deck 作为武将数据根目录（位置参数在命令层覆盖）。
              * @return Ok；Err 为坏 JSON/未知技能等中文加载错误。
              * @note 打印包装：human 策略留在本层；只读加载不建局、不消耗随机源，
              *       缺 heroes.json 回落空目录而非报错。
@@ -1288,8 +1327,8 @@ namespace tkw
             /**
              * @brief 规则/卡牌说明查询：拒绝真人座位后，把 rules_lines 逐行打印到
              *        标准输出。
-             * @param opt     对局选项；仅 --deck 决定被读取的牌表目录。
-             * @param keyword 过滤关键词；空串 = 列出全部。
+             * @param[in] opt     对局选项；仅 --deck 决定被读取的牌表目录。
+             * @param[in] keyword 过滤关键词；空串 = 列出全部。
              * @return Ok；Err 为牌堆加载失败（kind + detail，与建局错误面一致）。
              * @note 打印包装：human 策略留在本层；命中谓词与文案回落复用查询纯函数，
              *       只读查询不建局、不消耗随机源。
@@ -1309,7 +1348,7 @@ namespace tkw
                 return CliResult<void>::Ok();
             }
 
-            /** 跨局模拟聚合：各座位胜场、平局局数与回合总和（单局展示统计不可跨局累加）。 */
+            /** @brief 跨局模拟聚合：各座位胜场、平局局数与回合总和（单局展示统计不可跨局累加）。 */
             struct SimAggregate
             {
                 std::map<std::string, int> wins; /**< 座位 id → 胜场数 */
@@ -1317,17 +1356,17 @@ namespace tkw
                 std::int64_t turns_sum = 0;      /**< 全部局回合数总和 */
             };
 
-            /** 批量模拟结果：Ok 为汇总行（不含换行），Err 为中文错误文案。 */
+            /** @brief 批量模拟结果：`Ok` 为汇总行（不含换行），`Err` 为中文错误文案。 */
             using SimulateLines = tkw::Result<std::vector<std::string>, std::string>;
 
             /**
              * @brief 批量模拟的纯行构造：N 局独立种子全 AI 跑完，返回跨局聚合
              *        摘要行（胜者分布 / 平局 / 平均回合），不打印、不写 stderr。
-             * @param opt       对局选项；seed 为基种子（第 i 局用 seed + i），
-             *                  --deck/--players/--hand/--seed/--ai/--hero 生效。
-             * @param n         局数；须 ≥1（由调用方校验），耗时随 n 线性。
-             * @param warnings  非空时写入未实现卡与已选武将未实现技能的警告行。
-             * @param cancelled 可选取消谓词；非空且返回 true 时在局边界提前结束。
+             * @param[in]  opt       对局选项；seed 为基种子（第 i 局用 seed + i），
+             *                       --deck/--players/--hand/--seed/--ai/--hero 生效。
+             * @param[in]  n         局数；须 ≥1（由调用方校验），耗时随 n 线性。
+             * @param[out] warnings  非空时写入未实现卡与已选武将未实现技能的警告行。
+             * @param[in]  cancelled 可选取消谓词；非空且返回 true 时在局边界提前结束。
              * @return Ok 汇总行序（牌表头 + 模拟头 + 胜场/阵营行 + 平均回合）；
              *         Err 为牌堆加载失败 / 开局失败 / 对局失败（文案与 run_game 一致）。
              * @note 基种子缺省由调用方定（CLI/TUI 均 1，局种子 1..N）；每局经
@@ -1474,8 +1513,8 @@ namespace tkw
             /**
              * @brief 批量模拟的 CLI 包装：拒绝真人、逐行打印警告（stderr）与汇总
              *        （stdout），保持 CLI 用户可见输出不变。
-             * @param opt 对局选项；seed 为基种子。
-             * @param n   局数；须 ≥1（由调用方校验）。
+             * @param[in] opt 对局选项；seed 为基种子。
+             * @param[in] n   局数；须 ≥1（由调用方校验）。
              * @return Ok；Err 为牌堆加载失败 / 开局失败 / 对局失败。
              * @note 先输出警告再输出汇总，与旧「警告在循环前、汇总在后」的合并流
              *       序一致；--human 在全 AI 批量模拟下拒绝。
@@ -1500,8 +1539,8 @@ namespace tkw
 
         /**
          * @brief 构建完整命令树并绑定会话。
-         * @param app     根命令（App）；额外参数策略与中文帮助在此一并设置。
-         * @param session 跨命令会话，须比 app 的命令存活更久（action 以引用捕获）。
+         * @param[in,out] app     根命令（App）；额外参数策略与中文帮助在此一并设置。
+         * @param[in,out] session 跨命令会话，须比 app 的命令存活更久（action 以引用捕获）。
          * @note 命令树与 main() 分离，使测试可构建同一棵树并驱动 InteractiveConsole；
          *       根命令无子命令时跑一局，各 leaf 声明自身可读选项。
          */

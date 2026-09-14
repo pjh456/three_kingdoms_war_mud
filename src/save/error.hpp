@@ -1,6 +1,7 @@
 /**
- * @file error.hpp
- * @brief 存档模块错误：加载失败原因 + SaveResult 别名。
+ * @file   error.hpp
+ * @brief  存档模块错误：加载失败原因与 `SaveResult` 别名。
+ * @ingroup tkw_save
  */
 
 #ifndef INCLUDE_TKW_SAVE_ERROR_HPP
@@ -28,10 +29,14 @@ namespace tkw
         /** @brief 带定位的存档错误。 */
         struct SaveError
         {
-            SaveErrorKind kind = SaveErrorKind::StructureError;
-            std::string detail;
+            SaveErrorKind kind = SaveErrorKind::StructureError; /**< 失败原因分类。 */
+            std::string detail; /**< 人类可读的失败定位文本。 */
         };
 
+        /**
+         * @brief  存档操作结果别名：成功为 `T`，失败带 `SaveError`。
+         * @tparam T 成功值类型；`void` 表示无返回值的操作。
+         */
         template <typename T>
         using SaveResult = Result<T, SaveError>;
     }

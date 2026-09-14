@@ -1,8 +1,9 @@
 /**
  * @file card_event.hpp
  * @brief 卡牌域事件：摸牌/打出/弃置/区域转移，供日志、回放、AI 观测消费。
- * @note 事件在 gameplay 的单一写点发布（容器 CardManager 保持哑状态）；
- *       发布辅助统一带 bus 空检查，便于直接构造 GameContext 的测试。
+ * @note 事件在 gameplay 的单一写点发布（容器 `CardManager` 保持哑状态）；
+ *       发布辅助统一带 bus 空检查，便于直接构造 `GameContext` 的测试。
+ * @ingroup tkw_game_core
  */
 
 #ifndef INCLUDE_TKW_GAME_CARD_EVENT_HPP
@@ -44,42 +45,50 @@ namespace tkw
     /** @brief 摸牌：一张牌从摸牌堆进入某实体手牌。 */
     DEFINE_EVENT_START(CardDrawn, CardEvent)
 public:
-    std::string entity;
-    std::string instance_id;
-    std::string def_id;
+    std::string entity; /**< 摸牌入手的实体 id */
+    std::string instance_id; /**< 牌实例 id */
+    std::string def_id; /**< 牌面定义 id */
     DrawKind kind = DrawKind::Normal; /**< 摸牌来源语义（展示标签用） */
     DEFINE_EVENT_END(CardDrawn)
 
     /** @brief 打出：某实体主动打出一张牌（基本/锦囊/装备）。 */
     DEFINE_EVENT_START(CardPlayed, CardEvent)
 public:
-    std::string user;
-    std::string instance_id;
-    std::string def_id;
+    std::string user; /**< 打出者实体 id */
+    std::string instance_id; /**< 牌实例 id */
+    std::string def_id; /**< 牌面定义 id */
     DEFINE_EVENT_END(CardPlayed)
 
     /** @brief 弃置：一张牌进入弃牌堆（entity 可空 = 判定/无主）。 */
     DEFINE_EVENT_START(CardDiscarded, CardEvent)
 public:
-    std::string entity;
-    std::string instance_id;
-    std::string def_id;
+    std::string entity; /**< 弃置归属实体 id（可空 = 判定/无主） */
+    std::string instance_id; /**< 牌实例 id */
+    std::string def_id; /**< 牌面定义 id */
     DiscardKind kind = DiscardKind::Normal; /**< 进弃牌堆的来源语义（展示标签用） */
     DEFINE_EVENT_END(CardDiscarded)
 
     /** @brief 区域转移：一张牌从一个区域移到另一个区域（装备/顺牵/延时移送）。 */
     DEFINE_EVENT_START(CardMoved, CardEvent)
 public:
-    std::string from_entity;
-    std::string to_entity;
-    std::string instance_id;
-    std::string def_id;
-    Zone from = Zone::Limbo;
-    Zone to = Zone::Limbo;
+    std::string from_entity; /**< 来源实体 id（可空 = 牌堆/无主） */
+    std::string to_entity; /**< 目的实体 id（可空 = 牌堆/无主） */
+    std::string instance_id; /**< 牌实例 id */
+    std::string def_id; /**< 牌面定义 id */
+    Zone from = Zone::Limbo; /**< 来源区域 */
+    Zone to = Zone::Limbo; /**< 目的区域 */
     DEFINE_EVENT_END(CardMoved)
 
     namespace game
     {
+        /**
+         * @brief  发布摸牌事件。
+         * @param[in] ctx    对局上下文；`bus` 为空时安全 no-op。
+         * @param[in] entity 摸牌入手的实体 id。
+         * @param[in] c      摸到的牌。
+         * @param[in] kind   摸牌来源语义。
+         * @post  仅当 `ctx.bus` 非空时投递事件。
+         */
         inline void emit_card_drawn(
             GameContext &ctx, const std::string &entity, const card::Card &c,
             DrawKind kind = DrawKind::Normal)
@@ -94,6 +103,13 @@ public:
             ctx.bus->publish(ev);
         }
 
+        /**
+         * @brief  发布打出事件。
+         * @param[in] ctx  对局上下文；`bus` 为空时安全 no-op。
+         * @param[in] user 打出者实体 id。
+         * @param[in] c    打出的牌。
+         * @post  仅当 `ctx.bus` 非空时投递事件。
+         */
         inline void emit_card_played(
             GameContext &ctx, const std::string &user, const card::Card &c)
         {
@@ -106,6 +122,14 @@ public:
             ctx.bus->publish(ev);
         }
 
+        /**
+         * @brief  发布弃置事件。
+         * @param[in] ctx    对局上下文；`bus` 为空时安全 no-op。
+         * @param[in] entity 弃置归属实体 id（可空 = 判定/无主）。
+         * @param[in] c      进入弃牌堆的牌。
+         * @param[in] kind   进弃牌堆的来源语义。
+         * @post  仅当 `ctx.bus` 非空时投递事件。
+         */
         inline void emit_card_discarded(
             GameContext &ctx, const std::string &entity, const card::Card &c,
             DiscardKind kind = DiscardKind::Normal)
@@ -120,6 +144,16 @@ public:
             ctx.bus->publish(ev);
         }
 
+        /**
+         * @brief  发布区域转移事件。
+         * @param[in] ctx         对局上下文；`bus` 为空时安全 no-op。
+         * @param[in] from_entity 来源实体 id（可空 = 牌堆/无主）。
+         * @param[in] to_entity   目的实体 id（可空 = 牌堆/无主）。
+         * @param[in] c           被移动的牌。
+         * @param[in] from        来源区域。
+         * @param[in] to          目的区域。
+         * @post  仅当 `ctx.bus` 非空时投递事件。
+         */
         inline void emit_card_moved(
             GameContext &ctx, const std::string &from_entity,
             const std::string &to_entity, const card::Card &c, Zone from, Zone to)

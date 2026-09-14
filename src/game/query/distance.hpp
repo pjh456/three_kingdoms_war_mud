@@ -1,12 +1,14 @@
 /**
  * @file distance.hpp
- * @brief 距离与攻击范围：座次环距离 + 装备（武器攻击范围 / 坐骑 ±1）修正。
- * @note 规则约定：
- *       - 座次距离 = 存活者座位环上两下标的最短弧长（死亡者退出环，座位不回填）；
- *       - 攻击范围 = 武器 range，无武器为 1；
- *       - -1马（进攻马）：使用者计算到他人距离 -1；
- *       - +1马（防御马）：他人计算到自己的距离 +1；
- *       - 距离下限为 1。
+ * @brief 距离与攻击范围：座次环距离 + 装备修正。
+ * @details 规则约定：
+ *          - 座次距离 = 存活者座位环上两下标的最短弧长（死亡者退出环，座位
+ *            不回填）；
+ *          - 攻击范围 = 武器 range，无武器为 1；
+ *          - -1马（进攻马）：使用者计算到他人距离 -1；
+ *          - +1马（防御马）：他人计算到自己的距离 +1；
+ *          - 距离下限为 1。
+ * @ingroup tkw_game_query
  */
 
 #ifndef INCLUDE_TKW_GAME_DISTANCE_HPP
@@ -35,11 +37,14 @@ namespace tkw
         };
 
         /**
-         * @brief 座次距离（存活者环）：min(|i-j|, n-|i-j|)，i/j 为
-         *        ordered_ids() 中按座位升序的下标。
+         * @brief  座次距离（存活者环）：min(|i-j|, n-|i-j|)。
+         * @param[in] ctx 只读上下文。
+         * @param[in] a   实体 id。
+         * @param[in] b   实体 id。
          * @return 两实体都在容器内时返回环上最短弧长；任一不存在时返回 0。
-         * @note 死亡者已从容器移除但座位号不回填，故不能拿「绝对座位差」与
-         *       「存活数」直接相减，须先取存活者座位环上的下标。
+         * @note   i/j 为 `ordered_ids()` 中按座位升序的下标。死亡者已从容器
+         *         移除但座位号不回填，故不能拿「绝对座位差」与「存活数」直接
+         *         相减，须先取存活者座位环上的下标。
          */
         inline int seat_distance(
             const ReadOnlyContext &ctx, const std::string &a, const std::string &b)
@@ -56,7 +61,13 @@ namespace tkw
             return std::min(d, n - d);
         }
 
-        /** @brief 解析某实体装备区：武器 range 与坐骑方向（经 catalog）。 */
+        /**
+         * @brief  解析某实体装备区：武器 range 与坐骑方向（经 catalog）。
+         * @param[in] ctx       只读上下文。
+         * @param[in] entity_id 实体 id。
+         * @return 距离相关摘要；无武器时 `weapon_range == 0`。
+         * @post  本接口不改变任何状态。
+         */
         inline EquipSummary summarize_equipment(
             const ReadOnlyContext &ctx, const std::string &entity_id)
         {
@@ -81,7 +92,12 @@ namespace tkw
         }
 
         /**
-         * @brief from 到 to 的调整后距离（含坐骑修正，下限 1）。
+         * @brief  from 到 to 的调整后距离。
+         * @param[in] ctx  只读上下文。
+         * @param[in] from 起点实体 id。
+         * @param[in] to   终点实体 id。
+         * @return 含进攻/防御马与「马术」修正后的距离，下限 1。
+         * @post  本接口不改变任何状态。
          */
         inline int distance_between(
             const ReadOnlyContext &ctx, const std::string &from, const std::string &to)
@@ -101,8 +117,14 @@ namespace tkw
         }
 
         /**
-         * @brief 距离判定：from 到 to 的距离（含马修正）是否 ≤ range。
-         * @note 顺手牵羊（range=1）等按距离结算的牌走这里。
+         * @brief  距离判定：from 到 to 的距离（含马修正）是否 ≤ range。
+         * @param[in] ctx   只读上下文。
+         * @param[in] from  起点实体 id。
+         * @param[in] to    终点实体 id。
+         * @param[in] range 距离上限。
+         * @return 调整后距离不超过 `range` 时为 true。
+         * @note  顺手牵羊（`range == 1`）等按距离结算的牌走这里。
+         * @post  本接口不改变任何状态。
          */
         inline bool distance_le(
             const ReadOnlyContext &ctx, const std::string &from,
@@ -111,7 +133,14 @@ namespace tkw
             return distance_between(ctx, from, to) <= range;
         }
 
-        /** @brief 攻击距离判定：from 能否攻击 to（武器 range，无武器为 1）。 */
+        /**
+         * @brief  攻击距离判定：from 能否攻击 to。
+         * @param[in] ctx  只读上下文。
+         * @param[in] from 攻击方实体 id。
+         * @param[in] to   目标实体 id。
+         * @return 距离在武器攻击范围内时为 true（无武器时范围 1）。
+         * @post  本接口不改变任何状态。
+         */
         inline bool in_attack_range(
             const ReadOnlyContext &ctx, const std::string &from, const std::string &to)
         {

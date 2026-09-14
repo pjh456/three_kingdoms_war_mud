@@ -1,16 +1,18 @@
 /**
- * @file simple.hpp
- * @brief 确定性贪心策略：CLI 冒烟运行与回放测试用（无随机、无隐藏状态）。
- * @note 逻辑集中在 SimpleDecider::decide（只读 DecisionRequest）；SimpleAI 把
- *       它经 RequestDecisionSource 适配成引擎可用的 DecisionSource。只做「合法
- *       且能推进」的动作：出杀（按回合上下文给的次数上限）、可结算锦囊、装备。
- *       无懈不抵消自己的锦囊；敌人锦囊冲自己或自己判定区有延时锦囊时出第一张，
- *       其余不出；武器效果按代价可付性决定是否发动。弃牌按牌价值升序取（先弃
- *       最低价值，同价值保持手牌序）。响应窗口取第一张真响应牌，杀响应无真杀
- *       时用两张手牌当杀（丈八蛇矛）。身份局在以上基础上叠加阵营意识：无懈只挡
- *       敌方冲自己/友方、不拆友方锦囊，救桃按阵营取舍，出牌避开同阵营友方
- *       （内奸避让并救主公，直到主公成为最后一名非内奸）；乱斗与无角色时全部
- *       回落上述旧口径。
+ * @file   simple.hpp
+ * @brief  确定性贪心策略：CLI 冒烟运行与回放测试用（无随机、无隐藏状态）。
+ * @details 逻辑集中在 `SimpleDecider::decide`（只读 `DecisionRequest`）；`SimpleAI`
+ *          把它经 `RequestDecisionSource` 适配成引擎可用的 `DecisionSource`。只做
+ *          「合法且能推进」的动作：出杀（按回合上下文给的次数上限）、可结算锦囊、装备。
+ *          无懈不抵消自己的锦囊；敌人锦囊冲自己或自己判定区有延时锦囊时出第一张，
+ *          其余不出；武器效果按代价可付性决定是否发动。弃牌按牌价值升序取（先弃
+ *          最低价值，同价值保持手牌序）。响应窗口取第一张真响应牌，杀响应无真杀
+ *          时用两张手牌当杀（丈八蛇矛）。身份局在以上基础上叠加阵营意识：无懈只挡
+ *          敌方冲自己/友方、不拆友方锦囊，救桃按阵营取舍，出牌避开同阵营友方
+ *          （内奸避让并救主公，直到主公成为最后一名非内奸）；乱斗与无角色时全部
+ *          回落上述旧口径。
+ * @warning 只读 AI：实现不得修改对局状态或缓存请求内指针。
+ * @ingroup tkw_game_ai
  */
 
 #ifndef INCLUDE_TKW_GAME_SIMPLE_HPP
@@ -35,16 +37,31 @@ namespace tkw
     {
         namespace ai
         {
-            /** @brief 贪心决策逻辑（AI 状态机的参考实现）。 */
+            /**
+             * @brief 贪心决策逻辑（AI 状态机的参考实现）。
+             * @warning 只读：全部决策只读 `DecisionRequest`，不修改对局状态。
+             */
             class SimpleDecider : public DeciderBase
             {
             public:
+                /**
+                 * @brief  贪心决策入口：公共分支走基类分派，出牌与选牌用本档策略。
+                 * @param[in] req 决策请求。
+                 * @return 对应类别的决策；空结果表示放弃。
+                 * @post 不改变任何状态。
+                 */
                 DecisionChoice decide(const DecisionRequest &req) override
                 {
                     return dispatch(req, decide_play, decide_first_card);
                 }
 
             private:
+                /**
+                 * @brief  选牌策略：取首个候选（贪心）。
+                 * @param[in] req 选牌类决策请求（候选在 `options`）。
+                 * @return 下标 0 的决策；候选为空时返回空选择。
+                 * @post 不改变任何状态。
+                 */
                 static DecisionChoice decide_first_card(const DecisionRequest &req)
                 {
                     DecisionChoice out;
@@ -55,6 +72,9 @@ namespace tkw
 
                 /**
                  * @brief 出牌：取第一张可出的牌，再按贪心偏好选目标。
+                 * @param[in] req 出牌类决策请求（合法动作在 `legal`）。
+                 * @return 要执行的动作；无组可出时返回空选择（结束出牌阶段）。
+                 * @post 不改变任何状态。
                  * @note legal_actions 已按手牌序产出；按牌分组以复现「首张可出」
                  *       语义。OneOther 集火最低体力（方天画戟取目标最多者），
                  *       借刀对合法 {持武器者, 受害者} 对选集火对象体力最低者。
@@ -134,6 +154,10 @@ namespace tkw
             class SimpleAI : private SimpleDecider, public RequestDecisionSource
             {
             public:
+                /**
+                 * @brief 构造：把自身作为决策实现接入适配器。
+                 * @post 对象持有对自身 `SimpleDecider` 子对象的指针。
+                 */
                 SimpleAI() :
                     RequestDecisionSource(static_cast<SimpleDecider &>(*this))
                 {

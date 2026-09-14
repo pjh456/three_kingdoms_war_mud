@@ -1,13 +1,14 @@
 /**
- * @file manager.hpp
- * @brief 对局作用域的卡牌容器：摸牌堆/弃牌堆 + 按 entity id 键控的
- *        手牌区/装备区/判定区（三者共用一个 CardZone 抽象，区以三元素
- *        数组存放）。
- * @note 哑状态持有者（对齐 entity/manager.hpp 的定位）：
- *       - 不校验规则：装备槽位占用、手牌上限、摸空补牌等归 gameplay；
- *       - 不发布事件：摸/弃/打出由 gameplay 观察返回值并自行发布；
- *       - 不持有目录类型：build_deck 接收 def 范围，具体目录由 game 层传入，
- *         保持本模块无目录依赖。
+ * @file   manager.hpp
+ * @brief  对局作用域的卡牌容器：摸牌堆/弃牌堆 + 按 entity id 键控的
+ *         手牌区/装备区/判定区。
+ * @details 三个实体区共用一个 `CardZone` 抽象，区以三元素数组存放。
+ * @note   哑状态持有者（对齐 `entity/manager.hpp` 的定位）：
+ *         - 不校验规则：装备槽位占用、手牌上限、摸空补牌等归 gameplay；
+ *         - 不发布事件：摸/弃/打出由 gameplay 观察返回值并自行发布；
+ *         - 不持有目录类型：`build_deck` 接收 def 范围，具体目录由 game 层
+ *           传入，保持本模块无目录依赖。
+ * @ingroup tkw_card
  */
 
 #ifndef INCLUDE_TKW_CARD_MANAGER_HPP
@@ -30,13 +31,23 @@ namespace tkw
 {
     namespace card
     {
-        /** @brief 一个按 instance_id 管理的牌区（手牌/装备/判定共用）。 */
+        /** @brief 一个按 `instance_id` 管理的牌区（手牌/装备/判定共用）。 */
         class CardZone
         {
         public:
+            /**
+             * @brief  追加一张牌。
+             * @param[in] card 要加入的牌。
+             */
             void add(Card card) { cards_.push_back(std::move(card)); }
 
-            /** @brief 按 instance_id 移除并返回；不存在时 None。 */
+            /**
+             * @brief  按 `instance_id` 移除并返回。
+             * @param[in] instance_id 目标实体牌 id。
+             * @return 被移除的牌；`None` = 未找到。
+             * @retval Some 已从本区移除。
+             * @retval None 本区无此 `instance_id`。
+             */
             Option<Card> remove(const std::string &instance_id)
             {
                 const auto it = std::find_if(
@@ -49,15 +60,32 @@ namespace tkw
                 return Option<Card>::Some(std::move(c));
             }
 
+            /**
+             * @brief  当前牌数。
+             * @return 本区张数。
+             */
             std::size_t size() const noexcept { return cards_.size(); }
+
+            /**
+             * @brief  是否为空。
+             * @return `true` = 本区无牌。
+             */
             bool empty() const noexcept { return cards_.empty(); }
+
+            /**
+             * @brief  只读牌序列。
+             * @return 引用指向内部序列，生命周期同本对象。
+             */
             const std::vector<Card> &view() const noexcept { return cards_; }
 
-            /** @brief 取走全部牌（死亡清场）。 */
+            /**
+             * @brief  取走全部牌（死亡清场）。
+             * @return 本区原牌序列；调用后本区为空。
+             */
             std::vector<Card> drain() { return std::move(cards_); }
 
         private:
-            std::vector<Card> cards_;
+            std::vector<Card> cards_; /**< 按 `instance_id` 管理的牌序列（顺序 = 加入序）。 */
         };
 
         /**
@@ -65,12 +93,12 @@ namespace tkw
          */
         struct CardManagerSnapshot
         {
-            std::uint64_t instance_seq = 0;
+            std::uint64_t instance_seq = 0; /**< 下一个待分配的实例序号。 */
             std::vector<Card> draw;    /**< 堆底→堆顶 */
             std::vector<Card> discard; /**< 堆底→堆顶 */
-            std::vector<std::pair<std::string, std::vector<Card>>> hand;
-            std::vector<std::pair<std::string, std::vector<Card>>> equip;
-            std::vector<std::pair<std::string, std::vector<Card>>> judge;
+            std::vector<std::pair<std::string, std::vector<Card>>> hand; /**< entity id → 手牌，按 id 升序。 */
+            std::vector<std::pair<std::string, std::vector<Card>>> equip; /**< entity id → 装备，按 id 升序。 */
+            std::vector<std::pair<std::string, std::vector<Card>>> judge; /**< entity id → 判定，按 id 升序。 */
         };
 
         /**
@@ -81,18 +109,22 @@ namespace tkw
         class CardManager
         {
         public:
+            /** @brief 构造空容器。 */
             CardManager() = default;
-            CardManager(const CardManager &) = delete;
-            CardManager &operator=(const CardManager &) = delete;
-            CardManager(CardManager &&) noexcept = default;
-            CardManager &operator=(CardManager &&) noexcept = default;
+            CardManager(const CardManager &) = delete; /**< 不可拷贝。 */
+            CardManager &operator=(const CardManager &) = delete; /**< 不可拷贝赋值。 */
+            CardManager(CardManager &&) noexcept = default; /**< 移动构造。 */
+            CardManager &operator=(CardManager &&) noexcept = default; /**< 移动赋值；@return 自身。 */
 
             /**
-             * @brief 按 def 范围构建摸牌堆：每份副本生成一张实体牌并分配唯一 instance_id。
-             * @tparam DefRange `CardDef` 范围；迭代序即牌序，调用方保证其为 deck 引用序。
-             * @param defs def 范围，逐一定义、逐副本展开。
-             * @note 卡牌顺序 = 传入范围迭代序（deck.json 引用顺序），同 seed 下确定。
-             * @note 幂等：先清空摸牌堆，重复调用不会叠加重复牌。
+             * @brief  按 def 范围构建摸牌堆：每份副本生成一张实体牌并分配唯一
+             *         `instance_id`。
+             * @param[in] defs def 范围，逐一定义、逐副本展开。
+             * @tparam DefRange `CardDef` 范围；迭代序即牌序，调用方须保证其为
+             *         deck 引用序。
+             * @note   卡牌顺序 = 传入范围迭代序（`deck.json` 引用顺序），
+             *         同 seed 下确定。
+             * @note   幂等：先清空摸牌堆，重复调用不会叠加重复牌。
              */
             template <typename DefRange>
             void build_deck(const DefRange &defs)
@@ -105,7 +137,10 @@ namespace tkw
                 }
             }
 
-            /** @brief 完整快照（牌堆保序；区域按 entity id 排序）。 */
+            /**
+             * @brief  完整快照（牌堆保序；区域按 entity id 排序）。
+             * @return 含摸牌堆/弃牌堆与三实体区的快照。
+             */
             CardManagerSnapshot snapshot() const
             {
                 CardManagerSnapshot s;
@@ -118,7 +153,10 @@ namespace tkw
                 return s;
             }
 
-            /** @brief 从快照恢复：清空后按序重建（含 instance_seq）。 */
+            /**
+             * @brief  从快照恢复：清空后按序重建（含 `instance_seq`）。
+             * @param[in] s 快照。
+             */
             void restore(const CardManagerSnapshot &s)
             {
                 clear();
@@ -144,30 +182,50 @@ namespace tkw
 
             // ── 摸牌堆 / 弃牌堆 ──────────────────────────────────────────
 
-            /** @brief 摸顶牌；摸空时 None（不自动洗回弃牌堆）。 */
+            /**
+             * @brief  摸顶牌。
+             * @return 堆顶牌；`None` = 摸空（不自动洗回弃牌堆）。
+             * @retval Some 已从摸牌堆移除的牌。
+             * @retval None 摸牌堆为空。
+             */
             Option<Card> draw() { return draw_pile.pop(); }
 
-            /** @brief 弃牌（置弃牌堆顶）。 */
+            /**
+             * @brief  弃牌（置弃牌堆顶）。
+             * @param[in] card 要弃置的牌。
+             */
             void discard(Card card) { discard_pile.push(std::move(card)); }
 
-            /** @brief 从弃牌堆取回一张牌（结算回滚用）；不存在时 None。 */
+            /**
+             * @brief  从弃牌堆取回一张牌（结算回滚用）。
+             * @param[in] instance_id 目标实体牌 id。
+             * @return 取回的牌；`None` = 未找到。
+             */
             Option<Card> remove_from_discard(const std::string &instance_id)
             {
                 return discard_pile.remove(instance_id);
             }
 
-            /** @brief 从摸牌堆取回一张牌（结算回滚用）；不存在时 None。 */
+            /**
+             * @brief  从摸牌堆取回一张牌（结算回滚用）。
+             * @param[in] instance_id 目标实体牌 id。
+             * @return 取回的牌；`None` = 未找到。
+             */
             Option<Card> remove_from_draw(const std::string &instance_id)
             {
                 return draw_pile.remove(instance_id);
             }
 
-            /** @brief 置摸牌堆顶（种牌堆/结算后回置等）。 */
+            /**
+             * @brief  置摸牌堆顶（种牌堆/结算后回置等）。
+             * @param[in] card 要放入堆顶的牌。
+             */
             void add_to_draw(Card card) { draw_pile.push(std::move(card)); }
 
             /**
-             * @brief 弃牌堆整体洗回摸牌堆（判定/摸牌时牌堆空的补牌）。
-             * @note 弃牌堆为空时无操作；转移后原地洗牌。
+             * @brief  弃牌堆整体洗回摸牌堆（判定/摸牌时牌堆空的补牌）。
+             * @param[in,out] rng 随机源。
+             * @note   弃牌堆为空时无操作；转移后原地洗牌。
              */
             void refill_draw(Rng &rng)
             {
@@ -182,31 +240,69 @@ namespace tkw
                     draw_pile.shuffle(rng);
             }
 
+            /**
+             * @brief  摸牌堆张数。
+             * @return 摸牌堆当前张数。
+             */
             std::size_t draw_size() const noexcept { return draw_pile.size(); }
+
+            /**
+             * @brief  弃牌堆张数。
+             * @return 弃牌堆当前张数。
+             */
             std::size_t discard_size() const noexcept { return discard_pile.size(); }
 
+            /**
+             * @brief  原地洗摸牌堆。
+             * @param[in,out] rng 随机源。
+             */
             void shuffle_draw(Rng &rng) { draw_pile.shuffle(rng); }
+
+            /**
+             * @brief  看摸牌堆顶。
+             * @return 堆顶指针；`None` = 空。
+             */
             Option<const Card *> draw_top() const { return draw_pile.top(); }
 
             // ── 手牌区 ──────────────────────────────────────────────────
 
+            /**
+             * @brief  加入手牌。
+             * @param[in] entity_id 所属实体 id。
+             * @param[in] card      要加入的牌。
+             */
             void add_to_hand(const std::string &entity_id, Card card)
             {
                 zones_of(Zone::Hand)[entity_id].add(std::move(card));
             }
 
+            /**
+             * @brief  从手牌移除。
+             * @param[in] entity_id    所属实体 id。
+             * @param[in] instance_id  目标实体牌 id。
+             * @return 被移除的牌；`None` = 未找到。
+             */
             Option<Card> remove_from_hand(
                 const std::string &entity_id, const std::string &instance_id)
             {
                 return remove_from_zone(Zone::Hand, entity_id, instance_id);
             }
 
+            /**
+             * @brief  手牌数。
+             * @param[in] entity_id 实体 id。
+             * @return 该实体的手牌张数；实体不存在时为 0。
+             */
             std::size_t hand_size(const std::string &entity_id) const
             {
                 return zone_size(Zone::Hand, entity_id);
             }
 
-            /** @brief 手牌列表（不存在实体时为空列表）。 */
+            /**
+             * @brief  手牌列表。
+             * @param[in] entity_id 实体 id。
+             * @return 引用指向该实体手牌；实体不存在时为空列表。
+             */
             const std::vector<Card> &hand(const std::string &entity_id) const
             {
                 return zone_view(Zone::Hand, entity_id);
@@ -214,22 +310,43 @@ namespace tkw
 
             // ── 装备区 ──────────────────────────────────────────────────
 
+            /**
+             * @brief  加入装备区。
+             * @param[in] entity_id 所属实体 id。
+             * @param[in] card      要加入的牌。
+             */
             void add_to_equip(const std::string &entity_id, Card card)
             {
                 zones_of(Zone::Equip)[entity_id].add(std::move(card));
             }
 
+            /**
+             * @brief  从装备区移除。
+             * @param[in] entity_id   所属实体 id。
+             * @param[in] instance_id 目标实体牌 id。
+             * @return 被移除的牌；`None` = 未找到。
+             */
             Option<Card> remove_from_equip(
                 const std::string &entity_id, const std::string &instance_id)
             {
                 return remove_from_zone(Zone::Equip, entity_id, instance_id);
             }
 
+            /**
+             * @brief  装备区张数。
+             * @param[in] entity_id 实体 id。
+             * @return 该实体的装备张数；实体不存在时为 0。
+             */
             std::size_t equip_size(const std::string &entity_id) const
             {
                 return zone_size(Zone::Equip, entity_id);
             }
 
+            /**
+             * @brief  装备区列表。
+             * @param[in] entity_id 实体 id。
+             * @return 引用指向该实体装备；实体不存在时为空列表。
+             */
             const std::vector<Card> &equip(const std::string &entity_id) const
             {
                 return zone_view(Zone::Equip, entity_id);
@@ -237,22 +354,43 @@ namespace tkw
 
             // ── 判定区 ──────────────────────────────────────────────────
 
+            /**
+             * @brief  加入判定区。
+             * @param[in] entity_id 所属实体 id。
+             * @param[in] card      要加入的牌。
+             */
             void add_to_judge(const std::string &entity_id, Card card)
             {
                 zones_of(Zone::Judge)[entity_id].add(std::move(card));
             }
 
+            /**
+             * @brief  从判定区移除。
+             * @param[in] entity_id   所属实体 id。
+             * @param[in] instance_id 目标实体牌 id。
+             * @return 被移除的牌；`None` = 未找到。
+             */
             Option<Card> remove_from_judge(
                 const std::string &entity_id, const std::string &instance_id)
             {
                 return remove_from_zone(Zone::Judge, entity_id, instance_id);
             }
 
+            /**
+             * @brief  判定区张数。
+             * @param[in] entity_id 实体 id。
+             * @return 该实体的判定牌张数；实体不存在时为 0。
+             */
             std::size_t judge_size(const std::string &entity_id) const
             {
                 return zone_size(Zone::Judge, entity_id);
             }
 
+            /**
+             * @brief  判定区列表。
+             * @param[in] entity_id 实体 id。
+             * @return 引用指向该实体判定牌；实体不存在时为空列表。
+             */
             const std::vector<Card> &judge(const std::string &entity_id) const
             {
                 return zone_view(Zone::Judge, entity_id);
@@ -261,8 +399,11 @@ namespace tkw
             // ── 跨区操作 ────────────────────────────────────────────────
 
             /**
-             * @brief 从任一实体区域移除（hand → equip → judge 顺序）。
-             * @param from 非空时写入来源区域。
+             * @brief  从任一实体区域移除（hand → equip → judge 顺序）。
+             * @param[in]  entity_id   所属实体 id。
+             * @param[in]  instance_id 目标实体牌 id。
+             * @param[out] from        非空时写入来源区域；未找到时不写入。
+             * @return 被移除的牌；`None` = 三区均未找到。
              */
             Option<Card> remove_from_any(
                 const std::string &entity_id, const std::string &instance_id,
@@ -282,8 +423,11 @@ namespace tkw
             }
 
             /**
-             * @brief 该牌是否在实体的任一区域（hand/equip/judge）。
-             * @note 结算前校验用：避免决策源返回不存在的牌时才在结算中途失败。
+             * @brief  该牌是否在实体的任一区域（hand/equip/judge）。
+             * @param[in] entity_id   所属实体 id。
+             * @param[in] instance_id 目标实体牌 id。
+             * @return `true` = 该牌在任一实体区。
+             * @note   结算前校验用：避免决策源返回不存在的牌时才在结算中途失败。
              */
             bool has_card(
                 const std::string &entity_id, const std::string &instance_id) const
@@ -301,7 +445,8 @@ namespace tkw
             }
 
             /**
-             * @brief 死亡清场：手牌/装备/判定区全部置入弃牌堆。
+             * @brief  死亡清场：手牌/装备/判定区全部置入弃牌堆。
+             * @param[in] entity_id 实体 id。
              * @return 被弃置的牌（供调用方发布弃置事件）。
              */
             std::vector<Card> discard_all(const std::string &entity_id)
@@ -337,9 +482,11 @@ namespace tkw
                 Zone::Hand, Zone::Equip, Zone::Judge};
 
             /**
-             * @brief 实体区 → 槽位下标（kSlotZones 反查：Hand=0 / Equip=1 / Judge=2）。
-             * @note 不变量：仅 Hand/Equip/Judge 三区合法；其余 Zone 值
-             *       （Draw/Discard/Limbo）不在表中，返回 -1，不进入实体区。
+             * @brief  实体区 → 槽位下标（`kSlotZones` 反查）。
+             * @param[in] zone 区域。
+             * @return Hand=0 / Equip=1 / Judge=2；其余 Zone 值返回 -1。
+             * @note   不变量：仅 Hand/Equip/Judge 三区合法；其余 Zone 值
+             *         （Draw/Discard/Limbo）不在表中，返回 -1，不进入实体区。
              */
             static constexpr int zone_slot(Zone zone)
             {

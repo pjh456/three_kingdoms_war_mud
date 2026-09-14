@@ -1,6 +1,9 @@
 /**
- * @file format.hpp
- * @brief 存档格式常量与枚举 ↔ 文本映射。
+ * @file   format.hpp
+ * @brief  存档格式常量与枚举 ↔ 文本映射。
+ * @details 版本常量按实际用到的格式特性递增；枚举与文本的双向映射必须保持稳定，
+ *          否则旧存档无法读入。
+ * @ingroup tkw_save
  */
 
 #ifndef INCLUDE_TKW_SAVE_FORMAT_HPP
@@ -16,7 +19,10 @@ namespace tkw
 {
     namespace save
     {
+        /** @brief 存档格式标识；与读取端不一致即拒绝。 */
         inline constexpr std::string_view kFormat = "tkw-save";
+
+        /** @brief 基础存档版本号（无任何扩展规则状态时使用）。 */
         inline constexpr int kVersion = 1;
 
         /**
@@ -35,7 +41,11 @@ namespace tkw
          */
         inline constexpr int kVersionHeroes = 3;
 
-        /** @brief 性别 → 存档文本。 */
+        /**
+         * @brief  性别 → 存档文本。
+         * @param[in] g 待转换的性别。
+         * @return 稳定文本：`"male"` 或 `"female"`。
+         */
         inline constexpr const char *gender_name(entity::Gender g)
         {
             switch (g)
@@ -48,7 +58,14 @@ namespace tkw
             return "male";
         }
 
-        /** @brief 存档文本 → 性别；未知返回 false。 */
+        /**
+         * @brief  存档文本 → 性别。
+         * @param[in]  s   存档文本。
+         * @param[out] out 解析结果；仅在返回 `true` 时写入。
+         * @return 是否解析成功。
+         * @retval true  `s` 为 `"male"` 或 `"female"`，`out` 已写入。
+         * @retval false `s` 非法，`out` 不被修改。
+         */
         inline bool gender_from(std::string_view s, entity::Gender &out)
         {
             if (s == "male")
@@ -60,7 +77,11 @@ namespace tkw
             return true;
         }
 
-        /** @brief 花色 → 存档文本。 */
+        /**
+         * @brief  花色 → 存档文本。
+         * @param[in] s 待转换的花色。
+         * @return 稳定文本：`"spade"`/`"club"`/`"heart"`/`"diamond"`。
+         */
         inline constexpr const char *suit_name(card::Suit s)
         {
             switch (s)
@@ -77,7 +98,14 @@ namespace tkw
             return "spade";
         }
 
-        /** @brief 存档文本 → 花色；未知返回 false。 */
+        /**
+         * @brief  存档文本 → 花色。
+         * @param[in]  s   存档文本。
+         * @param[out] out 解析结果；仅在返回 `true` 时写入。
+         * @return 是否解析成功。
+         * @retval true  `s` 为四种合法花色文本之一，`out` 已写入。
+         * @retval false `s` 非法，`out` 不被修改。
+         */
         inline bool suit_from(std::string_view s, card::Suit &out)
         {
             if (s == "spade")
@@ -93,7 +121,11 @@ namespace tkw
             return true;
         }
 
-        /** @brief 对局模式 → 存档文本。 */
+        /**
+         * @brief  对局模式 → 存档文本。
+         * @param[in] m 待转换的对局模式。
+         * @return 稳定文本：`"brawl"` 或 `"identity"`。
+         */
         inline constexpr const char *mode_name(game::GameMode m)
         {
             switch (m)
@@ -106,7 +138,14 @@ namespace tkw
             return "brawl";
         }
 
-        /** @brief 存档文本 → 对局模式；未知返回 false。 */
+        /**
+         * @brief  存档文本 → 对局模式。
+         * @param[in]  s   存档文本。
+         * @param[out] out 解析结果；仅在返回 `true` 时写入。
+         * @return 是否解析成功。
+         * @retval true  `s` 为 `"brawl"` 或 `"identity"`，`out` 已写入。
+         * @retval false `s` 非法，`out` 不被修改。
+         */
         inline bool mode_from(std::string_view s, game::GameMode &out)
         {
             if (s == "brawl")
@@ -118,7 +157,12 @@ namespace tkw
             return true;
         }
 
-        /** @brief 角色 → 存档文本（None 为防御性兜底，合法存档不写出）。 */
+        /**
+         * @brief  角色 → 存档文本。
+         * @param[in] r 待转换的角色。
+         * @return 稳定文本；`game::Role::None` 返回 `"none"` 作为防御性兜底，
+         *         合法存档不写出该值。
+         */
         inline constexpr const char *role_name(game::Role r)
         {
             switch (r)
@@ -137,7 +181,14 @@ namespace tkw
             return "none";
         }
 
-        /** @brief 存档文本 → 角色；仅四个合法角色文本，未知与 "none" 返回 false。 */
+        /**
+         * @brief  存档文本 → 角色。
+         * @param[in]  s   存档文本。
+         * @param[out] out 解析结果；仅在返回 `true` 时写入。
+         * @return 是否解析成功。
+         * @retval true  `s` 为四个合法角色文本之一，`out` 已写入。
+         * @retval false `s` 未知或为 `"none"`，`out` 不被修改。
+         */
         inline bool role_from(std::string_view s, game::Role &out)
         {
             if (s == "lord")

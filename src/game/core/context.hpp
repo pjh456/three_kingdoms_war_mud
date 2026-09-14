@@ -1,12 +1,13 @@
 /**
  * @file context.hpp
- * @brief 对局上下文：把 entity / card / catalog 三个域的容器捆绑成一个
- *        引用集，作为 gameplay 各结算函数的入口。
- * @note 不持有所有权：GameContext 只聚合指针，生命周期由调用方保证
- *       （bus/entities/cards/catalog 均须比本对象存活更久）。跨域引用
- *       沿用 id 字符串约定，本结构不依赖 entity 类的具体形态。
- * @note 推荐经 Game::context() 构造：它保证 bus/entities/cards/catalog
- *       非空（rng 可空 = 不洗牌），并绑定同一局的生命周期。
+ * @brief 对局上下文：把 entity / card / catalog 三个域的容器捆绑成引用集。
+ * @details 作为 gameplay 各结算函数的入口。不持有所有权：`GameContext` 只
+ *          聚合指针，生命周期由调用方保证（`bus`/`entities`/`cards`/
+ *          `catalog` 均须比本对象存活更久）。跨域引用沿用 id 字符串约定，
+ *          本结构不依赖 entity 类的具体形态。
+ * @note 推荐经 `Game::context()` 构造：它保证 `bus`/`entities`/`cards`/
+ *       `catalog` 非空（`rng` 可空 = 不洗牌），并绑定同一局的生命周期。
+ * @ingroup tkw_game_core
  */
 
 #ifndef INCLUDE_TKW_GAME_CONTEXT_HPP
@@ -35,10 +36,10 @@ namespace tkw
          */
         struct ReadOnlyContext
         {
-            const EntityManager *entities = nullptr;
-            const card::CardManager *cards = nullptr;
-            const card::CardDefCatalog *catalog = nullptr;
-            const RulesConfig *rules = nullptr;
+            const EntityManager *entities = nullptr; /**< 实体容器（只读） */
+            const card::CardManager *cards = nullptr; /**< 牌区容器（只读） */
+            const card::CardDefCatalog *catalog = nullptr; /**< 卡牌定义目录（只读） */
+            const RulesConfig *rules = nullptr; /**< 规则数值（由对局持有） */
             const GameMode *mode = nullptr;    /**< 对局模式（由对局持有） */
             const RoleTable *roles = nullptr;  /**< 身份局角色表（由对局持有） */
             const hero::HeroCatalog *heroes = nullptr; /**< 武将目录（由对局持有） */
@@ -47,10 +48,10 @@ namespace tkw
         /** @brief 对局上下文（引用捆绑，不持有）。 */
         struct GameContext
         {
-            EventBus *bus = nullptr;
-            EntityManager *entities = nullptr;
-            card::CardManager *cards = nullptr;
-            const card::CardDefCatalog *catalog = nullptr;
+            EventBus *bus = nullptr;         /**< 事件总线（可空，发布辅助判空） */
+            EntityManager *entities = nullptr; /**< 实体容器（状态写入口） */
+            card::CardManager *cards = nullptr; /**< 牌区容器（状态写入口） */
+            const card::CardDefCatalog *catalog = nullptr; /**< 卡牌定义目录（只读） */
             Rng *rng = nullptr;                  /**< 判定/洗牌随机源（由对局持有） */
             const RulesConfig *rules = nullptr;  /**< 规则数值（由对局持有） */
             const GameMode *mode = nullptr;      /**< 对局模式（由对局持有） */
@@ -60,7 +61,12 @@ namespace tkw
             std::string jiu_damage_owner;       /**< 本回合下一张使用的「杀」享有酒加成的玩家 id；空 = 无加成 */
             bool jiu_used = false;               /**< 本回合出牌阶段是否已使用过酒（限一次） */
 
-            /** @brief 隐式转出只读视图（值拷贝七个 const 指针），供决策接缝使用。 */
+            /**
+             * @brief  隐式转出只读视图，供决策接缝使用。
+             * @details 值拷贝七个 const 指针；不暴露 `bus`/`rng`，故无法经该
+             *          视图发事件或推进随机。
+             * @return 仅含 const 容器指针的 `ReadOnlyContext`。
+             */
             operator ReadOnlyContext() const
             {
                 return ReadOnlyContext{entities, cards, catalog, rules, mode, roles,
@@ -68,26 +74,46 @@ namespace tkw
             }
         };
 
-        /** @brief 取规则数值；ctx 未绑定规则时回落到默认值（测试便利）。 */
+        /**
+         * @brief  取规则数值。
+         * @param[in] ctx 只读上下文。
+         * @return 绑定的规则数值；未绑定规则时回落默认 `RulesConfig`。
+         * @note  本函数是引擎读取规则数值的唯一入口，调用方不得另写魔法数。
+         * @see   RulesConfig
+         */
         inline const RulesConfig &rules_of(const ReadOnlyContext &ctx)
         {
             static const RulesConfig fallback{};
             return ctx.rules ? *ctx.rules : fallback;
         }
 
-        /** @brief 取对局模式；ctx 未绑定模式时回落 Brawl（测试便利）。 */
+        /**
+         * @brief  取对局模式。
+         * @param[in] ctx 对局上下文。
+         * @return 绑定的对局模式；未绑定模式时回落 `GameMode::Brawl`。
+         */
         inline GameMode mode_of(const GameContext &ctx)
         {
             return ctx.mode ? *ctx.mode : GameMode::Brawl;
         }
 
-        /** @brief 取对局模式（只读视图）；ctx 未绑定模式时回落 Brawl。 */
+        /**
+         * @brief  取对局模式（只读视图）。
+         * @param[in] ctx 只读上下文。
+         * @return 绑定的对局模式；未绑定模式时回落 `GameMode::Brawl`。
+         */
         inline GameMode mode_of(const ReadOnlyContext &ctx)
         {
             return ctx.mode ? *ctx.mode : GameMode::Brawl;
         }
 
-        /** @brief 取玩家角色；ctx 未绑定角色表或未命中时回落 Role::None。 */
+        /**
+         * @brief  取玩家角色。
+         * @param[in] ctx 对局上下文。
+         * @param[in] id  玩家 id。
+         * @return 绑定的角色表中该玩家的角色；未绑定角色表或未命中时回落
+         *         `Role::None`。
+         */
         inline Role role_of(const GameContext &ctx, const std::string &id)
         {
             return role_of(ctx.roles, id);

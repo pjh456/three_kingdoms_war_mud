@@ -1,3 +1,11 @@
+/**
+ * @file   event.hpp
+ * @brief  实体域事件：体力变化、伤害、恢复、濒死与死亡。
+ * @details 状态层（`Entity`/`Hp`）只发布体力与原因层事件；濒死与死亡事件由 combat
+ *          流程按结算窗口发布。
+ * @ingroup tkw_entity
+ */
+
 #ifndef INCLUDE_TKW_ENTITY_EVENT_HPP
 #define INCLUDE_TKW_ENTITY_EVENT_HPP
 
@@ -23,10 +31,10 @@ namespace tkw
      */
     DEFINE_EVENT_START(EntityHpChanged, EntityEvent)
 public:
-    std::string entity_id;
-    int old_cur = 0;
-    int new_cur = 0;
-    int max = 0;
+    std::string entity_id; /**< 体力发生变化的实体 id。 */
+    int old_cur = 0;       /**< 变化前体力。 */
+    int new_cur = 0;       /**< 变化后体力（可为非正 = 濒死值状态）。 */
+    int max = 0;           /**< 当次变化时的体力上限。 */
     DEFINE_EVENT_END(EntityHpChanged)
 
     /**
@@ -37,11 +45,11 @@ public:
      */
     DEFINE_EVENT_START(EntityDamaged, EntityEvent)
 public:
-    std::string source;
-    std::string target;
-    int amount = 0;
-    bool indirect = false;
-    card::DamageType damage_type = card::DamageType::Normal; /**< 伤害属性 */
+    std::string source; /**< 伤害来源 id（可为空 = 无来源/环境伤害）。 */
+    std::string target; /**< 受伤实体 id。 */
+    int amount = 0;     /**< 伤害点数（入参原始值）。 */
+    bool indirect = false; /**< 是否间接伤害（连环传导等）。 */
+    card::DamageType damage_type = card::DamageType::Normal; /**< 伤害属性。 */
     DEFINE_EVENT_END(EntityDamaged)
 
     /**
@@ -50,8 +58,8 @@ public:
      */
     DEFINE_EVENT_START(EntityHealed, EntityEvent)
 public:
-    std::string target;
-    int amount = 0;
+    std::string target; /**< 恢复实体 id。 */
+    int amount = 0;     /**< 实际恢复量。 */
     DEFINE_EVENT_END(EntityHealed)
 
     /**
@@ -62,8 +70,8 @@ public:
      */
     DEFINE_EVENT_START(EntityDying, EntityEvent)
 public:
-    std::string target;
-    int current_hp = 0;
+    std::string target; /**< 濒死实体 id。 */
+    int current_hp = 0; /**< 当轮判定时体力（非正）。 */
     DEFINE_EVENT_END(EntityDying)
 
     /**
@@ -74,7 +82,7 @@ public:
      */
     DEFINE_EVENT_START(EntityDied, EntityEvent)
 public:
-    std::string entity_id;
+    std::string entity_id; /**< 死亡实体 id。 */
     DEFINE_EVENT_END(EntityDied)
 }
 

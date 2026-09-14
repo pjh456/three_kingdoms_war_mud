@@ -1,11 +1,12 @@
 /**
- * @file def.hpp
- * @brief 卡牌域值类型：枚举 + 不可变 CardDef（卡牌定义）。
- * @note 本文件不含任何 JSON 解析（归 catalog.hpp）。CardDef 是纯值类型：
- *       解析器产出后即独立于 Document 生命周期，可直接值拷贝/比较。
- * @note effect.kind / judge / abilities 是「配置数据 ↔ 代码语义」的三个接缝：
- *       主动效果、判定条件、装备被动分别承载，未知值在加载时直接
- *       InvalidValue 失败，保证跑起来的数据永远是代码认识的。
+ * @file   def.hpp
+ * @brief  卡牌域值类型：封闭枚举 + 不可变 `CardDef`（卡牌定义）。
+ * @details 本文件不含任何 JSON 解析（归 `catalog.hpp`）。`CardDef` 是纯值类型：
+ *          解析器产出后即独立于 `Document` 生命周期，可直接值拷贝/比较。
+ * @note   `effect.kind` / `judge` / `abilities` 是「配置数据 ↔ 代码语义」的三个
+ *         接缝：主动效果、判定条件、装备被动分别承载，未知值在加载时直接
+ *         `InvalidValue` 失败，保证跑起来的数据永远是代码认识的。
+ * @ingroup tkw_card
  */
 
 #ifndef INCLUDE_TKW_CARD_DEF_HPP
@@ -24,10 +25,10 @@ namespace tkw
         /** @brief 花色（判定/拼点依赖具体花色点数）。 */
         enum class Suit : std::uint8_t
         {
-            Spade,
-            Club,
-            Heart,
-            Diamond,
+            Spade,   /**< 黑桃（♠）。 */
+            Club,    /**< 梅花（♣）。 */
+            Heart,   /**< 红桃（♥）。 */
+            Diamond, /**< 方块（♦）。 */
         };
 
         /** @brief 卡牌大类。 */
@@ -41,12 +42,12 @@ namespace tkw
         /** @brief 卡牌所在区域（Limbo = 不在任何区域/正在转移）。 */
         enum class Zone : std::uint8_t
         {
-            Draw,
-            Discard,
-            Hand,
-            Equip,
-            Judge,
-            Limbo,
+            Draw,    /**< 摸牌堆。 */
+            Discard, /**< 弃牌堆。 */
+            Hand,    /**< 手牌区。 */
+            Equip,   /**< 装备区。 */
+            Judge,   /**< 判定区。 */
+            Limbo,   /**< 不在任何区域/正在转移。 */
         };
 
         /**
@@ -139,24 +140,24 @@ namespace tkw
         /** @brief 延时锦囊/防具的判定描述：条件、成功动作、失败动作。 */
         struct JudgeEffect
         {
-            JudgeTrigger trigger = JudgeTrigger::Red;
-            JudgeAction success = JudgeAction::Nothing;
-            JudgeAction failure = JudgeAction::Nothing;
-            int amount = 0;
+            JudgeTrigger trigger = JudgeTrigger::Red; /**< 判定触发条件。 */
+            JudgeAction success = JudgeAction::Nothing; /**< 条件满足时的动作。 */
+            JudgeAction failure = JudgeAction::Nothing; /**< 条件不满足时的动作。 */
+            int amount = 0; /**< 动作伤害量；`Damage` 动作时须 > 0。 */
             DamageType damage_type =
                 DamageType::Normal; /**< 伤害属性；仅火焰/雷电显式标注 */
             Option<Scope> scope =
                 Option<Scope>::None(); /**< 打出时的目标范围（延时锦囊用） */
             int range = 0; /**< 打出时的目标距离上限；0 = 不限制（乐不思蜀/闪电） */
 
-            bool operator==(const JudgeEffect &) const = default;
+            bool operator==(const JudgeEffect &) const = default; /**< 逐字段相等；@return 全等。 */
         };
 
         /** @brief 需要目标打出的响应牌类别。 */
         enum class ResponseKind : std::uint8_t
         {
-            Sha,
-            Jink,
+            Sha,  /**< 【杀】。 */
+            Jink, /**< 【闪】。 */
         };
 
         /**
@@ -167,28 +168,28 @@ namespace tkw
          */
         enum class EquipSlot : std::uint8_t
         {
-            Weapon,
-            Armor,
-            OffensiveHorse,
-            DefensiveHorse,
+            Weapon,         /**< 武器槽。 */
+            Armor,          /**< 防具槽。 */
+            OffensiveHorse, /**< 进攻坐骑槽（-1 马）。 */
+            DefensiveHorse, /**< 防御坐骑槽（+1 马）。 */
         };
 
         /** @brief 一张实体牌副本的花色点数（判定/拼点用）。 */
         struct CardCopy
         {
-            Suit suit = Suit::Spade;
-            int number = 1;
+            Suit suit = Suit::Spade; /**< 花色。 */
+            int number = 1;          /**< 点数（1~13）。 */
 
-            bool operator==(const CardCopy &) const = default;
+            bool operator==(const CardCopy &) const = default; /**< 逐字段相等；@return 全等。 */
         };
 
         /** @brief 装备参数：槽位；武器带攻击范围。 */
         struct CardEquip
         {
-            EquipSlot slot = EquipSlot::Weapon;
-            int range = 0;
+            EquipSlot slot = EquipSlot::Weapon; /**< 装备槽位。 */
+            int range = 0;                      /**< 攻击范围；仅武器使用。 */
 
-            bool operator==(const CardEquip &) const = default;
+            bool operator==(const CardEquip &) const = default; /**< 逐字段相等；@return 全等。 */
         };
 
         /**
@@ -197,16 +198,17 @@ namespace tkw
          */
         struct CardEffect
         {
-            CardEffectKind kind = CardEffectKind::Damage;
-            int amount = 0;
-            int count = 0;
-            Option<Scope> scope = Option<Scope>::None();
+            CardEffectKind kind = CardEffectKind::Damage; /**< 效果判别器。 */
+            int amount = 0; /**< 伤害/回复量；按 `kind` 取用。 */
+            int count = 0; /**< 摸/弃/获得张数；按 `kind` 取用。 */
+            Option<Scope> scope = Option<Scope>::None(); /**< 目标范围；`None` = 默认。 */
+            /** @brief 需目标打出的响应牌；`None` = 不需响应。 */
             Option<ResponseKind> response = Option<ResponseKind>::None();
-            int range = 0;
+            int range = 0; /**< 目标距离上限；0 = 不限制。 */
             DamageType damage_type =
                 DamageType::Normal; /**< 伤害属性；仅火焰/雷电显式标注 */
 
-            bool operator==(const CardEffect &) const = default;
+            bool operator==(const CardEffect &) const = default; /**< 逐字段相等；@return 全等。 */
         };
 
         /**
@@ -216,22 +218,22 @@ namespace tkw
          */
         struct CardDef
         {
-            std::string id;
-            std::string name;
-            CardType type = CardType::Basic;
-            std::string subtype;
-            std::vector<CardCopy> copies;
-            std::string text;
-            Option<CardEffect> effect = Option<CardEffect>::None();
-            Option<CardEquip> equip = Option<CardEquip>::None();
-            Option<JudgeEffect> judge = Option<JudgeEffect>::None();
-            std::vector<Ability> abilities;
+            std::string id;      /**< 卡牌定义 id（= 卡牌文件名）。 */
+            std::string name;    /**< 卡牌中文名。 */
+            CardType type = CardType::Basic; /**< 卡牌大类。 */
+            std::string subtype; /**< 子类（空串 = 未分类）。 */
+            std::vector<CardCopy> copies; /**< 精确副本列表；牌堆逐张生成。 */
+            std::string text;             /**< 技能/效果文案（仅展示）。 */
+            Option<CardEffect> effect = Option<CardEffect>::None(); /**< 主动效果；`None` = 无。 */
+            Option<CardEquip> equip = Option<CardEquip>::None(); /**< 装备参数；`None` = 非装备。 */
+            Option<JudgeEffect> judge = Option<JudgeEffect>::None(); /**< 判定描述；`None` = 无判定。 */
+            std::vector<Ability> abilities; /**< 装备被动能力（可多个）。 */
             bool rescue = false;  /**< 可作濒死救场牌（桃） */
             bool counter = false; /**< 可作无懈响应牌（无懈可击） */
             bool self_rescue = false; /**< 仅可作自己濒死时的救场牌（酒） */
             bool recast = false; /**< 可重铸：弃置此牌并摸一张（铁索连环等） */
 
-            bool operator==(const CardDef &) const = default;
+            bool operator==(const CardDef &) const = default; /**< 逐字段相等；@return 全等。 */
         };
     }
 }

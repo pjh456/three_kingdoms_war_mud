@@ -1,10 +1,11 @@
 /**
- * @file decider.hpp
- * @brief 统一决策接缝：把 DecisionSource 的分散回调收敛成单个
- *        decide(DecisionRequest)，并附带只读观察与候选枚举。
- * @note 状态机只需实现 Decider::decide；RequestDecisionSource 负责从
- *       ReadOnlyContext 抽取观察/候选并适配回引擎的 DecisionSource。请求只含
- *       只读数据（观察 + 候选 + 卡牌目录），故决策是纯函数、可回放、可单测。
+ * @file   decider.hpp
+ * @brief  统一决策接缝：把 DecisionSource 的分散回调收敛成单个 decide(DecisionRequest)。
+ * @details 并附带只读观察与候选枚举。状态机只需实现 `Decider::decide`；
+ *          `RequestDecisionSource` 负责从 `ReadOnlyContext` 抽取观察/候选并适配回引擎的
+ *          `DecisionSource`。请求只含只读数据（观察 + 候选 + 卡牌目录），故决策是
+ *          纯函数、可回放、可单测。本层为只读 AI，不修改任何对局状态。
+ * @ingroup tkw_game_ai
  */
 
 #ifndef INCLUDE_TKW_GAME_DECIDER_HPP
@@ -49,13 +50,13 @@ namespace tkw
             /** @brief 一次决策请求：类别 + 决策者 + 只读观察 + 候选。 */
             struct DecisionRequest
             {
-                DecisionKind kind = DecisionKind::Play;
+                DecisionKind kind = DecisionKind::Play; /**< 决策点类别 */
                 std::string actor; /**< 决策者 id */
                 AiView view;       /**< 决策者视角观察 */
                 const card::CardDefCatalog *catalog = nullptr; /**< 只读卡牌目录 */
 
                 // Play
-                TurnContext turn;
+                TurnContext turn; /**< Play：当前回合上下文（杀次数上限等） */
 
                 // Play / Response
                 std::vector<LegalAction> legal; /**< Play 合法出牌动作；Response 两张当杀 pair 候选（丈八） */
@@ -65,19 +66,19 @@ namespace tkw
                 // 龙胆杀当闪）；
                 // PickCard 的对手手牌候选为无身份占位槽（def_id/instance_id 空，
                 // zone_labels 仍标 Hand）；其余类别均为决策者可见牌或公开亮牌。
-                std::vector<card::Card> options;
+                std::vector<card::Card> options; /**< 各类别的候选牌（口径见上方注释） */
 
                 // PickRevealed
                 RevealSource reveal_source = RevealSource::Wugu; /**< 亮牌来源结算 */
 
                 // Response
-                card::ResponseKind response_kind = card::ResponseKind::Sha;
+                card::ResponseKind response_kind = card::ResponseKind::Sha; /**< Response：需要的响应牌类别 */
                 std::string response_source; /**< Response：来源牌 def id（空 = 未知） */
                 std::string response_user;   /**< Response：来源使用者 id */
                 int response_damage = 0;     /**< Response：不响应伤害量（0 = 不适用） */
 
                 // Peach
-                std::string dying;
+                std::string dying; /**< Peach：濒死者 id */
 
                 // Counter
                 std::string counter_user;              /**< 锦囊使用者（延时判定窗口 = 空串哨兵） */
@@ -86,26 +87,26 @@ namespace tkw
                 int counter_played = 0; /**< 本窗已打出的无懈张数（公开事实，0 起） */
 
                 // PickCard
-                std::string target;
+                std::string target; /**< PickCard：被选牌的目标 id */
                 std::vector<card::Zone> zone_labels; /**< PickCard：与 options 等长的来源分区标签；其余类别为空 */
 
                 // Trigger
-                card::Ability ability = card::Ability::NoShaLimit;
+                card::Ability ability = card::Ability::NoShaLimit; /**< Trigger：装备能力（hero_trigger=false 时有效） */
                 bool hero_trigger = false; /**< Trigger：true=武将触发技，false=装备能力 */
                 hero::HeroSkill hero_skill =
                     hero::HeroSkill::PaoXiao; /**< Trigger：武将触发技技能 */
                 std::string trigger_cause; /**< Trigger：触发来源（反馈=伤害来源；空=无来源） */
 
                 // Discard
-                int count = 0;
-                DiscardReason discard_reason = DiscardReason::TurnLimit;
+                int count = 0; /**< Discard：需弃牌数 */
+                DiscardReason discard_reason = DiscardReason::TurnLimit; /**< Discard：弃牌原因 */
             };
 
             /** @brief 决策结果（按类别取用相应字段）。 */
             struct DecisionChoice
             {
                 bool accepted = false; /**< Trigger：是否发动 */
-                Option<std::string> instance_id = Option<std::string>::None();
+                Option<std::string> instance_id = Option<std::string>::None(); /**< Play/Response/Peach/Counter：选中的牌实例 id；`None` = 放弃 */
                 Option<std::size_t> option_index =
                     Option<std::size_t>::None(); /**< PickCard/PickRevealed：选中的候选下标 */
                 std::vector<std::string> targets;  /**< Play：目标 */
@@ -115,11 +116,23 @@ namespace tkw
                 bool converted_sha = false; /**< Play：单张转化当杀（武圣红牌 / 龙胆闪；来源由引擎按武将判定） */
             };
 
-            /** @brief 状态机接口：实现单个 decide 即可接入引擎。 */
+            /**
+             * @brief  状态机接口：实现单个 decide 即可接入引擎。
+             * @warning 实现必须是只读的：不得修改对局状态或缓存请求内指针。
+             */
             class Decider
             {
             public:
-                virtual ~Decider() = default;
+                virtual ~Decider() = default; /**< 多态析构；派生决策源经基类指针释放。 */
+
+                /**
+                 * @brief  对一次决策请求给出选择。
+                 * @param[in] request 类别 + 决策者 + 只读观察 + 候选；生命周期覆盖本次调用。
+                 * @return 按 `request.kind` 取用相应字段的决策结果。
+                 * @pre   `request` 生命周期覆盖本次调用。
+                 * @post  本接口不改变任何对局状态；请求与观察只读。
+                 * @note  实现应确定性、可回放；返回空 `DecisionChoice` 表示放弃。
+                 */
                 virtual DecisionChoice decide(const DecisionRequest &request) = 0;
             };
 
@@ -127,12 +140,28 @@ namespace tkw
              * @class RequestDecisionSource
              * @brief 把 Decider 适配回引擎的 DecisionSource：负责从 GameContext
              *        抽取观察与候选，构造 DecisionRequest，再翻译 DecisionChoice。
+             * @note  只读：全部回调只读取容器并构造副本，不修改对局状态。
              */
             class RequestDecisionSource : public DecisionSource
             {
             public:
+                /**
+                 * @brief  以指定决策器构造适配器。
+                 * @param[in] decider 决策实现；生命周期须覆盖本对象。
+                 */
                 explicit RequestDecisionSource(Decider &decider) : decider_(&decider) {}
 
+                /**
+                 * @brief  响应窗口适配：枚举真响应牌与单张/两张转化候选并翻译选择。
+                 * @param[in] ctx    只读容器视图。
+                 * @param[in] entity 被询问的实体 id。
+                 * @param[in] kind   需要的响应牌类别。
+                 * @param[in] prompt 来源牌/使用者/伤害量（只读事实）。
+                 * @return 要打出的响应动作；`None` = 不响应。
+                 * @retval Some 引擎校验并负责消费所选手牌。
+                 * @retval None 放弃响应。
+                 * @post 本接口不改变任何状态。
+                 */
                 Option<PlayAction> play_response(
                     const ReadOnlyContext &ctx, const std::string &entity,
                     card::ResponseKind kind, const ResponsePrompt &prompt) override
@@ -168,6 +197,16 @@ namespace tkw
                         choice.instance_id.unwrap(), {}, choice.second_instance_id});
                 }
 
+                /**
+                 * @brief  濒死救场适配：枚举救场牌并翻译选择。
+                 * @param[in] ctx   只读容器视图。
+                 * @param[in] saver 被询问的救援者 id。
+                 * @param[in] dying 濒死者 id（`saver == dying` 时只找自救牌）。
+                 * @return 打出的救场牌实例 id；`None` = 不救。
+                 * @retval Some 引擎校验并负责消费该牌。
+                 * @retval None 放弃救援。
+                 * @post 本接口不改变任何状态。
+                 */
                 Option<std::string> play_peach(
                     const ReadOnlyContext &ctx, const std::string &saver,
                     const std::string &dying) override
@@ -182,6 +221,19 @@ namespace tkw
                     return decider_->decide(req).instance_id;
                 }
 
+                /**
+                 * @brief  无懈窗口适配：枚举无懈牌并翻译选择。
+                 * @param[in] ctx            只读容器视图。
+                 * @param[in] player         被询问的实体 id。
+                 * @param[in] trick_user     锦囊使用者 id（延时判定窗为空串哨兵）。
+                 * @param[in] trick_targets  锦囊目标集合。
+                 * @param[in] trick_def_id   被无懈的锦囊 def id（空 = 未知）。
+                 * @param[in] counter_played 本窗已打出的无懈张数（公开事实，0 起）。
+                 * @return 打出的无懈实例 id；`None` = 不出。
+                 * @retval Some 引擎校验并负责消费该牌。
+                 * @retval None 放弃响应。
+                 * @post 本接口不改变任何状态。
+                 */
                 Option<std::string> play_counter(
                     const ReadOnlyContext &ctx, const std::string &player,
                     const std::string &trick_user,
@@ -201,6 +253,14 @@ namespace tkw
                     return decider_->decide(req).instance_id;
                 }
 
+                /**
+                 * @brief  可选装备能力触发适配。
+                 * @param[in] ctx     只读容器视图。
+                 * @param[in] player  决策者 id。
+                 * @param[in] ability 待触发的装备能力。
+                 * @return true = 发动，false = 不发动。
+                 * @post 本接口不改变任何状态。
+                 */
                 bool trigger_effect(
                     const ReadOnlyContext &ctx, const std::string &player,
                     card::Ability ability) override
@@ -211,6 +271,15 @@ namespace tkw
                     return decider_->decide(req).accepted;
                 }
 
+                /**
+                 * @brief  武将触发技适配。
+                 * @param[in] ctx    只读容器视图。
+                 * @param[in] player 决策者 id。
+                 * @param[in] skill  待触发的武将技能。
+                 * @param[in] cause  触发来源 id（空 = 无来源）。
+                 * @return true = 发动，false = 不发动。
+                 * @post 本接口不改变任何状态。
+                 */
                 bool trigger_hero_skill(
                     const ReadOnlyContext &ctx, const std::string &player,
                     hero::HeroSkill skill, const std::string &cause) override
@@ -223,6 +292,17 @@ namespace tkw
                     return decider_->decide(req).accepted;
                 }
 
+                /**
+                 * @brief  从目标区域选牌适配：隐藏手牌只放无身份占位槽。
+                 * @param[in] ctx    只读容器视图。
+                 * @param[in] source 决策者 id。
+                 * @param[in] target 被选牌的目标 id。
+                 * @param[in] scope  可选取域（手/装备/判定）。
+                 * @return 选中的目标牌；`None` = 放弃或下标越界。
+                 * @retval Some 隐藏手牌只回传槽位下标，真实身份由引擎随机暗抽。
+                 * @retval None 放弃选择。
+                 * @post 本接口不改变任何状态。
+                 */
                 Option<TargetPick> pick_card_from_target(
                     const ReadOnlyContext &ctx, const std::string &source,
                     const std::string &target, PickCardScope scope) override
@@ -261,6 +341,17 @@ namespace tkw
                         TargetPick{zone, i, Option<card::Card>::Some(req.options[i])});
                 }
 
+                /**
+                 * @brief  从亮出的牌中选牌适配。
+                 * @param[in] ctx     只读容器视图。
+                 * @param[in] player  决策者 id。
+                 * @param[in] options 可选的亮牌。
+                 * @param[in] source  亮牌来源结算。
+                 * @return 选中的牌；`None` = 放弃或下标越界。
+                 * @retval Some 引擎按来源消费该亮牌。
+                 * @retval None 放弃选择。
+                 * @post 本接口不改变任何状态。
+                 */
                 Option<card::Card> pick_from_revealed(
                     const ReadOnlyContext &ctx, const std::string &player,
                     const std::vector<card::Card> &options,
@@ -280,6 +371,15 @@ namespace tkw
                     return Option<card::Card>::Some(req.options[i]);
                 }
 
+                /**
+                 * @brief  出牌阶段适配：枚举合法动作并翻译选择。
+                 * @param[in] ctx  只读容器视图。
+                 * @param[in] turn 当前回合上下文（决策者 = `turn.player`）。
+                 * @return 要执行的动作；`None` = 结束出牌阶段。
+                 * @retval Some 引擎校验并结算该动作。
+                 * @retval None 结束出牌阶段。
+                 * @post 本接口不改变任何状态。
+                 */
                 Option<PlayAction> choose_play(
                     const ReadOnlyContext &ctx, const TurnContext &turn) override
                 {
@@ -296,6 +396,15 @@ namespace tkw
                         choice.converted_sha});
                 }
 
+                /**
+                 * @brief  弃牌适配：把手牌作为候选交给 Decider。
+                 * @param[in] ctx    只读容器视图。
+                 * @param[in] player 决策者 id。
+                 * @param[in] count  需弃牌数。
+                 * @param[in] reason 弃牌原因（回合上限/能力代价等）。
+                 * @return 要弃置的牌实例 id 列表；数量不足由引擎按非法选择处理。
+                 * @post 本接口不改变任何状态。
+                 */
                 std::vector<std::string> choose_discards(
                     const ReadOnlyContext &ctx, const std::string &player, int count,
                     DiscardReason reason) override
@@ -309,8 +418,15 @@ namespace tkw
                 }
 
             private:
-                Decider *decider_;
+                Decider *decider_; /**< 决策实现；生命周期由调用方保证覆盖本对象。 */
 
+                /**
+                 * @brief  构造只读基请求：填 actor/catalog/view，其余字段由各回调补齐。
+                 * @param[in] ctx   只读容器视图。
+                 * @param[in] actor 决策者 id。
+                 * @return 已填公共字段的请求；观察为 `actor` 视角副本。
+                 * @post 不改变任何状态。
+                 */
                 static DecisionRequest base_request(
                     const ReadOnlyContext &ctx, const std::string &actor)
                 {
@@ -321,6 +437,14 @@ namespace tkw
                     return req;
                 }
 
+                /**
+                 * @brief  手牌是否可作指定类别的真响应牌。
+                 * @param[in] ctx  只读容器视图。
+                 * @param[in] c    待查手牌。
+                 * @param[in] kind 响应牌类别。
+                 * @return 命中该类别响应定义时为 true。
+                 * @post 本接口不改变任何状态。
+                 */
                 static bool is_response_card(
                     const ReadOnlyContext &ctx, const card::Card &c,
                     card::ResponseKind kind)
@@ -330,6 +454,14 @@ namespace tkw
                         { return is_response_def(def, kind); });
                 }
 
+                /**
+                 * @brief  手牌是否可救场（自救助只认桃，救他人按定义口径）。
+                 * @param[in] ctx     只读容器视图。
+                 * @param[in] c       待查手牌。
+                 * @param[in] is_self 救援者是否即濒死者。
+                 * @return 可救场时为 true。
+                 * @post 本接口不改变任何状态。
+                 */
                 static bool is_rescue_card(
                     const ReadOnlyContext &ctx, const card::Card &c, bool is_self)
                 {
@@ -339,6 +471,13 @@ namespace tkw
                         { return can_rescue_def(def, is_self); });
                 }
 
+                /**
+                 * @brief  手牌是否为无懈可击。
+                 * @param[in] ctx 只读容器视图。
+                 * @param[in] c   待查手牌。
+                 * @return 该牌定义为无懈时为 true。
+                 * @post 本接口不改变任何状态。
+                 */
                 static bool is_counter_card(
                     const ReadOnlyContext &ctx, const card::Card &c)
                 {
@@ -347,7 +486,14 @@ namespace tkw
                         [](const card::CardDef &def) { return is_counter_def(def); });
                 }
 
-                /** @brief 追加一个区域的候选牌，并为每张牌记录来源分区。 */
+                /**
+                 * @brief 追加一个区域的候选牌，并为每张牌记录来源分区。
+                 * @param[in,out] out    候选牌输出。
+                 * @param[in,out] labels 与 `out` 平行的来源分区标签输出。
+                 * @param[in]     zone   待追加的区域牌。
+                 * @param[in]     label  该区域的分区标签。
+                 * @post `out` 与 `labels` 保持等长。
+                 */
                 static void append_zone(
                     std::vector<card::Card> &out,
                     std::vector<card::Zone> &labels,

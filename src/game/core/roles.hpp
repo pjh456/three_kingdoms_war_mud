@@ -1,8 +1,10 @@
 /**
  * @file roles.hpp
- * @brief 身份局的对局模式与角色值类型：模式/角色/阵营枚举、人数配比与只读查表。
- * @note 纯值类型，不引 context/table；角色是对局状态，按玩家 id 键控存放于 Game，
- *       不进 Entity（支撑域不承载游戏规则）。
+ * @brief 身份局的对局模式与角色值类型。
+ * @details 含模式/角色/阵营枚举、人数配比与只读查表；纯值类型，不引
+ *          `context`/`table`。角色是对局状态，按玩家 id 键控存放于 `Game`，
+ *          不进 `Entity`（支撑域不承载游戏规则）。
+ * @ingroup tkw_game_core
  */
 
 #ifndef INCLUDE_TKW_GAME_ROLES_HPP
@@ -49,10 +51,10 @@ namespace tkw
         using RoleTable = std::map<std::string, Role>;
 
         /**
-         * @brief 查角色。
-         * @param roles 角色表（可为空指针）。
-         * @param id 玩家 id。
-         * @return 命中返回对应角色；空表或未命中返回 Role::None。
+         * @brief  查角色。
+         * @param[in] roles 角色表（可为空指针）。
+         * @param[in] id    玩家 id。
+         * @return 命中返回对应角色；空表或未命中返回 `Role::None`。
          */
         inline Role role_of(const RoleTable *roles, const std::string &id)
         {
@@ -71,10 +73,12 @@ namespace tkw
         };
 
         /**
-         * @brief 按人数取身份局角色配比。
-         * @param n 玩家数。
-         * @return 4→(1,1,1)、5→(1,2,1)、6→(1,3,1)、7→(2,3,1)、8→(2,4,1)；
-         *         其余人数返回 None（无标准配比）。
+         * @brief  按人数取身份局角色配比。
+         * @param[in] n 玩家数。
+         * @return 该人数下的忠臣/反贼/内奸配比；无标准配比时为 `None`。
+         * @retval Some 4→(1,1,1)、5→(1,2,1)、6→(1,3,1)、7→(2,3,1)、
+         *              8→(2,4,1)。
+         * @retval None 其余人数无标准配比。
          * @note 主公恒 1 名，故 1 + loyalist + rebel + traitor == n。
          */
         inline Option<RoleCounts> roles_for_count(int n)

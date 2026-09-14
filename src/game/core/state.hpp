@@ -1,8 +1,12 @@
 /**
  * @file state.hpp
- * @brief 对局状态的基础操作：扣血/回血/摸牌（不含濒死死亡，那些归 combat.hpp）。
- * @note 这些是「状态层」原语：只改实体状态与牌堆，不发布流程事件（濒死/死亡），
- *       但会发布卡牌域事件（如摸牌）供日志/回放消费。
+ * @brief 对局状态的基础操作：扣血/回血/摸牌。
+ * @details 不含濒死与死亡判定，那些归 combat 结算。这些是「状态层」原语：
+ *          只改实体状态与牌堆，不发布流程事件（濒死/死亡），但会发布卡牌域
+ *          事件（如摸牌）供日志/回放消费。
+ * @warning 改对局状态只能经本文件或 resolve 层；query/AI 目录不得调用其中的
+ *          非 const 接口。
+ * @ingroup tkw_game_core
  */
 
 #ifndef INCLUDE_TKW_GAME_STATE_HPP
@@ -24,19 +28,32 @@ namespace tkw
 {
     namespace game
     {
-        /** @brief 花色是否为黑（♠/♣）。 */
+        /**
+         * @brief  花色是否为黑（♠/♣）。
+         * @param[in] s 花色。
+         * @return 黑桃或梅花时为 true。
+         */
         inline bool is_black_suit(card::Suit s)
         {
             return s == card::Suit::Spade || s == card::Suit::Club;
         }
 
-        /** @brief 花色是否为红（♥/♦）。 */
+        /**
+         * @brief  花色是否为红（♥/♦）。
+         * @param[in] s 花色。
+         * @return 红桃或方块时为 true。
+         */
         inline bool is_red_suit(card::Suit s)
         {
             return s == card::Suit::Heart || s == card::Suit::Diamond;
         }
 
-        /** @brief 判定牌是否满足触发条件（条件来自数据）。 */
+        /**
+         * @brief  判定牌是否满足触发条件（条件来自数据）。
+         * @param[in] t 判定触发条件。
+         * @param[in] c 揭示的判定牌。
+         * @return 判定牌满足该条件时为 true；未知条件为 false。
+         */
         inline bool judge_triggered(card::JudgeTrigger t, const card::Card &c)
         {
             switch (t)
@@ -57,7 +74,12 @@ namespace tkw
             return false;
         }
 
-        /** @brief 判定结果动作：触发取 success，否则取 failure。 */
+        /**
+         * @brief  判定结果动作。
+         * @param[in] j 判定效果（触发条件与成功/失败动作）。
+         * @param[in] c 揭示的判定牌。
+         * @return 满足触发条件时取 `j.success`，否则取 `j.failure`。
+         */
         inline card::JudgeAction judge_result(
             const card::JudgeEffect &j, const card::Card &c)
         {
@@ -65,7 +87,11 @@ namespace tkw
         }
 
         /**
-         * @brief 目录查找：命中返回定义指针，未命中或目录未绑定时返回 nullptr。
+         * @brief  目录查找。
+         * @param[in] ctx    只读上下文。
+         * @param[in] def_id 卡牌定义 id。
+         * @return 命中的定义指针；未命中或目录未绑定时为 `nullptr`。
+         * @note  返回指针在目录生命周期内稳定。
          */
         inline const card::CardDef *def_of(
             const ReadOnlyContext &ctx, const std::string &def_id)
@@ -77,8 +103,12 @@ namespace tkw
         }
 
         /**
-         * @brief 单张牌是否满足谓词（目录缺失或未命中即不匹配）。
+         * @brief  单张牌是否满足谓词。
          * @tparam Accept 谓词类型：接受 `const card::CardDef &`、返回 bool。
+         * @param[in] ctx    只读上下文。
+         * @param[in] c      待判定的牌。
+         * @param[in] accept 对牌面定义求值的谓词。
+         * @return 目录命中且谓词为 true 时为 true；目录缺失或未命中为 false。
          */
         template <class Accept>
         inline bool hand_card_matching(
@@ -89,8 +119,13 @@ namespace tkw
         }
 
         /**
-         * @brief 手牌中是否存在满足谓词者（只读扫描）。
+         * @brief  手牌中是否存在满足谓词者（只读扫描）。
          * @tparam Accept 谓词类型：接受 `const card::CardDef &`、返回 bool。
+         * @param[in] ctx    只读上下文。
+         * @param[in] owner  手牌持有者 id。
+         * @param[in] accept 对牌面定义求值的谓词。
+         * @return 存在满足谓词的手牌时为 true。
+         * @post  本接口不改变任何状态。
          */
         template <class Accept>
         inline bool any_hand_card_matching(
@@ -103,9 +138,15 @@ namespace tkw
         }
 
         /**
-         * @brief 手牌中首张满足谓词者（只读副本）。
+         * @brief  手牌中首张满足谓词者（只读副本）。
          * @tparam Accept 谓词类型：接受 `const card::CardDef &`、返回 bool。
-         * @return Some(首张匹配的手牌)；None = 无匹配（含目录缺失）。
+         * @param[in] ctx    只读上下文。
+         * @param[in] owner  手牌持有者 id。
+         * @param[in] accept 对牌面定义求值的谓词。
+         * @return 首张匹配的手牌副本；无匹配时为 `None`。
+         * @retval Some 按手牌序命中的首张牌。
+         * @retval None 无匹配（含目录缺失或未命中）。
+         * @post  本接口不改变任何状态。
          */
         template <class Accept>
         inline Option<card::Card> find_hand_card_matching(
@@ -117,7 +158,13 @@ namespace tkw
             return Option<card::Card>::None();
         }
 
-        /** @brief 回血（按上限钳制）。 */
+        /**
+         * @brief  回血（按上限钳制）。
+         * @param[in,out] ctx    对局上下文。
+         * @param[in]     target 回复对象 id。
+         * @param[in]     amount 回复量；实体不存在时安全 no-op。
+         * @post  实际回复量受实体体力上限钳制。
+         */
         inline void apply_heal(GameContext &ctx, const std::string &target, int amount)
         {
             const auto e = ctx.entities->find(target);
@@ -125,7 +172,12 @@ namespace tkw
                 e.unwrap()->heal(amount);
         }
 
-        /** @brief 目标是否处于连环状态（实体不存在时返回 false）。 */
+        /**
+         * @brief  目标是否处于连环状态。
+         * @param[in] ctx 只读上下文。
+         * @param[in] id  实体 id。
+         * @return 实体存在且已横置时为 true；实体不存在时为 false。
+         */
         inline bool is_chained(const ReadOnlyContext &ctx, const std::string &id)
         {
             const auto e = ctx.entities->find(id);
@@ -133,8 +185,11 @@ namespace tkw
         }
 
         /**
-         * @brief 设置目标的连环状态（横置/重置）。
-         * @note 空 id 或实体不存在时安全 no-op；不发事件，调用方负责结算语义。
+         * @brief  设置目标的连环状态（横置/重置）。
+         * @param[in,out] ctx     对局上下文。
+         * @param[in]     id      目标实体 id。
+         * @param[in]     chained 目标状态。
+         * @note  空 id 或实体不存在时安全 no-op；不发事件，调用方负责结算语义。
          */
         inline void set_chained(GameContext &ctx, const std::string &id, bool chained)
         {
@@ -144,10 +199,13 @@ namespace tkw
         }
 
         /**
-         * @brief 失去装备区一张牌后的触发结算：带「白银狮子」能力者回复 1 点体力。
-         * @param owner 失去装备的实体（回复对象，非取牌者）。
-         * @note 仅装备区失去触发；手牌/判定区的同名卡离场不触发（调用方保证来源为
-         *       Equip）。满体力时 heal 钳制为 0，无副作用。
+         * @brief  失去装备区一张牌后的触发结算。
+         * @details 带「白银狮子」能力者回复 1 点体力。
+         * @param[in,out] ctx   对局上下文。
+         * @param[in]     owner 失去装备的实体 id（回复对象，非取牌者）。
+         * @param[in]     card  离开装备区的牌。
+         * @note  仅装备区失去触发；手牌/判定区的同名卡离场不触发（调用方保证
+         *        来源为 `Equip`）。满体力时 heal 钳制为 0，无副作用。
          */
         inline void apply_equip_lost(
             GameContext &ctx, const std::string &owner, const card::Card &card)
@@ -162,11 +220,13 @@ namespace tkw
         }
 
         /**
-         * @brief 消费酒对本回合下一张「杀」的伤害加成：归属匹配才生效且只生效一次。
-         * @param attacker 本次使用「杀」的玩家 id。
-         * @return 应叠加的伤害基数（+1）；无待生效加成或归属不符时返回 0。
-         * @note 只清归属不碰「本回合已用酒」标记：该标记由回合入口清零。
-         *       消费点放在「使用杀」的入口，响应/打出的杀不消费也不享受。
+         * @brief  消费酒对本回合下一张「杀」的伤害加成。
+         * @details 归属匹配才生效且只生效一次。
+         * @param[in,out] ctx      对局上下文。
+         * @param[in]     attacker 本次使用「杀」的玩家 id。
+         * @return 应叠加的伤害基数（+1）；无待生效加成或归属不符时为 0。
+         * @note  只清归属不碰「本回合已用酒」标记：该标记由回合入口清零。
+         *        消费点放在「使用杀」的入口，响应/打出的杀不消费也不享受。
          */
         inline int consume_jiu_sha_bonus(
             GameContext &ctx, const std::string &attacker)
@@ -178,9 +238,12 @@ namespace tkw
         }
 
         /**
-         * @brief 从摸牌堆取一张；牌堆空且弃牌堆非空时经 rng 洗回后重试。
-         * @return None 表示摸牌堆与弃牌堆皆空（或无 rng 且摸牌堆空）。
-         * @note 依赖 ctx.rng 洗回；随机源为 null 时牌堆空则直接 None。
+         * @brief  从摸牌堆取一张；牌堆空且弃牌堆非空时经 rng 洗回后重试。
+         * @param[in,out] ctx 对局上下文。
+         * @return 摸到的牌；无牌可摸时为 `None`。
+         * @retval Some 摸牌堆顶的牌（必要时先经 `ctx.rng` 洗回弃牌堆）。
+         * @retval None 摸牌堆与弃牌堆皆空（或无 rng 且摸牌堆空）。
+         * @note  随机源为 null 时牌堆空则直接 `None`。
          */
         inline Option<card::Card> draw_with_refill(GameContext &ctx)
         {
@@ -195,8 +258,13 @@ namespace tkw
         }
 
         /**
-         * @brief 摸 count 张进手牌；牌堆与弃牌堆皆空即停，返回实际摸到的张数。
-         * @param kind 摸牌来源语义，透传到摸牌事件供日志标签区分。
+         * @brief  摸 count 张进手牌；牌堆与弃牌堆皆空即停。
+         * @param[in,out] ctx    对局上下文。
+         * @param[in]     player 摸牌入手的实体 id。
+         * @param[in]     count  请求摸牌张数。
+         * @param[in]     kind   摸牌来源语义，透传到摸牌事件供日志标签区分。
+         * @return 实际摸到的张数（提前无牌可摸时小于 `count`）。
+         * @post  每张入手的牌发布一次摸牌事件。
          */
         inline int apply_draw(
             GameContext &ctx, const std::string &player, int count,
@@ -216,7 +284,16 @@ namespace tkw
             return drew;
         }
 
-        /** @brief 从某实体的任一区域移除指定牌（填 out 返回被移除的牌与来源区域）。 */
+        /**
+         * @brief  从某实体的任一区域移除指定牌。
+         * @param[in,out] ctx         对局上下文。
+         * @param[in]     entity_id   实体 id。
+         * @param[in]     instance_id 待移除的牌实例 id。
+         * @param[out]    out         被移除的牌；失败时不被修改。
+         * @param[out]    from_zone   来源区域；非空时写入，可为 `nullptr`。
+         * @return 移除成功时为 true；该牌不在任一区域时为 false。
+         * @post  失败时 `out` 与牌区均不被污染。
+         */
         inline bool remove_card_from_zones(
             GameContext &ctx, const std::string &entity_id,
             const std::string &instance_id, card::Card &out,
@@ -229,7 +306,14 @@ namespace tkw
             return true;
         }
 
-        /** @brief 弃置一张牌并发布弃置事件。按值拷贝入弃牌堆，事件读原牌。 */
+        /**
+         * @brief  弃置一张牌并发布弃置事件。
+         * @param[in,out] ctx   对局上下文。
+         * @param[in]     owner 弃置归属实体 id（可空 = 判定/无主）。
+         * @param[in]     c     待弃置的牌。
+         * @param[in]     kind  进弃牌堆的来源语义（供展示标签区分）。
+         * @note  按值拷贝入弃牌堆，事件读原牌。
+         */
         inline void discard_and_emit(
             GameContext &ctx, const std::string &owner, const card::Card &c,
             DiscardKind kind = DiscardKind::Normal)
@@ -239,10 +323,14 @@ namespace tkw
         }
 
         /**
-         * @brief 从手牌移除指定牌并无条件弃置，发布弃置事件。
-         * @param instance_id 待移除的手牌实例；不在手牌时直接失败。
-         * @return Some(被弃置的牌)；None = 该牌不在 owner 手牌（无副作用）。
-         * @note 弃置按值拷贝、事件读原牌后再整体移动返回，返回值保持完整。
+         * @brief  从手牌移除指定牌并无条件弃置，发布弃置事件。
+         * @param[in,out] ctx         对局上下文。
+         * @param[in]     owner       手牌持有者 id。
+         * @param[in]     instance_id 待移除的手牌实例。
+         * @return 被弃置的牌；牌不在手牌时为 `None`。
+         * @retval Some 已从手牌移除并进入弃牌堆的牌。
+         * @retval None 该牌不在 `owner` 手牌（无副作用）。
+         * @note  弃置按值拷贝、事件读原牌后再整体移动返回，返回值保持完整。
          */
         inline Option<card::Card> remove_and_discard(
             GameContext &ctx, const std::string &owner, const std::string &instance_id)
@@ -256,10 +344,14 @@ namespace tkw
         }
 
         /**
-         * @brief 从任一区域移除指定牌并无条件弃置，发布弃置事件。
-         * @param instance_id 待移除的牌实例（按手牌 → 装备 → 判定顺序查找）。
-         * @return Some(被弃置的牌)；None = 该牌不在 owner 任一区域（无副作用）。
-         * @note 弃置按值拷贝、事件读原牌后再整体移动返回，返回值保持完整。
+         * @brief  从任一区域移除指定牌并无条件弃置，发布弃置事件。
+         * @param[in,out] ctx         对局上下文。
+         * @param[in]     owner       牌所属实体 id。
+         * @param[in]     instance_id 待移除的牌实例（按手牌 → 装备 → 判定顺序查找）。
+         * @return 被弃置的牌；牌不在 `owner` 任一区域时为 `None`。
+         * @retval Some 已移除并进入弃牌堆的牌；来源为装备区时附带触发失去结算。
+         * @retval None 该牌不在 `owner` 任一区域（无副作用）。
+         * @note  弃置按值拷贝、事件读原牌后再整体移动返回，返回值保持完整。
          */
         inline Option<card::Card> remove_any_and_discard(
             GameContext &ctx, const std::string &owner, const std::string &instance_id)
@@ -277,15 +369,19 @@ namespace tkw
         }
 
         /**
-         * @brief 从手牌移除指定牌并按谓词校验；合法则弃置并发布弃置事件。
+         * @brief  从手牌移除指定牌并按谓词校验；合法则弃置并发布弃置事件。
          * @tparam Accept 谓词类型：接受 `const card::CardDef &` 与
          *         `const card::Card &`、返回 bool。
-         * @param instance_id 待消费的手牌实例；不在手牌时直接失败。
-         * @param kind 进弃牌堆的来源语义（响应/判定/真实弃置，供展示标签）。
-         * @return Some(消费的牌) 成功；None = 牌不在手牌，或目录缺失/谓词不匹配
-         *         （非法选择已退回手牌）。
-         * @note 弃置按值拷贝、事件读原牌后再整体移动返回，返回值保持完整。
-         *       谓词接收牌面：花色在 Card 上，转化类判定（黑牌当闪等）需要。
+         * @param[in,out] ctx         对局上下文。
+         * @param[in]     owner       手牌持有者 id。
+         * @param[in]     instance_id 待消费的手牌实例。
+         * @param[in]     accept      校验所选牌的谓词。
+         * @param[in]     kind        进弃牌堆的来源语义（响应/判定/真实弃置）。
+         * @return 被消费的牌；牌不在手牌或校验失败时为 `None`。
+         * @retval Some 校验通过并进入弃牌堆的牌。
+         * @retval None 牌不在手牌，或目录缺失/谓词不匹配（非法选择已退回手牌）。
+         * @note  弃置按值拷贝、事件读原牌后再整体移动返回，返回值保持完整。
+         *        谓词接收牌面：花色在 Card 上，转化类判定（黑牌当闪等）需要。
          */
         template <class Accept>
         inline Option<card::Card> consume_hand_card_matching(
@@ -309,9 +405,12 @@ namespace tkw
         }
 
         /**
-         * @brief 判定：从摸牌堆顶揭示一张（牌堆空则弃牌堆洗回）。
-         * @return None 表示摸牌堆与弃牌堆皆空（无法判定）。
-         * @note 洗回口径与摸牌一致：同走 draw_with_refill。
+         * @brief  判定：从摸牌堆顶揭示一张（牌堆空则弃牌堆洗回）。
+         * @param[in,out] ctx 对局上下文。
+         * @return 揭示的判定牌；无法判定时为 `None`。
+         * @retval Some 摸牌堆顶的牌。
+         * @retval None 摸牌堆与弃牌堆皆空。
+         * @note  洗回口径与摸牌一致：同走 `draw_with_refill`。
          */
         inline Option<card::Card> perform_judgement(GameContext &ctx)
         {
@@ -319,13 +418,16 @@ namespace tkw
         }
 
         /**
-         * @brief 落地目标区域选牌：明置牌直接返回，隐藏手牌经 rng 均匀暗抽。
-         * @param target 被选牌的目标实体 id。
-         * @param pick   决策源回传的区域/槽位/明置牌；隐藏手牌 card == None。
-         * @return Some(选中的真实手牌/明置牌)；None = 目标手牌为空且无可选明置牌。
-         * @note 每次调用按当前手牌快照重算，不缓存槽位（寒冰剑连取时手牌持续收缩）。
-         *       ctx.rng 为空时回落候选槽位（无随机源测试）；手牌仅 1 张时
-         *       uniform_below 因 bound <= 1 不消费随机流。
+         * @brief  落地目标区域选牌：明置牌直接返回，隐藏手牌经 rng 均匀暗抽。
+         * @param[in,out] ctx    对局上下文。
+         * @param[in]     target 被选牌的目标实体 id。
+         * @param[in]     pick   决策源回传的区域/槽位/明置牌；隐藏手牌 card == None。
+         * @return 选中的真实手牌/明置牌；无可选牌时为 `None`。
+         * @retval Some 决策源明示的牌，或按槽位从当前手牌快照抽出的牌。
+         * @retval None 目标手牌为空且无可选明置牌。
+         * @note  每次调用按当前手牌快照重算，不缓存槽位（寒冰剑连取时手牌持续
+         *        收缩）。`ctx.rng` 为空时回落候选槽位（无随机源测试）；手牌仅
+         *        1 张时 `uniform_below` 因 bound <= 1 不消费随机流。
          */
         inline Option<card::Card> resolve_target_pick(
             GameContext &ctx, const std::string &target, const TargetPick &pick)
