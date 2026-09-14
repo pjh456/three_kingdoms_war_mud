@@ -46,9 +46,12 @@ jobs:
             ccache_variant: ccache
             cmake_args: ""
             ctest_args: "-E cli_repl_raw_mode_smoke"
+          # 钉 windows-2022：windows-latest 已升到 VS18（MSVC 14.51），其 STL 与项目
+          # 钉定的 doctest 2.5.0 不兼容（前置声明 basic_ostream 与 <string_view> 冲突），
+          # windows-2022 的 VS2022 工具链可正常编译 doctest，故保留测试目标的构建覆盖。
           - name: Windows (MSVC)
             cache_key: Windows-MSVC
-            os: windows-latest
+            os: windows-2022
             cc: cl
             cxx: cl
             ccache_variant: ccache
