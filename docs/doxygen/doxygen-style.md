@@ -137,6 +137,8 @@ class CommonEventBus;
 | `src/game/ai/` | `tkw_game_ai` |
 | `src/cli/` | `tkw_cli` |
 | `src/tui/` | `tkw_tui` |
+| `tui/` | `tkw_tui_frontend`（FTXUI 前端可执行 `tkw-tui`） |
+| `src/main.cpp` | `tkw_cli`（CLI 可执行入口） |
 
 ## 8. 写作要求
 

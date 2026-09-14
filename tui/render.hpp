@@ -4,6 +4,7 @@
  * @note 纯函数渲染：同一 ShellSpec 产出同一 DOM，可用固定尺寸 Screen 单测。
  *       只依赖 FTXUI 与 src/tui 的纯值模型，不触引擎容器、控制器与终端读写；
  *       FTXUI 类型只出现在本层与 tkw-tui 目标。
+ * @ingroup tkw_tui_frontend
  */
 #ifndef INCLUDE_TKW_TUI_RENDER_HPP
 #define INCLUDE_TKW_TUI_RENDER_HPP

@@ -96,3 +96,9 @@
  * @brief TUI 纯视图模型（无 FTXUI、无终端 I/O）。
  * @ingroup tkw_root
  */
+
+/**
+ * @defgroup tkw_tui_frontend TUI Frontend
+ * @brief 可选 FTXUI 前端 (`tkw-tui` 可执行)：终端 I/O、DOM 组装与决策面板。
+ * @ingroup tkw_root
+ */

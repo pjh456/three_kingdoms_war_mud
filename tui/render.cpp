@@ -2,6 +2,7 @@
  * @file render.cpp
  * @brief TUI 渲染实现：四面板 DOM 组装、中段 flex 布局与日志滚动视口。
  * @note 只读纯值模型；布局分级与降级提示在此单点决定，App 只负责准备底部区。
+ * @ingroup tkw_tui_frontend
  */
 
 #include <algorithm>

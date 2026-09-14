@@ -3,6 +3,7 @@
  * @brief 决策面板实现：键位状态机与 FTXUI 渲染。
  * @note 只读纯值视图，候选文本已在 worker 折好；本文件不访问目录/引擎，也不写
  *       标准输出，避免污染全屏画面。
+ * @ingroup tkw_tui_frontend
  */
 
 #include "decision_panel.hpp"

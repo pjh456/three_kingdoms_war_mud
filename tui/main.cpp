@@ -5,6 +5,7 @@
  *       快照；标准输入与标准输出任一非 TTY 即提前退出，避免全屏转义序列污染
  *       管道输出。命令栏 quit/q 或 Esc/Ctrl-C 干净退出（退出前自动存档），退出后
  *       由 FTXUI 恢复终端，自动存档结果写 stderr。
+ * @ingroup tkw_tui_frontend
  */
 
 #include <cstdint>

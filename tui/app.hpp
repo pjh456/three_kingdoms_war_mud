@@ -4,6 +4,7 @@
  * @note FTXUI 类型只出现在本头与实现中；会话驱动、后台线程、日志与退出存档
  *       全在 Controller（无 FTXUI、可单测）。成员声明序即析构保证：命令输入
  *       组件先于输入缓冲析构，不持悬空引用。
+ * @ingroup tkw_tui_frontend
  */
 #ifndef INCLUDE_TKW_TUI_APP_HPP
 #define INCLUDE_TKW_TUI_APP_HPP

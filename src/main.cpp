@@ -3,6 +3,7 @@
  * @brief CLI 入口（pjh_cli）：构建命令树后一次性解析并分派 help/version/action。
  * @note 命令树与执行体在 cli/commands.hpp，便于测试复用同一棵树。
  *       入口自行渲染：解析错误经项目中文前缀，动作错误保留原消息。
+ * @ingroup tkw_cli
  */
 
 #include <iostream>

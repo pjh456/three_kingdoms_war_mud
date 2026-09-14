@@ -4,6 +4,7 @@
  * @note 面板不含引擎逻辑与目录访问：候选文本、多选数量与 pass 语义都由 worker
  *       事前折好；本类只维护光标/勾选状态并把确认结果经回调回送。Esc/Ctrl-C 不
  *       在此处理，由应用壳统一全局退出。
+ * @ingroup tkw_tui_frontend
  */
 #ifndef INCLUDE_TKW_TUI_DECISION_PANEL_HPP
 #define INCLUDE_TKW_TUI_DECISION_PANEL_HPP

@@ -4,6 +4,7 @@
  * @note 渲染层不触引擎容器：快照与日志都是控制器回送的值拷贝，worker 运行
  *       期间主线程只读模型。屏幕回送经 screen.Post（FTXUI TaskQueue 自带锁），
  *       闭包只捕获模型 shared_ptr 与值，不捕获 App。
+ * @ingroup tkw_tui_frontend
  */
 
 #include <cstddef>
