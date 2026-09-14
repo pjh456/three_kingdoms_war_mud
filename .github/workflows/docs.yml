@@ -27,15 +27,20 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install Doxygen
+      # doxygen 出 HTML；graphviz 提供 dot，用于 HAVE_DOT=YES 的继承/协作类图。
+      - name: Install Doxygen and Graphviz
         run: |
           sudo apt-get update
-          sudo apt-get install -y doxygen
+          sudo apt-get install -y doxygen graphviz
 
       # 权威门禁：Doxyfile 设 WARN_AS_ERROR=YES，任何文档警告都会让本步失败、不发布。
       # Doxyfile 的相对路径按运行时当前工作目录解析，必须在仓库根执行。
+      # 先建输出目录：旧版 doxygen 在写 WARN_LOGFILE 时早于创建 OUTPUT_DIRECTORY，
+      # 干净检出下会因父目录不存在而报错。
       - name: Build docs
-        run: doxygen docs/doxygen/Doxyfile
+        run: |
+          mkdir -p build/docs
+          doxygen docs/doxygen/Doxyfile
 
       # 只上传 HTML 产物；生成目录 build/docs/ 已被 .gitignore 忽略，不入库。
       - name: Upload Pages artifact

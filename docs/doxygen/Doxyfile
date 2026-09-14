@@ -33,7 +33,10 @@ SOURCE_BROWSER         = YES
 INLINE_SOURCES         = NO
 REFERENCED_BY_RELATION = YES
 REFERENCES_RELATION    = YES
-HAVE_DOT               = NO
+# 生成继承/协作类图需要 graphviz（dot）。CI 与本地都必须安装，否则 dot 缺失时
+# 会告警并在 WARN_AS_ERROR 下失败；加 DOT_IMAGE_FORMAT=svg 以适配网页缩放。
+HAVE_DOT               = YES
+DOT_IMAGE_FORMAT       = svg
 
 # 解析
 MARKDOWN_SUPPORT       = YES

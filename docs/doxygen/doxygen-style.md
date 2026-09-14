@@ -183,3 +183,5 @@ doxygen docs/doxygen/Doxyfile                       # 权威门禁（WARN_AS_ERR
 
 静态脚本只做结构检查（`@file`、doc 块缺 `@brief`、`@param` 数量不符），
 **Doxygen 警告才是最终验收标准**。
+
+依赖环境：`doxygen` 与 `graphviz`（`HAVE_DOT=YES` 需 `dot`；从仓库根运行）。
