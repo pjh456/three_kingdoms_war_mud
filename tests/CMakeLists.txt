@@ -6,6 +6,11 @@ FetchContent_Declare(doctest
 set(DOCTEST_WITH_MAIN_IN_STATIC_LIB OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(doctest)
 
+# doctest 2.5.0 默认前置声明 std::basic_ostream；MSVC 14.4x 的 <string_view> 在
+# 该类型不完整时实例化流插入，报 C2027（goodbit/badbit 未声明）。切到标准头模式，
+# 让 doctest 先完整包含 <ostream>，无需升级版本。
+target_compile_definitions(doctest INTERFACE DOCTEST_CONFIG_USE_STD_HEADERS)
+
 add_executable(tkw_tests test_main.cpp test_smoke.cpp)
 
 target_link_libraries(tkw_tests PRIVATE tkw_core doctest)
