@@ -405,7 +405,7 @@ namespace tkw
                                       static_cast<std::uint32_t>(
                                           cmd.games) -
                                       1) +
-                      "，ai=" + tkw::cli::detail::ai_level_name(opt.ai) +
+                      "，ai=" + tkw::cli::ai_level_name(opt.ai) +
                       "），请稍候…（q 可取消）");
             post_snapshot();
 
@@ -438,7 +438,7 @@ namespace tkw
                 text = "第 " + std::to_string(snap.turns) +
                        " 回合  下一回合: " + snap.current + "  存活: " +
                        std::to_string(snap.alive) + "  AI: " +
-                       detail::ai_level_name(snap.ai) + "  摸牌堆 " +
+                       tkw::cli::ai_level_name(snap.ai) + "  摸牌堆 " +
                        std::to_string(snap.draw_size) + "  弃牌堆 " +
                        std::to_string(snap.discard_size);
             append_line("状态: " + text);
@@ -505,7 +505,7 @@ namespace tkw
                 return;
             }
             tkw::save::SessionMeta meta;
-            meta.ai = detail::ai_level_name(m_session.ai);
+            meta.ai = tkw::cli::ai_level_name(m_session.ai);
             meta.stats = m_session.stats;
             const std::string text =
                 tkw::save::write(*m_session.game, m_session.state, "deck", meta);
@@ -564,9 +564,12 @@ namespace tkw
             }
 
             tkw::cli::AiLevel ai = m_base.ai;
-            tkw::cli::AiLevel saved = tkw::cli::AiLevel::Simple;
-            if (!meta.ai.empty() && detail::ai_from(meta.ai, saved))
-                ai = saved;
+            if (!meta.ai.empty())
+            {
+                const auto lvl = tkw::cli::ai_level_from(meta.ai);
+                if (lvl.is_some())
+                    ai = lvl.unwrap();
+            }
 
             m_log.unbind();
             m_stats_handles.clear();
@@ -597,7 +600,7 @@ namespace tkw
             if (!m_session.active || !m_session.game || m_base.autosave.empty())
                 return;
             tkw::save::SessionMeta meta;
-            meta.ai = detail::ai_level_name(m_session.ai);
+            meta.ai = tkw::cli::ai_level_name(m_session.ai);
             meta.stats = m_session.stats;
             const std::string text =
                 tkw::save::write(*m_session.game, m_session.state, "deck", meta);

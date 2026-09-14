@@ -109,21 +109,6 @@ namespace tkw
             bool mode_from(std::string_view name, tkw::game::GameMode &out);
 
             /**
-             * @brief  选项值域字符串 → AI 档。
-             * @param[in]  name 选项值（`simple`/`aggressive`）。
-             * @param[out] out  命中时写入 AI 档。
-             * @return 命中返回 true；未命中返回 false 且不写 `out`。
-             */
-            bool ai_from(std::string_view name, tkw::cli::AiLevel &out);
-
-            /**
-             * @brief  AI 档 → 命令行/存档值域字符串。
-             * @param[in] ai AI 档。
-             * @return 稳定字面量（`"aggressive"`/`"simple"`）。
-             */
-            const char *ai_level_name(tkw::cli::AiLevel ai);
-
-            /**
              * @brief  玩家数越界提示：值与合法范围同 REPL 文案口径。
              * @param[in] value 越界的玩家数。
              * @return 中文提示文本。

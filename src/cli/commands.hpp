@@ -370,20 +370,6 @@ namespace tkw
                 const std::vector<std::string> &humans, const std::string &cmd);
 
             /**
-             * @brief AI 难度档 → 命令行/存档值域字符串。
-             * @param[in] ai AI 难度档。
-             * @return `"aggressive"` 或 `"simple"`。
-             */
-            const char *ai_level_name(AiLevel ai);
-
-            /**
-             * @brief 值域字符串 → AI 难度档。
-             * @param[in] name 值域字符串。
-             * @return 匹配的 `AiLevel`；未知或空串返回 `None`，由调用方回落默认档。
-             */
-            tkw::Option<AiLevel> ai_level_from(std::string_view name);
-
-            /**
              * @brief 构造决策源：无真人按难度档取 AI，否则按 actor 路由到交互输入
              *        （真人座位外的回落与全 AI 局同一难度档）。
              * @param[in] humans 真人座位 id；空 = 全 AI 对局。

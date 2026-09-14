@@ -30,7 +30,9 @@ namespace tkw
         /** @brief 存档伴随的会话元数据；ai 空 / stats 全空表示未写，读档回落默认。 */
         struct SessionMeta
         {
-            std::string ai;    /**< AI 难度档文本（`"simple"`/`"aggressive"`；空 = 未写）。 */
+            std::string ai;    /**< AI 难度档文本（`"simple"`/`"aggressive"`；空 = 未写）。
+                                    值域归 `tkw::cli::kAiLevelTexts` 所有，属存档格式稳定
+                                    契约；新增档位须同时考虑旧档回落。 */
             BattleStats stats; /**< 对局统计；全空 = 未写。 */
         };
     }

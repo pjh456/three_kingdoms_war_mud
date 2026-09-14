@@ -115,6 +115,14 @@ namespace tkw
                 return std::make_unique<pjh::cli::FileHistory>(path);
             }
 
+            std::vector<std::pair<std::string, AiLevel>> ai_level_mappings()
+            {
+                std::vector<std::pair<std::string, AiLevel>> mappings;
+                for (const auto &entry : kAiLevelTexts)
+                    mappings.emplace_back(entry.name, entry.level);
+                return mappings;
+            }
+
             void declare_common_options(
                 pjh::cli::BaseCommand &cmd, const tkw::game::RulesConfig &rules)
             {
@@ -154,11 +162,12 @@ namespace tkw
                        "--ai",
                        "AI 难度：simple 贪心 / aggressive 伤害优先（默认 simple）")
                     .enum_type<AiLevel>()
-                    .mapping({{"simple", AiLevel::Simple},
-                             {"aggressive", AiLevel::Aggressive}})
+                    .mapping(ai_level_mappings())
                     .completer([] {
-                        // 候选值域与上方 enum 映射保持一致
-                        return std::vector<std::string>{"simple", "aggressive"};
+                        std::vector<std::string> names;
+                        for (const auto &m : ai_level_mappings())
+                            names.push_back(m.first);
+                        return names;
                     });
                 cmd.option<fixed_string("mode")>(
                        "--mode",
@@ -431,20 +440,6 @@ namespace tkw
                 return cmd +
                        " 不支持 --human（该命令不运行真人参与的对局）；请直接运行 tkw " +
                        cmd;
-            }
-
-            const char *ai_level_name(AiLevel ai)
-            {
-                return ai == AiLevel::Aggressive ? "aggressive" : "simple";
-            }
-
-            tkw::Option<AiLevel> ai_level_from(std::string_view name)
-            {
-                if (name == "simple")
-                    return tkw::Option<AiLevel>::Some(AiLevel::Simple);
-                if (name == "aggressive")
-                    return tkw::Option<AiLevel>::Some(AiLevel::Aggressive);
-                return tkw::Option<AiLevel>::None();
             }
 
             std::unique_ptr<tkw::game::DecisionSource> make_decision_source(
@@ -1088,6 +1083,26 @@ namespace tkw
 {
     namespace cli
     {
+        const char *ai_level_name(AiLevel ai)
+        {
+            for (const auto &entry : kAiLevelTexts)
+            {
+                if (entry.level == ai)
+                    return entry.name;
+            }
+            return kAiLevelTexts[0].name;
+        }
+
+        tkw::Option<AiLevel> ai_level_from(std::string_view name)
+        {
+            for (const auto &entry : kAiLevelTexts)
+            {
+                if (name == entry.name)
+                    return tkw::Option<AiLevel>::Some(entry.level);
+            }
+            return tkw::Option<AiLevel>::None();
+        }
+
         void build_app(pjh::cli::App &app, Session &session)
         {
             app.set_help_formatter(
@@ -1322,7 +1337,7 @@ namespace tkw
                     if (session.active && session.game && !opt.autosave.empty())
                     {
                         tkw::save::SessionMeta meta;
-                        meta.ai = detail::ai_level_name(session.ai);
+                        meta.ai = ai_level_name(session.ai);
                         meta.stats = session.stats;
                         const std::string text = tkw::save::write(
                             *session.game, session.state, "deck", meta);

@@ -96,27 +96,6 @@ namespace tkw
                 return false;
             }
 
-            bool ai_from(std::string_view name, tkw::cli::AiLevel &out)
-            {
-                if (name == "simple")
-                {
-                    out = tkw::cli::AiLevel::Simple;
-                    return true;
-                }
-                if (name == "aggressive")
-                {
-                    out = tkw::cli::AiLevel::Aggressive;
-                    return true;
-                }
-                return false;
-            }
-
-            const char *ai_level_name(tkw::cli::AiLevel ai)
-            {
-                return ai == tkw::cli::AiLevel::Aggressive ? "aggressive"
-                                                           : "simple";
-            }
-
             std::string player_range_error(int value)
             {
                 const tkw::game::RulesConfig rules;
@@ -254,12 +233,12 @@ namespace tkw
                         if (!value_of(value))
                             return CommandParseResult::Err(
                                 missing_value_error(t));
-                        tkw::cli::AiLevel ai = tkw::cli::AiLevel::Simple;
-                        if (!ai_from(value, ai))
+                        const auto ai = tkw::cli::ai_level_from(value);
+                        if (ai.is_none())
                             return CommandParseResult::Err(
                                 "选项 '--ai' 的值 '" + value +
                                 "' 无效: 期望 simple 或 aggressive");
-                        cmd.options.ai = ai;
+                        cmd.options.ai = ai.unwrap();
                     }
                     else if (t == "--deck")
                     {
@@ -484,12 +463,12 @@ namespace tkw
                         if (!value_of(value))
                             return CommandParseResult::Err(
                                 missing_value_error(t));
-                        tkw::cli::AiLevel ai = tkw::cli::AiLevel::Simple;
-                        if (!ai_from(value, ai))
+                        const auto ai = tkw::cli::ai_level_from(value);
+                        if (ai.is_none())
                             return CommandParseResult::Err(
                                 "选项 '--ai' 的值 '" + value +
                                 "' 无效: 期望 simple 或 aggressive");
-                        cmd.options.ai = ai;
+                        cmd.options.ai = ai.unwrap();
                     }
                     else if (t.rfind("--", 0) == 0)
                     {

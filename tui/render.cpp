@@ -250,7 +250,7 @@ namespace tkw
                     rows.push_back(ftxui::text(
                         "第 " + std::to_string(snap.turns) + " 回合  下一回合: " +
                         snap.current + "  存活: " + std::to_string(snap.alive) +
-                        "  AI: " + tkw::tui::detail::ai_level_name(snap.ai) +
+                        "  AI: " + tkw::cli::ai_level_name(snap.ai) +
                         "  摸牌堆 " + std::to_string(snap.draw_size) +
                         "  弃牌堆 " + std::to_string(snap.discard_size)));
 

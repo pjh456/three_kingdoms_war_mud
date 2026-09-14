@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "game/core/roles.hpp"
@@ -20,6 +21,7 @@
 #include "game/flow/loop.hpp"
 #include "game/flow/table.hpp"
 #include "save/session_meta.hpp"
+#include "util/types.hpp"
 
 namespace tkw
 {
@@ -37,6 +39,40 @@ namespace tkw
             Simple,     /**< 贪心档（默认）。 */
             Aggressive, /**< 攻击优先档（伤害/多目标先行）。 */
         };
+
+        /** @brief AI 难度档与其稳定文本的一条映射。 */
+        struct AiLevelText
+        {
+            const char *name; /**< 稳定值域文本；CLI/TUI/存档共用的文本契约。 */
+            AiLevel level;    /**< 对应难度档。 */
+        };
+
+        /**
+         * @brief AI 难度档 ↔ 文本的唯一事实源。
+         * @note  表序即值域顺序：枚举候选、completer、存档文本与各前端显示均由此
+         *        派生；新增/调整档位只改此表。
+         */
+        inline constexpr AiLevelText kAiLevelTexts[] = {
+            {"simple", AiLevel::Simple},
+            {"aggressive", AiLevel::Aggressive},
+        };
+
+        /**
+         * @brief  AI 难度档 → 稳定文本。
+         * @param[in] ai 难度档。
+         * @return 稳定字面量（`"simple"`/`"aggressive"`）；表外档位回落首项。
+         * @note  返回静态字面量，可直接参与 `std::string` 拼接。
+         */
+        const char *ai_level_name(AiLevel ai);
+
+        /**
+         * @brief  稳定文本 → AI 难度档。
+         * @param[in] name 值域文本。
+         * @return 匹配的难度档。
+         * @retval Some `name` 命中 `kAiLevelTexts`。
+         * @retval None 空串或未知文本；默认档由上层决定。
+         */
+        tkw::Option<AiLevel> ai_level_from(std::string_view name);
 
         /**
          * @brief 命令行/REPL 解析出的对局参数。

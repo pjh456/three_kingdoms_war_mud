@@ -149,14 +149,14 @@ namespace
                     parsed.error = "选项 '--ai' 需要一个值";
                     return parsed;
                 }
-                tkw::cli::AiLevel ai = tkw::cli::AiLevel::Simple;
-                if (!detail::ai_from(value, ai))
+                const auto parsed_ai = tkw::cli::ai_level_from(value);
+                if (parsed_ai.is_none())
                 {
                     parsed.error = "选项 '--ai' 的值 '" + value +
                                    "' 无效: 期望 simple 或 aggressive";
                     return parsed;
                 }
-                parsed.options.ai = ai;
+                parsed.options.ai = parsed_ai.unwrap();
             }
             else if (arg == "--mode")
             {
