@@ -1,0 +1,55 @@
+name: Docs
+
+# 构建 Doxygen HTML 并发布到 GitHub Pages。
+# 只在 main 推送或手动触发时跑；不发布 PR 预览。
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+# GITHUB_TOKEN 的最小权限：读仓库、写 Pages、取 OIDC 令牌供 deploy-pages 使用。
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时刻只允许一个 Pages 部署；不取消进行中的部署，排队保留最新一次。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Doxygen HTML
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen
+
+      # 权威门禁：Doxyfile 设 WARN_AS_ERROR=YES，任何文档警告都会让本步失败、不发布。
+      # Doxyfile 的相对路径按运行时当前工作目录解析，必须在仓库根执行。
+      - name: Build docs
+        run: doxygen docs/doxygen/Doxyfile
+
+      # 只上传 HTML 产物；生成目录 build/docs/ 已被 .gitignore 忽略，不入库。
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/docs/html
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
