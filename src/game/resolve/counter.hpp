@@ -83,74 +83,151 @@ namespace tkw
         }
 
         /**
-         * @brief 询问某玩家是否打出无懈（有牌且决定出则消费）。
-         * @param[in] ctx           对局上下文。
-         * @param[in] ai            决策源；询问是否以及哪张无懈。
-         * @param[in] player        被询问的实体 id。
-         * @param[in] trick_user    被结算锦囊的使用者（空串 = 延时锦囊判定窗口）。
-         * @param[in] trick_targets 锦囊目标集合（透传窗口文案）。
-         * @param[in] trick_def_id  被结算锦囊的 def id（只读事实，透传窗口文案）。
-         * @param[in] counter_played 本窗此前已打出的无懈张数（公开链状态，透传决策源）。
-         * @return 本玩家是否打出了无懈。
-         * @retval true  已校验并消费一张无懈。
-         * @retval false 无无懈牌、决策源放弃或选择非法；状态不变。
-         * @post 返回 true 时该无懈牌已进入弃牌堆并发响应语义事件。
+         * @brief 无懈窗口事实：一张锦囊对一组目标的一次结算窗口。
+         * @note `trick_user` 为空表示延时锦囊判定窗口（使用者不随牌记录，窗口主体
+         *       为被判定玩家）；`targets` 为受影响目标集合（判定窗口一人），其首位
+         *       在 `trick_user` 为空时充作轮询起点。
          */
-        inline bool try_play_counter(
-            GameContext &ctx, DecisionSource &ai, const std::string &player,
-            const std::string &trick_user,
-            const std::vector<std::string> &trick_targets,
-            const std::string &trick_def_id, int counter_played)
+        struct CounterWindow
         {
-            if (!has_counter_card(ctx, player))
-                return false;
-            const auto chosen = ai.play_counter(
-                ctx, player, trick_user, trick_targets, trick_def_id,
-                counter_played);
-            if (chosen.is_none())
-                return false;
-            return consume_counter(ctx, player, chosen.unwrap());
-        }
+            const card::CardDef *trick = nullptr; /**< 被结算锦囊定义。 */
+            std::string trick_user;               /**< 使用者；空 = 延时判定窗口。 */
+            std::vector<std::string> targets;     /**< 目标集合（判定窗口一人）。 */
+
+            class Builder; /**< 链式构造器；定义见下。 */
+        };
 
         /**
-         * @brief 无懈响应窗口（链式）。
-         * @param[in] ctx           对局上下文。
-         * @param[in] ai            决策源；逐玩家询问是否出无懈。
-         * @param[in] trick         被结算的锦囊定义（def id 透传给窗口文案；当前
-         *                          实现只用它做语义占位与展示）。
-         * @param[in] trick_user    锦囊使用者；空串 = 延时锦囊判定窗口（使用者不随
-         *                          牌记录，窗口主体为被判定玩家）。
-         * @param[in] trick_targets 锦囊目标集合（判定窗口 = 被判定玩家一人）；
-         *                          轮询起点 = 使用者非空 → 使用者，否则 → 首位目标。
-         * @return 该目标是否被无懈抵消。
-         * @retval true  本窗打出奇数张无懈，效果被抵消。
-         * @retval false 打出偶数张（含 0 张），效果照常结算。
-         * @pre   `trick_targets` 非空（实现取 `front()` 作为回落起点）。
-         * @post 本窗打出的无懈均已被消费（进入弃牌堆）；链状态不跨窗保留。
-         * @note 窗口粒度 = 每个受影响目标一次（调用方按目标调用）：一张锦囊
-         *       可开多个独立窗口，每个目标窗口各自出奇数张无懈才抵消该目标
-         *       （卡面「对一名角色产生的效果」）。
-         * @note 逐轮向决策源透传本窗已打出的无懈张数（公开事实），使决策源能
-         *       感知链状态、避免同窗或跨轮偶数相抵。
+         * @brief `CounterWindow` 的链式构造器（可选字段按需设置）。
+         * @details 每个设置方法名与所设字段同名：调用什么就是设置什么。
          */
-        inline bool resolve_nullification(
-            GameContext &ctx, DecisionSource &ai, const card::CardDef &trick,
-            const std::string &trick_user,
-            const std::vector<std::string> &trick_targets)
+        class CounterWindow::Builder
+        {
+        public:
+            /**
+             * @brief  设置被结算锦囊定义。
+             * @param[in] trick 锦囊定义指针；须比产出窗口存活更久。
+             * @return 本构造器，供链式调用。
+             */
+            Builder &trick(const card::CardDef *trick)
+            {
+                m_window.trick = trick;
+                return *this;
+            }
+
+            /**
+             * @brief  设置使用者。
+             * @param[in] trick_user 使用者实体 id；空串 = 延时判定窗口。
+             * @return 本构造器，供链式调用。
+             */
+            Builder &trick_user(std::string trick_user)
+            {
+                m_window.trick_user = std::move(trick_user);
+                return *this;
+            }
+
+            /**
+             * @brief  设置目标集合。
+             * @param[in] targets 受影响目标 id 列表。
+             * @return 本构造器，供链式调用。
+             */
+            Builder &targets(std::vector<std::string> targets)
+            {
+                m_window.targets = std::move(targets);
+                return *this;
+            }
+
+            /**
+             * @brief  产出组装好的无懈窗口。
+             * @return 组装完成的值。
+             */
+            CounterWindow build() const { return m_window; }
+
+        private:
+            CounterWindow m_window; /**< 组装中的值。 */
+        };
+
+        /**
+         * @brief 无懈结算操作类：以对局上下文与决策源为依赖。
+         * @details 把「按座位序轮询无懈 → 奇偶相抵 → 返回是否被抵消」的窗口收敛为
+         *          成员函数。
+         * @warning 本类**不拥有** `ctx`/`ai`：二者须比本对象存活更久，不得跨局复用。
+         * @see   CounterWindow
+         */
+        class CounterResolver
+        {
+        public:
+            /**
+             * @brief  绑定对局上下文与决策源。
+             * @param[in,out] ctx 对局上下文；本对象只持引用。
+             * @param[in,out] ai  决策源；逐玩家询问是否出无懈。
+             */
+            CounterResolver(GameContext &ctx, DecisionSource &ai)
+                : m_ctx(ctx), m_ai(ai)
+            {
+            }
+
+            /**
+             * @brief  结算一次无懈窗口（链式）。
+             * @param[in] window 窗口事实：锦囊定义、使用者、目标集合。
+             * @return 该目标是否被无懈抵消。
+             * @retval true  本窗打出奇数张无懈，效果被抵消。
+             * @retval false 打出偶数张（含 0 张），效果照常结算。
+             * @pre   `window.trick` 非空，`window.targets` 非空（实现取 `front()`
+             *        作为 `trick_user` 为空时的回落起点）。
+             * @post 本窗打出的无懈均已被消费（进入弃牌堆）；链状态不跨窗保留。
+             * @note 窗口粒度 = 每个受影响目标一次（调用方按目标调用）：一张锦囊
+             *       可开多个独立窗口，每个目标窗口各自出奇数张无懈才抵消该目标。
+             */
+            bool resolve_nullification(const CounterWindow &window);
+
+        private:
+            /**
+             * @brief  询问某玩家是否打出无懈（有牌且决定出则消费）。
+             * @param[in] player          被询问的实体 id。
+             * @param[in] window          当前窗口事实。
+             * @param[in] counter_played  本窗此前已打出的无懈张数（公开链状态）。
+             * @return 本玩家是否打出了无懈。
+             * @retval true  已校验并消费一张无懈。
+             * @retval false 无无懈牌、决策源放弃或选择非法；状态不变。
+             */
+            bool try_play_counter(
+                const std::string &player, const CounterWindow &window,
+                int counter_played);
+
+            GameContext &m_ctx;   /**< 对局上下文（引用，非拥有）。 */
+            DecisionSource &m_ai; /**< 决策源（引用，非拥有）。 */
+        };
+
+        inline bool CounterResolver::try_play_counter(
+            const std::string &player, const CounterWindow &window,
+            int counter_played)
+        {
+            if (!has_counter_card(m_ctx, player))
+                return false;
+            const auto chosen = m_ai.play_counter(
+                m_ctx, player, window.trick_user, window.targets,
+                window.trick ? window.trick->id : std::string(), counter_played);
+            if (chosen.is_none())
+                return false;
+            return consume_counter(m_ctx, player, chosen.unwrap());
+        }
+
+        inline bool CounterResolver::resolve_nullification(
+            const CounterWindow &window)
         {
             const std::string &start =
-                trick_user.empty() ? trick_targets.front() : trick_user;
-            const auto order = seat_order_from(ctx, start);
+                window.trick_user.empty() ? window.targets.front()
+                                          : window.trick_user;
+            const auto order = seat_order_from(m_ctx, start);
             bool cancelled = false;
             int played = 0;
-            for (int round = 0; round < rules_of(ctx).wuxie_rounds; ++round)
+            for (int round = 0; round < rules_of(m_ctx).wuxie_rounds; ++round)
             {
                 bool any = false;
                 for (const auto &p : order)
                 {
-                    if (try_play_counter(
-                            ctx, ai, p, trick_user, trick_targets, trick.id,
-                            played))
+                    if (try_play_counter(p, window, played))
                     {
                         cancelled = !cancelled;
                         any = true;

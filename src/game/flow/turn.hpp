@@ -115,7 +115,8 @@ namespace tkw
 
             // 无懈窗口：判定结算前可被抵消，抵消则直接弃置
             // （判定窗口使用者不可考 → 空串哨兵，目标 = 被判定玩家）
-            if (resolve_nullification(ctx, ai, def, "", {player}))
+            if (CounterResolver(ctx, ai).resolve_nullification(
+                    CounterWindow::Builder{}.trick(&def).targets({player}).build()))
             {
                 discard_and_emit(ctx, player, delayed_card);
                 return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::Normal);
@@ -299,7 +300,12 @@ namespace tkw
                 return TurnResult<void>::Err(TurnError::CardNotInHand);
             emit_card_played(ctx, player, card);
 
-            if (resolve_nullification(ctx, ai, def, player, {target}))
+            if (CounterResolver(ctx, ai).resolve_nullification(
+                    CounterWindow::Builder{}
+                        .trick(&def)
+                        .trick_user(player)
+                        .targets({target})
+                        .build()))
             {
                 discard_and_emit(ctx, player, card);
                 return TurnResult<void>::Ok();

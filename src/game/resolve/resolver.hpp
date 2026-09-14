@@ -81,7 +81,13 @@ namespace tkw
             for (const auto &t : targets)
             {
                 // 无懈窗口逐目标单元素，与 EffectInvocation::nullified 同口径
-                if (is_trick && resolve_nullification(ctx, ai, def, player, {t}))
+                if (is_trick &&
+                    CounterResolver(ctx, ai).resolve_nullification(
+                        CounterWindow::Builder{}
+                            .trick(&def)
+                            .trick_user(player)
+                            .targets({t})
+                            .build()))
                     continue;
                 const auto picked = ai.pick_card_from_target(
                     ctx, player, t, PickCardScope::HandEquipJudge);
@@ -127,7 +133,12 @@ namespace tkw
                 bool nullified(const std::vector<std::string> &window_targets) const
                 {
                     return is_trick &&
-                           resolve_nullification(ctx, ai, def, player, window_targets);
+                           CounterResolver(ctx, ai).resolve_nullification(
+                               CounterWindow::Builder{}
+                                   .trick(&def)
+                                   .trick_user(player)
+                                   .targets(window_targets)
+                                   .build());
                 }
             };
 
