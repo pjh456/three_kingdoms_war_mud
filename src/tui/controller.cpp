@@ -105,9 +105,9 @@ namespace tkw
 
         void Controller::request_quit()
         {
-            if (quit_requested_)
+            if (m_quit_requested)
                 return;
-            quit_requested_ = true;
+            m_quit_requested = true;
             // 先唤醒可能阻塞在真人待决的 worker，再置取消位并 join，避免互等。
             if (m_decision)
                 m_decision->cancel();
@@ -115,9 +115,9 @@ namespace tkw
             join_worker();
             autosave();
             m_log.unbind();
-            stats_handles_.clear();
-            if (on_quit_)
-                on_quit_();
+            m_stats_handles.clear();
+            if (m_on_quit)
+                m_on_quit();
         }
 
         void Controller::append_line(std::string line)
@@ -220,12 +220,12 @@ namespace tkw
 
             // 旧局仍在：先退订旧总线句柄，避免替换 Game 后向已释放总线退订。
             m_log.unbind();
-            stats_handles_.clear();
+            m_stats_handles.clear();
             m_session.stats = tkw::cli::BattleStats{};
 
             // 日志订阅先于开局发牌，初始摸牌事件才会落入日志面板。
             m_log.bind(*game, opt.humans);
-            stats_handles_ =
+            m_stats_handles =
                 tkw::cli::detail::subscribe_stats(*game, m_session.stats);
 
             tkw::game::GameSession state;
@@ -235,7 +235,7 @@ namespace tkw
                     .is_err())
             {
                 m_log.unbind();
-                stats_handles_.clear();
+                m_stats_handles.clear();
                 append_line("开局失败：场上没有玩家");
                 return;
             }
@@ -569,10 +569,10 @@ namespace tkw
                 ai = saved;
 
             m_log.unbind();
-            stats_handles_.clear();
+            m_stats_handles.clear();
             m_session.stats = std::move(meta.stats);
             m_log.bind(*game, m_base.humans);
-            stats_handles_ =
+            m_stats_handles =
                 tkw::cli::detail::subscribe_stats(*game, m_session.stats);
             m_session.game = std::move(game);
             m_session.state = std::move(state);
@@ -603,10 +603,10 @@ namespace tkw
                 tkw::save::write(*m_session.game, m_session.state, "deck", meta);
             const std::string path = m_base.autosave.string();
             if (tkw::io::write_text_atomic(m_base.autosave, text).is_ok())
-                exit_message_ = "已自动存档: " + path;
+                m_exit_message = "已自动存档: " + path;
             else
-                exit_message_ = "自动存档失败: " + path;
-            append_line(exit_message_);
+                m_exit_message = "自动存档失败: " + path;
+            append_line(m_exit_message);
         }
     }  // namespace tui
 }  // namespace tkw

@@ -102,7 +102,7 @@ namespace tkw
              * @param[in] on_quit 退出回调。 */
             void set_on_quit(std::function<void()> on_quit)
             {
-                on_quit_ = std::move(on_quit);
+                m_on_quit = std::move(on_quit);
             }
 
             /** @brief 设置启动选项基准（deck/players/seed/ai/autosave 等）。
@@ -188,7 +188,7 @@ namespace tkw
              * @return 常引用；未触发自动存档时为空串。 */
             const std::string &exit_message() const noexcept
             {
-                return exit_message_;
+                return m_exit_message;
             }
 
         private:
@@ -196,16 +196,16 @@ namespace tkw
             tkw::cli::Options m_base;
             std::string m_viewer = "P0";
             Post m_post;
-            std::function<void()> on_quit_;
-            bool quit_requested_ = false;
+            std::function<void()> m_on_quit;
+            bool m_quit_requested = false;
 
             // 声明序 = 析构保证：m_session 先、m_log/stats 后、决策源与 m_worker 最后。
             // m_adapter 只持 m_decision 的裸指针，声明在 m_decision 之后，析构先于它。
             tkw::cli::Session m_session;
             LogBuffer m_log;
-            std::vector<tkw::EventBus::Handle> stats_handles_;
+            std::vector<tkw::EventBus::Handle> m_stats_handles;
             std::atomic<bool> m_cancel{false};
-            std::string exit_message_;
+            std::string m_exit_message;
             std::shared_ptr<TuiDecisionSource> m_decision;
             std::unique_ptr<tkw::game::ai::RequestDecisionSource> m_adapter;
             std::jthread m_worker;
@@ -375,7 +375,7 @@ namespace tkw
 
             /**
              * @brief 退出自动存档：对齐 REPL 语义（有活动会话且路径非空）。
-             * @note 结果写入 exit_message_，由入口在事件循环结束后写 stderr，
+             * @note 结果写入 m_exit_message，由入口在事件循环结束后写 stderr，
              *       避免退出后面板不可见导致失败静默。
              */
             void autosave();
