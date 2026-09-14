@@ -40,6 +40,39 @@ namespace tkw
             std::uint32_t seed = 42;                  /**< 随机种子（构造 SeededRng，不消费流） */
             GameMode mode = GameMode::Brawl;          /**< 对局模式（identity 时分配角色） */
             std::map<std::string, std::string> heroes; /**< 座位 id → 武将 id（缺省空 = 全通用） */
+
+            /**
+             * @brief 显式声明移动/拷贝：std::map 的移动只窃取节点、实际不抛，但
+             *        MSVC 调试构建下未标记 noexcept；显式 noexcept 移动使本结构可
+             *        放入 Result（其存储要求 T 移动构造为 noexcept）。自定义移动会
+             *        抑制隐式拷贝，故拷贝一并保留。
+             */
+            BuildOptions() = default;
+            BuildOptions(const BuildOptions &) = default;
+            BuildOptions &operator=(const BuildOptions &) = default;
+            BuildOptions(BuildOptions &&other) noexcept
+                : deck(std::move(other.deck)), players(other.players),
+                  seed(other.seed), mode(other.mode),
+                  heroes(std::move(other.heroes))
+            {
+            }
+            BuildOptions &operator=(BuildOptions &&other) noexcept
+            {
+                deck = std::move(other.deck);
+                players = other.players;
+                seed = other.seed;
+                mode = other.mode;
+                heroes = std::move(other.heroes);
+                return *this;
+            }
+
+            /** @brief 常用四字段装配：heroes 留空，等价于原聚合初始化。 */
+            BuildOptions(std::filesystem::path deck_, int players_,
+                         std::uint32_t seed_, GameMode mode_)
+                : deck(std::move(deck_)), players(players_), seed(seed_),
+                  mode(mode_)
+            {
+            }
         };
 
         /** @brief 建局失败信息：失败阶段 + 阶段上下文。 */

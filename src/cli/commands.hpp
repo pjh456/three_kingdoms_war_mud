@@ -354,6 +354,29 @@ namespace tkw
             }
 
             /**
+             * @brief `--hero` 解析结果：归一化座位 id → 武将 id。
+             * @note std::map 在 MSVC 调试构建下的移动不满足 nothrow move，包裹后
+             *       显式声明 noexcept 移动，使结果可放入 Result；拷贝保持可用。
+             */
+            struct HeroAssignments
+            {
+                std::map<std::string, std::string> by_seat; /**< 座位 id → 武将 id */
+
+                HeroAssignments() = default;
+                HeroAssignments(const HeroAssignments &) = default;
+                HeroAssignments &operator=(const HeroAssignments &) = default;
+                HeroAssignments(HeroAssignments &&other) noexcept
+                    : by_seat(std::move(other.by_seat))
+                {
+                }
+                HeroAssignments &operator=(HeroAssignments &&other) noexcept
+                {
+                    by_seat = std::move(other.by_seat);
+                    return *this;
+                }
+            };
+
+            /**
              * @brief 解析可重复 `--hero` 原文为「座位 id → 武将 id」映射。
              * @param raw     --hero 原始值列表（形如 "P0=zhangfei"）。
              * @param players 本局玩家数，用于座位下标越界校验与可用座位列表。
@@ -364,11 +387,11 @@ namespace tkw
              *       报错而非后写覆盖。武将 id 是否存在于目录由 build_game
              *       按当前牌表目录校验（解析期不读文件系统）。
              */
-            inline tkw::Result<std::map<std::string, std::string>, std::string>
+            inline tkw::Result<HeroAssignments, std::string>
             parse_hero_assignments(
                 const std::vector<std::string> &raw, int players)
             {
-                std::map<std::string, std::string> out;
+                HeroAssignments out;
                 std::vector<std::string> all_seats;
                 all_seats.reserve(static_cast<std::size_t>(players));
                 for (int i = 0; i < players; ++i)
@@ -382,14 +405,14 @@ namespace tkw
                     const auto eq = item.find('=');
                     if (eq == std::string::npos || eq == 0 ||
                         eq + 1 >= item.size())
-                        return tkw::Result<std::map<std::string, std::string>,
+                        return tkw::Result<HeroAssignments,
                                            std::string>::Err(
                             "武将选项格式须为 座位=武将（如 P0=zhangfei）: " + item);
 
                     const std::string seat = item.substr(0, eq);
                     const std::string hero_id = item.substr(eq + 1);
                     if (seat.size() < 2 || seat.front() != 'P')
-                        return tkw::Result<std::map<std::string, std::string>,
+                        return tkw::Result<HeroAssignments,
                                            std::string>::Err(
                             "武将座位须形如 P0: " + item);
 
@@ -398,23 +421,23 @@ namespace tkw
                     const char *end = seat.data() + seat.size();
                     const auto r = std::from_chars(begin, end, index);
                     if (r.ec != std::errc{} || r.ptr != end)
-                        return tkw::Result<std::map<std::string, std::string>,
+                        return tkw::Result<HeroAssignments,
                                            std::string>::Err(
                             "武将座位须形如 P0: " + item);
                     if (index < 0 || index >= players)
-                        return tkw::Result<std::map<std::string, std::string>,
+                        return tkw::Result<HeroAssignments,
                                            std::string>::Err(
                             "武将座位超出玩家数: " + seat + "（当前 " +
                             std::to_string(players) + " 人）" + seat_hint);
 
                     const std::string canonical = "P" + std::to_string(index);
-                    if (!out.emplace(canonical, hero_id).second)
-                        return tkw::Result<std::map<std::string, std::string>,
+                    if (!out.by_seat.emplace(canonical, hero_id).second)
+                        return tkw::Result<HeroAssignments,
                                            std::string>::Err(
                             "武将座位重复: " + canonical +
                             "（每个座位只能指定一次）");
                 }
-                return tkw::Result<std::map<std::string, std::string>,
+                return tkw::Result<HeroAssignments,
                                    std::string>::Ok(std::move(out));
             }
 
@@ -433,7 +456,7 @@ namespace tkw
                     return tkw::Result<tkw::game::BuildOptions,
                                        std::string>::Err(parsed.unwrap_err());
                 auto bo = build_options_from(opt, mode);
-                bo.heroes = std::move(parsed).unwrap();
+                bo.heroes = std::move(parsed).unwrap().by_seat;
                 return tkw::Result<tkw::game::BuildOptions, std::string>::Ok(
                     std::move(bo));
             }
