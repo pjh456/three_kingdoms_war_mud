@@ -12,6 +12,7 @@
 #include <ios>
 #include <random>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -62,13 +63,18 @@ namespace tkw
         {
             std::istringstream is(state.data);
             std::mt19937 restored;
-            // 非法文本在部分标准库（MSVC）抛 failure 而非只置 failbit；
-            // 两种情形都按「data 非法」处理，失败时引擎保持原状。
+            // 非法文本的处理各标准库不同：libstdc++ 抛 ios_base::failure，
+            // MSVC 抛 invalid_argument，也有实现只置 failbit。
+            // 全部归为「data 非法」，失败时引擎保持原状。
             try
             {
                 is >> restored;
             }
             catch (const std::ios_base::failure &)
+            {
+                return false;
+            }
+            catch (const std::invalid_argument &)
             {
                 return false;
             }
