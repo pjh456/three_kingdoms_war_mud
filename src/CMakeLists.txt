@@ -2,11 +2,13 @@
 # tkw-tui 与 tui_tests，默认配置的 tkw/引擎目标不链 Threads。
 find_package(Threads REQUIRED)
 
-add_library(tkw_io INTERFACE)
+add_library(tkw_io STATIC
+    io/file.cpp
+)
 
-target_include_directories(tkw_io INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(tkw_io PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(tkw_io INTERFACE pjh_result pjh_platform)
+target_link_libraries(tkw_io PUBLIC pjh_result pjh_platform)
 
 add_library(tkw_config INTERFACE)
 
