@@ -39,50 +39,9 @@ namespace tkw
          *       与顺手牵羊同点）；装备区失去时联动白银狮子回血。
          * @note 任一步失败安全返回，不部分落子。
          */
-        inline void trigger_fankui(
+        void trigger_fankui(
             GameContext &ctx, DecisionSource &ai, const std::string &victim,
-            const std::string &source)
-        {
-            // 无来源或自伤不触发（技能要求伤害来源）
-            if (source.empty() || source == victim)
-                return;
-
-            // 来源须为已离场者之外的实体
-            const auto src = ctx.entities->find(source);
-            if (src.is_none() || src.unwrap()->get_hp() <= 0)
-                return;
-
-            // 来源任一区域可取的牌：无牌则不打开决策窗
-            if (ctx.cards->hand_size(source) == 0 &&
-                ctx.cards->equip_size(source) == 0 &&
-                ctx.cards->judge_size(source) == 0)
-                return;
-
-            if (!ai.trigger_hero_skill(
-                    ctx, victim, hero::HeroSkill::FanKui, source))
-                return;
-
-            const auto pick = ai.pick_card_from_target(
-                ctx, victim, source, PickCardScope::HandEquipJudge);
-            if (pick.is_none())
-                return;
-
-            // 隐藏手牌按槽位经 rng 暗抽定位实体牌；明置牌直接携带身份
-            const auto picked = StateOps(ctx).resolve_target_pick(source, pick.unwrap());
-            if (picked.is_none())
-                return;
-            const card::Card picked_card = picked.unwrap();
-
-            card::Card removed;
-            Zone from = Zone::Limbo;
-            if (!StateOps(ctx).remove_card_from_zones(source, picked_card.instance_id, removed, &from))
-                return;
-
-            ctx.cards->add_to_hand(victim, removed);
-            emit_card_moved(ctx, source, victim, removed, from, Zone::Hand);
-            if (from == Zone::Equip)
-                StateOps(ctx).apply_equip_lost(source, removed);
-        }
+            const std::string &source);
 
         /**
          * @brief 伤害落定后的武将触发钩子：对受伤者按固定顺序询问触发技。
@@ -96,17 +55,9 @@ namespace tkw
          *       单一入口与确定序。
          * @note 无对应技能时在打开任何决策窗/rng 消费之前短路。
          */
-        inline void run_after_damage_skills(
+        void run_after_damage_skills(
             GameContext &ctx, DecisionSource &ai, const std::string &victim,
-            const std::string &source, int applied)
-        {
-            if (applied <= 0)
-                return;
-
-            if (!HeroQuery::has_hero_skill(ctx, victim, hero::HeroSkill::FanKui))
-                return;
-            trigger_fankui(ctx, ai, victim, source);
-        }
+            const std::string &source, int applied);
     }
 }
 

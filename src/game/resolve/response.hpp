@@ -40,21 +40,8 @@ namespace tkw
          *       与转换来源（武圣红牌 / 龙胆闪当杀）；闪响应额外计入转化来源
          *       （龙胆杀当闪）。
          */
-        inline bool has_response_card(
-            const GameContext &ctx, const std::string &entity_id, card::ResponseKind kind)
-        {
-            if (StateQuery::any_hand_card_matching(
-                    ctx, entity_id,
-                    [kind](const card::CardDef &def)
-                    { return is_response_def(def, kind); }))
-                return true;
-            if (kind != card::ResponseKind::Sha)
-                return !HeroQuery::jink_conversion_cards(ctx, entity_id).empty();
-            if (EquipQuery::has_ability(ctx, entity_id, card::Ability::TwoCardsAsSha) &&
-                ctx.cards->hand_size(entity_id) >= 2)
-                return true;
-            return !HeroQuery::sha_conversion_cards(ctx, entity_id).empty();
-        }
+        bool has_response_card(
+            const GameContext &ctx, const std::string &entity_id, card::ResponseKind kind);
 
         /**
          * @brief 开响应窗口并消费响应牌。
@@ -73,27 +60,10 @@ namespace tkw
          *       respond_sha（另支持两张手牌当杀）。闪窗口的转化来源（龙胆杀
          *       当闪）由谓词识别，消费的仍是所选那张牌。
          */
-        inline Option<card::Card> consume_response(
+        Option<card::Card> consume_response(
             GameContext &ctx, DecisionSource &ai,
             const std::string &entity_id, card::ResponseKind kind,
-            const ResponsePrompt &prompt)
-        {
-            if (!has_response_card(ctx, entity_id, kind))
-                return Option<card::Card>::None();
-            const auto chosen = ai.play_response(ctx, entity_id, kind, prompt);
-            if (chosen.is_none())
-                return Option<card::Card>::None();
-
-            return StateOps(ctx).consume_hand_card_matching(entity_id, chosen.unwrap().instance_id,
-                [&ctx, &entity_id, kind](const card::CardDef &def,
-                                         const card::Card &c)
-                {
-                    return is_response_def(def, kind) ||
-                           (kind == card::ResponseKind::Jink &&
-                            HeroQuery::can_convert_card_to_jink(ctx, entity_id, c, def));
-                },
-                DiscardKind::Response);
-        }
+            const ResponsePrompt &prompt);
 
         /**
          * @brief 开响应窗口并消费响应牌。

@@ -39,12 +39,7 @@ namespace tkw
          * @retval true  手牌中至少一张卡定义带无懈标记。
          * @retval false 目录为空、手牌为空或无此标记。
          */
-        inline bool has_counter_card(const GameContext &ctx, const std::string &player)
-        {
-            return StateQuery::any_hand_card_matching(
-                ctx, player,
-                [](const card::CardDef &def) { return is_counter_def(def); });
-        }
+        bool has_counter_card(const GameContext &ctx, const std::string &player);
 
         /**
          * @brief 消费一张无懈牌。
@@ -57,16 +52,9 @@ namespace tkw
          * @retval false 所选牌不存在或定义无无懈标记；状态不变。
          * @post 返回 false 时不对该玩家状态做任何改动。
          */
-        inline bool consume_counter(
+        bool consume_counter(
             GameContext &ctx, const std::string &player,
-            const std::string &instance_id)
-        {
-            return StateOps(ctx).consume_hand_card_matching(player, instance_id,
-                       [](const card::CardDef &def, const card::Card &)
-                       { return is_counter_def(def); },
-                       DiscardKind::Response)
-                .is_some();
-        }
+            const std::string &instance_id);
 
         /**
          * @brief 生成从 `start` 开始环绕的座位序。
@@ -197,47 +185,6 @@ namespace tkw
             GameContext &m_ctx;   /**< 对局上下文（引用，非拥有）。 */
             DecisionSource &m_ai; /**< 决策源（引用，非拥有）。 */
         };
-
-        inline bool CounterResolver::try_play_counter(
-            const std::string &player, const CounterWindow &window,
-            int counter_played)
-        {
-            if (!has_counter_card(m_ctx, player))
-                return false;
-            const auto chosen = m_ai.play_counter(
-                m_ctx, player, window.trick_user, window.targets,
-                window.trick ? window.trick->id : std::string(), counter_played);
-            if (chosen.is_none())
-                return false;
-            return consume_counter(m_ctx, player, chosen.unwrap());
-        }
-
-        inline bool CounterResolver::resolve_nullification(
-            const CounterWindow &window)
-        {
-            const std::string &start =
-                window.trick_user.empty() ? window.targets.front()
-                                          : window.trick_user;
-            const auto order = seat_order_from(m_ctx, start);
-            bool cancelled = false;
-            int played = 0;
-            for (int round = 0; round < rules_of(m_ctx).wuxie_rounds; ++round)
-            {
-                bool any = false;
-                for (const auto &p : order)
-                {
-                    if (try_play_counter(p, window, played))
-                    {
-                        cancelled = !cancelled;
-                        any = true;
-                        ++played;
-                    }
-                }
-                if (!any)
-                    break;
-            }
-            return cancelled;
-        }
     }
 }
 

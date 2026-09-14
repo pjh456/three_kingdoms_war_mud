@@ -92,13 +92,19 @@ target_include_directories(tkw_game_query PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(tkw_game_query PUBLIC tkw_game_core tkw_card pjh_result)
 
-add_library(tkw_game_resolve INTERFACE)
+add_library(tkw_game_resolve STATIC
+    game/resolve/response.cpp
+    game/resolve/counter.cpp
+    game/resolve/skill.cpp
+    game/resolve/validate.cpp
+    game/resolve/audit.cpp
+)
 
-target_include_directories(tkw_game_resolve INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(tkw_game_resolve PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(tkw_game_resolve INTERFACE tkw_game_core tkw_game_query
-                                               tkw_card tkw_entity tkw_event
-                                               pjh_result)
+target_link_libraries(tkw_game_resolve PUBLIC tkw_game_core tkw_game_query
+                                             tkw_card tkw_entity tkw_event
+                                             pjh_result)
 
 add_library(tkw_game_flow INTERFACE)
 

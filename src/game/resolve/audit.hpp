@@ -48,31 +48,8 @@ namespace tkw
          *       均不计入；装备打出即装备，但含未实现装备能力时计入（一张卡至多
          *       列一次）。
          */
-        inline std::vector<std::string> unsupported_cards(
-            const card::CardDefCatalog &catalog)
-        {
-            std::vector<std::string> out;
-            for (const auto &def : catalog)
-            {
-                // 主动效果未实现
-                if (def.effect.is_some() &&
-                    is_unimplemented_active_kind(def.effect.unwrap().kind))
-                {
-                    out.push_back(def.id);
-                    continue;
-                }
-                // 装备能力任一未实现即计入（多个未实现只列一次）
-                for (const auto a : def.abilities)
-                {
-                    if (is_unimplemented_ability(a))
-                    {
-                        out.push_back(def.id);
-                        break;
-                    }
-                }
-            }
-            return out;
-        }
+        std::vector<std::string> unsupported_cards(
+            const card::CardDefCatalog &catalog);
 
         /**
          * @brief 返回牌堆中「机制名未被引擎认识或尚未实现」的卡（deck 序）。
@@ -84,48 +61,8 @@ namespace tkw
          * @note 走容错扫描：未知 effect.kind / abilities 名不使扫描失败，而是
          *       逐卡记为未实现；建局仍走严格加载，未知机制在对局入口直接失败。
          */
-        inline cfg::ConfigResult<std::vector<UnsupportedCard>> unsupported_cards(
-            const cfg::ResourceStore &store, std::string_view deck_name)
-        {
-            auto raws = card::scan_mechanisms(store, deck_name);
-            if (raws.is_err())
-                return cfg::ConfigResult<std::vector<UnsupportedCard>>::Err(
-                    raws.unwrap_err());
-
-            std::vector<UnsupportedCard> out;
-            for (const auto &raw : raws.unwrap())
-            {
-                bool unsupported = false;
-
-                // 未知效果名一律计入；已知名按 implemented 属性判定
-                if (raw.effect_kind.is_some())
-                {
-                    const auto kind =
-                        card::effect_kind_from_name(raw.effect_kind.unwrap());
-                    unsupported = kind.is_none() ||
-                                  is_unimplemented_active_kind(kind.unwrap());
-                }
-
-                // 主动效果已判定为未实现时无需再看能力；一张卡至多列一次
-                if (!unsupported)
-                {
-                    for (const auto &name : raw.abilities)
-                    {
-                        const auto ability = card::ability_from_name(name);
-                        if (ability.is_none() ||
-                            is_unimplemented_ability(ability.unwrap()))
-                        {
-                            unsupported = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (unsupported)
-                    out.push_back(UnsupportedCard{raw.id, raw.name});
-            }
-            return cfg::ConfigResult<std::vector<UnsupportedCard>>::Ok(std::move(out));
-        }
+        cfg::ConfigResult<std::vector<UnsupportedCard>> unsupported_cards(
+            const cfg::ResourceStore &store, std::string_view deck_name);
     }
 }
 
