@@ -178,7 +178,7 @@ namespace tkw
         inline bool has_rescue(
             const GameContext &ctx, const std::string &player, bool is_self)
         {
-            return any_hand_card_matching(
+            return StateQuery::any_hand_card_matching(
                 ctx, player,
                 [is_self](const card::CardDef &def)
                 { return can_rescue_def(def, is_self); });
@@ -198,8 +198,7 @@ namespace tkw
             GameContext &ctx, const std::string &player,
             const std::string &instance_id, bool is_self)
         {
-            return consume_hand_card_matching(
-                       ctx, player, instance_id,
+            return StateOps(ctx).consume_hand_card_matching(player, instance_id,
                        [is_self](const card::CardDef &def, const card::Card &)
                        { return can_rescue_def(def, is_self); },
                        DiscardKind::Response)
@@ -276,7 +275,7 @@ namespace tkw
                         continue;
                     if (!consume_rescue(ctx, saver, chosen.unwrap(), is_self))
                         continue;
-                    apply_heal(ctx, dying, rules_of(ctx).rescue_heal);
+                    StateOps(ctx).apply_heal(dying, rules_of(ctx).rescue_heal);
                     progress = true;
                     const auto cur = ctx.entities->find(dying);
                     if (cur.is_none())
@@ -312,7 +311,7 @@ namespace tkw
                 if (removed.is_none())
                     continue;
                 auto keep = std::move(removed).unwrap();
-                discard_and_emit(ctx, player, keep);
+                StateOps(ctx).discard_and_emit(player, keep);
             }
 
             const auto equips = ctx.cards->equip(player);
@@ -322,8 +321,8 @@ namespace tkw
                 if (removed.is_none())
                     continue;
                 auto keep = std::move(removed).unwrap();
-                discard_and_emit(ctx, player, keep);
-                apply_equip_lost(ctx, player, keep);
+                StateOps(ctx).discard_and_emit(player, keep);
+                StateOps(ctx).apply_equip_lost(player, keep);
             }
         }
 
@@ -345,16 +344,14 @@ namespace tkw
 
             if (mode_of(ctx) != GameMode::Identity)
             {
-                apply_draw(
-                    ctx, source, rules_of(ctx).kill_reward, DrawKind::KillReward);
+                StateOps(ctx).apply_draw(source, rules_of(ctx).kill_reward, DrawKind::KillReward);
                 return;
             }
 
             switch (role_of(ctx, target))
             {
             case Role::Rebel:
-                apply_draw(
-                    ctx, source, rules_of(ctx).kill_reward, DrawKind::KillReward);
+                StateOps(ctx).apply_draw(source, rules_of(ctx).kill_reward, DrawKind::KillReward);
                 break;
             case Role::Loyalist:
                 if (role_of(ctx, source) == Role::Lord)
@@ -413,7 +410,7 @@ namespace tkw
             {
                 for (const auto &id :
                      m_ctx.entities->order_from(m_ctx.entities->next(target)))
-                    if (id != target && is_chained(m_ctx, id))
+                    if (id != target && StateQuery::is_chained(m_ctx, id))
                         chain_targets.push_back(id);
                 e.unwrap()->set_chained(false);
             }

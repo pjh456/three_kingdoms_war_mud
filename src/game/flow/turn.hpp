@@ -118,38 +118,38 @@ namespace tkw
             if (CounterResolver(ctx, ai).resolve_nullification(
                     CounterWindow::Builder{}.trick(&def).targets({player}).build()))
             {
-                discard_and_emit(ctx, player, delayed_card);
+                StateOps(ctx).discard_and_emit(player, delayed_card);
                 return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::Normal);
             }
 
-            auto judge = perform_judgement(ctx);
+            auto judge = StateOps(ctx).perform_judgement();
             if (judge.is_none())
             {
                 // 判定牌不可得：延时牌已移出判定区，弃置以免凭空消失
-                discard_and_emit(ctx, player, delayed_card);
+                StateOps(ctx).discard_and_emit(player, delayed_card);
                 return TurnResult<DelayedOutcome>::Err(TurnError::JudgeEmptyDeck);
             }
             const card::Card judge_card = std::move(judge).unwrap();
-            discard_and_emit(ctx, player, judge_card, DiscardKind::Judgement);  // 判定牌进弃牌堆
+            StateOps(ctx).discard_and_emit(player, judge_card, DiscardKind::Judgement);  // 判定牌进弃牌堆
 
             if (def.judge.is_none())
             {
-                discard_and_emit(ctx, player, delayed_card);
+                StateOps(ctx).discard_and_emit(player, delayed_card);
                 return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::Normal);
             }
 
-            switch (judge_result(def.judge.unwrap(), judge_card))
+            switch (StateQuery::judge_result(def.judge.unwrap(), judge_card))
             {
             case card::JudgeAction::SkipPlay:
-                discard_and_emit(ctx, player, delayed_card);
+                StateOps(ctx).discard_and_emit(player, delayed_card);
                 return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::SkipPlay);
 
             case card::JudgeAction::SkipDraw:
-                discard_and_emit(ctx, player, delayed_card);
+                StateOps(ctx).discard_and_emit(player, delayed_card);
                 return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::SkipDraw);
 
             case card::JudgeAction::Damage:
-                discard_and_emit(ctx, player, delayed_card);
+                StateOps(ctx).discard_and_emit(player, delayed_card);
                 CombatResolver(ctx, ai)
                     .deal_damage(
                         player, DamageSpec::Builder{}
@@ -166,7 +166,7 @@ namespace tkw
                 if (next.empty())
                 {
                     // 异常残留态下无空位：弃置而非丢牌
-                    discard_and_emit(ctx, player, delayed_card);
+                    StateOps(ctx).discard_and_emit(player, delayed_card);
                     return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::Normal);
                 }
                 ctx.cards->add_to_judge(next, delayed_card);
@@ -178,7 +178,7 @@ namespace tkw
             case card::JudgeAction::Nothing:
             case card::JudgeAction::Jink:
             default:
-                discard_and_emit(ctx, player, delayed_card);
+                StateOps(ctx).discard_and_emit(player, delayed_card);
                 return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::Normal);
             }
         }
@@ -247,8 +247,8 @@ namespace tkw
                     if (old.is_some())
                     {
                         card::Card old_card = std::move(old).unwrap();
-                        discard_and_emit(ctx, player, old_card);
-                        apply_equip_lost(ctx, player, old_card);
+                        StateOps(ctx).discard_and_emit(player, old_card);
+                        StateOps(ctx).apply_equip_lost(player, old_card);
                     }
                 }
             }
@@ -307,7 +307,7 @@ namespace tkw
                         .targets({target})
                         .build()))
             {
-                discard_and_emit(ctx, player, card);
+                StateOps(ctx).discard_and_emit(player, card);
                 return TurnResult<void>::Ok();
             }
 
@@ -403,7 +403,7 @@ namespace tkw
          */
         inline void run_draw_phase(GameContext &ctx, const std::string &player)
         {
-            apply_draw(ctx, player, HeroQuery::draw_phase_count(ctx, player));
+            StateOps(ctx).apply_draw(player, HeroQuery::draw_phase_count(ctx, player));
         }
 
         /**
@@ -443,7 +443,7 @@ namespace tkw
                     if (vr.is_err())
                         return TurnResult<void>::Err(to_turn_error(vr.unwrap_err()));
                     // 主动使用虚拟杀：消费本回合的酒加成（响应/打出路径不消费）
-                    const int jiu = consume_jiu_sha_bonus(ctx, player);
+                    const int jiu = StateOps(ctx).consume_jiu_sha_bonus(player);
                     auto rr = resolve_virtual_sha(
                         ctx, ai, player, action.unwrap().instance_id,
                         action.unwrap().second_instance_id, action.unwrap().targets,
@@ -477,10 +477,10 @@ namespace tkw
                 {
                     if (!def.recast || !action.unwrap().targets.empty())
                         return TurnResult<void>::Err(TurnError::PlayRejected);
-                    if (remove_and_discard(ctx, player, card.unwrap().instance_id)
+                    if (StateOps(ctx).remove_and_discard(player, card.unwrap().instance_id)
                             .is_none())
                         return TurnResult<void>::Err(TurnError::CardNotInHand);
-                    apply_draw(ctx, player, 1);
+                    StateOps(ctx).apply_draw(player, 1);
                     continue;
                 }
 
@@ -544,7 +544,7 @@ namespace tkw
                     return TurnResult<void>::Err(TurnError::DiscardInsufficient);
                 for (const auto &id : discards)
                 {
-                    if (remove_and_discard(ctx, player, id).is_none())
+                    if (StateOps(ctx).remove_and_discard(player, id).is_none())
                         return TurnResult<void>::Err(TurnError::DiscardInsufficient);
                 }
             }

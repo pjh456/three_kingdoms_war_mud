@@ -93,7 +93,7 @@ namespace tkw
                     ctx, player, t, PickCardScope::HandEquipJudge);
                 if (picked.is_none())
                     return GameResult<TargetPicks>::Err(EffectError::InvalidChoice);
-                const auto chosen = resolve_target_pick(ctx, t, picked.unwrap());
+                const auto chosen = StateOps(ctx).resolve_target_pick(t, picked.unwrap());
                 if (chosen.is_none() ||
                     !ctx.cards->has_card(t, chosen.unwrap().instance_id))
                     return GameResult<TargetPicks>::Err(EffectError::InvalidChoice);
@@ -179,7 +179,7 @@ namespace tkw
             {
                 // 使用「杀」即消费本回合的酒加成：被闪/被防具无效也已使用，不再保留；
                 // 方天多目标共享同一次消费（每个目标都 +1）
-                const int jiu = consume_jiu_sha_bonus(e.ctx, e.player);
+                const int jiu = StateOps(e.ctx).consume_jiu_sha_bonus(e.player);
                 for (const auto &t : e.targets)
                     ShaResolver(e.ctx, e.ai)
                         .resolve_sha(
@@ -262,7 +262,7 @@ namespace tkw
                 {
                     if (e.nullified({t}))
                         continue;
-                    apply_heal(e.ctx, t, e.eff.amount);
+                    StateOps(e.ctx).apply_heal(t, e.eff.amount);
                 }
                 return GameResult<void>::Ok();
             }
@@ -277,7 +277,7 @@ namespace tkw
             {
                 if (e.nullified(e.targets))
                     return GameResult<void>::Ok();
-                apply_draw(e.ctx, e.player, e.eff.count);
+                StateOps(e.ctx).apply_draw(e.player, e.eff.count);
                 return GameResult<void>::Ok();
             }
 
@@ -300,7 +300,7 @@ namespace tkw
                 const auto picks = std::move(picks_r).unwrap();
                 for (const auto &[owner, picked_card] : picks)
                 {
-                    if (remove_any_and_discard(e.ctx, owner, picked_card.instance_id)
+                    if (StateOps(e.ctx).remove_any_and_discard(owner, picked_card.instance_id)
                             .is_none())
                         return GameResult<void>::Err(EffectError::InvalidChoice);
                 }
@@ -328,13 +328,12 @@ namespace tkw
                 {
                     card::Card removed;
                     Zone from = Zone::Limbo;
-                    if (!remove_card_from_zones(
-                            e.ctx, owner, picked_card.instance_id, removed, &from))
+                    if (!StateOps(e.ctx).remove_card_from_zones(owner, picked_card.instance_id, removed, &from))
                         return GameResult<void>::Err(EffectError::InvalidChoice);
                     e.ctx.cards->add_to_hand(e.player, removed);
                     emit_card_moved(e.ctx, owner, e.player, removed, from, Zone::Hand);
                     if (from == Zone::Equip)
-                        apply_equip_lost(e.ctx, owner, removed);
+                        StateOps(e.ctx).apply_equip_lost(owner, removed);
                 }
                 return GameResult<void>::Ok();
             }
@@ -397,7 +396,7 @@ namespace tkw
                 const int n = static_cast<int>(e.ctx.entities->size());
                 for (int i = 0; i < n; ++i)
                 {
-                    auto c = draw_with_refill(e.ctx);
+                    auto c = StateOps(e.ctx).draw_with_refill();
                     if (c.is_none())
                         break;
                     revealed.push_back(std::move(c).unwrap());
@@ -446,7 +445,7 @@ namespace tkw
 
                 // 剩余置入弃牌堆
                 for (const auto &c : revealed)
-                    discard_and_emit(e.ctx, "", c);
+                    StateOps(e.ctx).discard_and_emit("", c);
                 return GameResult<void>::Ok();
             }
 
@@ -502,7 +501,7 @@ namespace tkw
                 {
                     if (e.nullified({t}))
                         continue;
-                    set_chained(e.ctx, t, !is_chained(e.ctx, t));
+                    StateOps(e.ctx).set_chained(t, !StateQuery::is_chained(e.ctx, t));
                 }
                 return GameResult<void>::Ok();
             }
@@ -563,7 +562,7 @@ namespace tkw
                         break;
                     }
                 if (chosen.empty() ||
-                    remove_and_discard(e.ctx, e.player, chosen).is_none())
+                    StateOps(e.ctx).remove_and_discard(e.player, chosen).is_none())
                     return GameResult<void>::Ok();
 
                 // 火焰伤害：藤甲火焰脆弱 +1（杀管线之外的直伤在此补足）
@@ -910,7 +909,7 @@ namespace tkw
                         ctx.cards->remove_from_hand(entity, act.instance_id);
                     if (removed.is_none())
                         return false;
-                    discard_and_emit(ctx, entity, std::move(removed).unwrap(),
+                    StateOps(ctx).discard_and_emit(entity, std::move(removed).unwrap(),
                                      DiscardKind::Response);
                     return true;
                 }

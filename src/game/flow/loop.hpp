@@ -229,7 +229,7 @@ namespace tkw
         inline void deal_initial_hands(GameContext &ctx, int count)
         {
             for (const auto &ent : *ctx.entities)
-                apply_draw(ctx, ent->get_id(), count);
+                StateOps(ctx).apply_draw(ent->get_id(), count);
         }
 
         /**

@@ -99,7 +99,7 @@ TEST_CASE("tui: snapshot mirrors chained state")
 {
     auto s = started_session(2, 1, 2);
     auto ctx = s.game->context();
-    tkw::game::set_chained(ctx, "P1", true);
+    tkw::game::StateOps(ctx).set_chained("P1", true);
 
     const auto snap = tkw::tui::make_snapshot(s, "P0");
     REQUIRE(snap.players.size() == 2);

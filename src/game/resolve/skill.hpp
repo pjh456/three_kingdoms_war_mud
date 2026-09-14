@@ -68,21 +68,20 @@ namespace tkw
                 return;
 
             // 隐藏手牌按槽位经 rng 暗抽定位实体牌；明置牌直接携带身份
-            const auto picked = resolve_target_pick(ctx, source, pick.unwrap());
+            const auto picked = StateOps(ctx).resolve_target_pick(source, pick.unwrap());
             if (picked.is_none())
                 return;
             const card::Card picked_card = picked.unwrap();
 
             card::Card removed;
             Zone from = Zone::Limbo;
-            if (!remove_card_from_zones(
-                    ctx, source, picked_card.instance_id, removed, &from))
+            if (!StateOps(ctx).remove_card_from_zones(source, picked_card.instance_id, removed, &from))
                 return;
 
             ctx.cards->add_to_hand(victim, removed);
             emit_card_moved(ctx, source, victim, removed, from, Zone::Hand);
             if (from == Zone::Equip)
-                apply_equip_lost(ctx, source, removed);
+                StateOps(ctx).apply_equip_lost(source, removed);
         }
 
         /**

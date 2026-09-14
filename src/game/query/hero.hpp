@@ -171,7 +171,7 @@ namespace tkw
             const card::Card &c, const card::CardDef &def)
         {
             if (has_hero_skill(ctx, entity_id, hero::HeroSkill::WuSheng) &&
-                is_red_suit(c.suit))
+                StateQuery::is_red_suit(c.suit))
                 return true;
             return has_hero_skill(ctx, entity_id, hero::HeroSkill::LongDan) &&
                    def.effect.is_some() &&
@@ -204,7 +204,7 @@ namespace tkw
                 def.effect.is_some() && is_sha_kind(def.effect.unwrap().kind))
                 return true;
             return has_hero_skill(ctx, entity_id, hero::HeroSkill::QingGuo) &&
-                   is_black_suit(c.suit);
+                   StateQuery::is_black_suit(c.suit);
         }
 
         inline std::vector<card::Card> HeroQuery::jink_conversion_cards(

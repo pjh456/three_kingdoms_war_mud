@@ -41,7 +41,7 @@ namespace tkw
          */
         inline bool has_counter_card(const GameContext &ctx, const std::string &player)
         {
-            return any_hand_card_matching(
+            return StateQuery::any_hand_card_matching(
                 ctx, player,
                 [](const card::CardDef &def) { return is_counter_def(def); });
         }
@@ -61,8 +61,7 @@ namespace tkw
             GameContext &ctx, const std::string &player,
             const std::string &instance_id)
         {
-            return consume_hand_card_matching(
-                       ctx, player, instance_id,
+            return StateOps(ctx).consume_hand_card_matching(player, instance_id,
                        [](const card::CardDef &def, const card::Card &)
                        { return is_counter_def(def); },
                        DiscardKind::Response)

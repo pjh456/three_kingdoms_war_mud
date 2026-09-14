@@ -2309,7 +2309,7 @@ TEST_CASE("game: identity kill reward draws are tagged for the log")
         CHECK(k == tkw::DrawKind::KillReward);
 
     kinds.clear();
-    apply_draw(g.ctx, "a", 1);  // 对照：常规摸牌
+    StateOps(g.ctx).apply_draw("a", 1);  // 对照：常规摸牌
     REQUIRE(kinds.size() == 1);
     CHECK(kinds[0] == tkw::DrawKind::Normal);
 }
@@ -2937,7 +2937,7 @@ TEST_CASE("game: draw emits CardDrawn per card")
     auto h = g.bus.subscribe(tkw::Handler<tkw::CardDrawnEvent>(
         [&](tkw::HandlerContext<tkw::CardDrawnEvent> &) { ++drawn; }));
 
-    apply_draw(g.ctx, "a", 3);
+    StateOps(g.ctx).apply_draw("a", 3);
     CHECK(drawn == 3);
     CHECK(g.cards.hand_size("a") == 3);
 }
@@ -2951,7 +2951,7 @@ TEST_CASE("game: draw refills from the discard pile when the draw pile is empty"
     g.cards.discard(Card{"d#1", "shan", Suit::Heart, 2});
     CHECK(g.cards.draw_size() == 0);
 
-    CHECK(apply_draw(g.ctx, "a", 2) == 2);
+    CHECK(StateOps(g.ctx).apply_draw("a", 2) == 2);
     CHECK(g.cards.hand_size("a") == 2);
     CHECK(g.cards.draw_size() == 0);
     CHECK(g.cards.discard_size() == 0);  // 洗回后全部摸出，无牌丢失
@@ -2965,7 +2965,7 @@ TEST_CASE("game: draw stops when both draw and discard piles are empty")
     CHECK(g.cards.draw_size() == 0);
     CHECK(g.cards.discard_size() == 0);
 
-    CHECK(apply_draw(g.ctx, "a", 2) == 0);
+    CHECK(StateOps(g.ctx).apply_draw("a", 2) == 0);
     CHECK(g.cards.hand_size("a") == 0);
 }
 
@@ -4379,7 +4379,7 @@ TEST_CASE("game: silver lion heals when discarded from the equip zone")
     b->take_damage("", 1, false);  // 4 → 3
 
     // 过河拆桥 / 寒冰剑共用的移除入口：装备区失去即触发
-    REQUIRE(remove_any_and_discard(g.ctx, "b", "e#0").is_some());
+    REQUIRE(StateOps(g.ctx).remove_any_and_discard("b", "e#0").is_some());
     CHECK(b->get_hp() == 4);
     CHECK(g.cards.equip_size("b") == 0);
 }
@@ -4444,7 +4444,7 @@ TEST_CASE("game: silver lion in hand does not heal when discarded")
     b->take_damage("", 1, false);  // 4 → 3
     g.give("b", "silver_lion", "h#0");
 
-    REQUIRE(remove_any_and_discard(g.ctx, "b", "h#0").is_some());
+    REQUIRE(StateOps(g.ctx).remove_any_and_discard("b", "h#0").is_some());
     CHECK(b->get_hp() == 3);  // 仅装备区失去触发；手牌离场不回复
 }
 

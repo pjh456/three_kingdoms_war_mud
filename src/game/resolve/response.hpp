@@ -43,7 +43,7 @@ namespace tkw
         inline bool has_response_card(
             const GameContext &ctx, const std::string &entity_id, card::ResponseKind kind)
         {
-            if (any_hand_card_matching(
+            if (StateQuery::any_hand_card_matching(
                     ctx, entity_id,
                     [kind](const card::CardDef &def)
                     { return is_response_def(def, kind); }))
@@ -84,8 +84,7 @@ namespace tkw
             if (chosen.is_none())
                 return Option<card::Card>::None();
 
-            return consume_hand_card_matching(
-                ctx, entity_id, chosen.unwrap().instance_id,
+            return StateOps(ctx).consume_hand_card_matching(entity_id, chosen.unwrap().instance_id,
                 [&ctx, &entity_id, kind](const card::CardDef &def,
                                          const card::Card &c)
                 {

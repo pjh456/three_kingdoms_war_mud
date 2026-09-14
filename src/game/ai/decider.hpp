@@ -449,7 +449,7 @@ namespace tkw
                     const ReadOnlyContext &ctx, const card::Card &c,
                     card::ResponseKind kind)
                 {
-                    return hand_card_matching(
+                    return StateQuery::hand_card_matching(
                         ctx, c, [kind](const card::CardDef &def)
                         { return is_response_def(def, kind); });
                 }
@@ -465,7 +465,7 @@ namespace tkw
                 static bool is_rescue_card(
                     const ReadOnlyContext &ctx, const card::Card &c, bool is_self)
                 {
-                    return hand_card_matching(
+                    return StateQuery::hand_card_matching(
                         ctx, c,
                         [is_self](const card::CardDef &def)
                         { return can_rescue_def(def, is_self); });
@@ -481,7 +481,7 @@ namespace tkw
                 static bool is_counter_card(
                     const ReadOnlyContext &ctx, const card::Card &c)
                 {
-                    return hand_card_matching(
+                    return StateQuery::hand_card_matching(
                         ctx, c,
                         [](const card::CardDef &def) { return is_counter_def(def); });
                 }

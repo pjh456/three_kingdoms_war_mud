@@ -259,7 +259,7 @@ TEST_CASE("cli: status marks chained seats")
     Repl repl;
     REQUIRE(repl.run("new --players 2 --seed 1").ok);
     auto ctx = repl.session.game->context();
-    tkw::game::set_chained(ctx, "P1", true);
+    tkw::game::StateOps(ctx).set_chained("P1", true);
 
     auto status = repl.run("status");
     REQUIRE(status.ok);
@@ -275,7 +275,7 @@ TEST_CASE("cli: status marks chained seat despite hidden role")
     Repl repl;
     REQUIRE(repl.run("new --mode identity --players 4 --seed 1 --human P0").ok);
     auto ctx = repl.session.game->context();
-    tkw::game::set_chained(ctx, "P2", true);
+    tkw::game::StateOps(ctx).set_chained("P2", true);
 
     auto status = repl.run("status");
     REQUIRE(status.ok);

@@ -240,7 +240,7 @@ namespace tkw
         inline Option<card::Card> find_sha_in_hand(
             const GameContext &ctx, const std::string &player)
         {
-            return find_hand_card_matching(
+            return StateQuery::find_hand_card_matching(
                 ctx, player, [](const card::CardDef &def)
                 { return is_response_def(def, card::ResponseKind::Sha); });
         }
@@ -268,10 +268,10 @@ namespace tkw
                     ctx, attacker, target, PickCardScope::HandEquip);
                 if (picked.is_none())
                     break;
-                const auto chosen = resolve_target_pick(ctx, target, picked.unwrap());
+                const auto chosen = StateOps(ctx).resolve_target_pick(target, picked.unwrap());
                 if (chosen.is_none())
                     break;
-                if (remove_any_and_discard(ctx, target, chosen.unwrap().instance_id)
+                if (StateOps(ctx).remove_any_and_discard(target, chosen.unwrap().instance_id)
                         .is_some())
                     ++discarded;
             }
@@ -364,14 +364,14 @@ namespace tkw
                     sc.ctx, sc.target, 1, DiscardReason::CixiongChoice);
                 for (const auto &id : discards)
                 {
-                    if (remove_and_discard(sc.ctx, sc.target, id).is_some())
+                    if (StateOps(sc.ctx).remove_and_discard(sc.target, id).is_some())
                         return;
                     break;
                 }
             }
 
             // 无手牌或目标选择放弃弃牌：使用者摸一张牌
-            apply_draw(sc.ctx, sc.attacker, 1);
+            StateOps(sc.ctx).apply_draw(sc.attacker, 1);
         }
 
         /**
@@ -381,7 +381,7 @@ namespace tkw
          */
         inline void hook_renwang(ShaContext &sc)
         {
-            if (!sc.ignore_armor && !sc.virtual_sha && is_black_suit(sc.sha.suit))
+            if (!sc.ignore_armor && !sc.virtual_sha && StateQuery::is_black_suit(sc.sha.suit))
                 sc.blocked = true;
         }
 
@@ -430,12 +430,12 @@ namespace tkw
                 EquipQuery::find_equipment(ctx, target, card::Ability::JudgementJink);
             if (!armor || armor->judge.is_none())
                 return false;
-            auto judge = perform_judgement(ctx);
+            auto judge = StateOps(ctx).perform_judgement();
             if (judge.is_none())
                 return false;
             const card::Card judge_card = std::move(judge).unwrap();
-            discard_and_emit(ctx, target, judge_card, DiscardKind::Judgement);
-            return judge_result(armor->judge.unwrap(), judge_card) ==
+            StateOps(ctx).discard_and_emit(target, judge_card, DiscardKind::Judgement);
+            return StateQuery::judge_result(armor->judge.unwrap(), judge_card) ==
                    card::JudgeAction::Jink;
         }
 
@@ -513,7 +513,7 @@ namespace tkw
             {
                 if (discarded == rules_of(sc.ctx).two_card_cost)
                     break;
-                if (remove_and_discard(sc.ctx, sc.attacker, id).is_some())
+                if (StateOps(sc.ctx).remove_and_discard(sc.attacker, id).is_some())
                     ++discarded;
             }
 
@@ -595,7 +595,7 @@ namespace tkw
             if (removed.is_some())
             {
                 card::Card card = std::move(removed).unwrap();
-                discard_and_emit(sc.ctx, sc.target, card);
+                StateOps(sc.ctx).discard_and_emit(sc.target, card);
             }
         }
 
