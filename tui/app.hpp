@@ -39,7 +39,7 @@ namespace tkw
 
             /**
              * @brief 设置启动选项基准（argv 透传）；bootstrap 前调用生效。
-             * @param options 命令行解析出的选项；未给出的项沿用结构体默认值。
+             * @param[in] options 命令行解析出的选项；未给出的项沿用结构体默认值。
              */
             void set_base_options(tkw::cli::Options options)
             {
@@ -48,7 +48,7 @@ namespace tkw
 
             /**
              * @brief 组装根组件：命令输入 + 渲染器 + 决策面板键位 + Esc/Ctrl-C 退出。
-             * @param screen 全屏屏幕；注入 Post 与退出回调都由其承载。
+             * @param[in,out] screen 全屏屏幕；注入 Post 与退出回调都由其承载。
              * @note 待决期面板覆盖命令输入并接管键位（↑/↓/Enter/p/空格/数字，
              *       q 退出）；无待决时按键回落命令输入。退出由控制器 request_quit
              *       统一处理（取消 → join → 存档 → Exit），Esc/Ctrl-C 不再直接

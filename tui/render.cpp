@@ -42,8 +42,8 @@ namespace
 
     /**
      * @brief 单个带圆角边框与粗体标题的面板。
-     * @param title 面板标题。
-     * @param body 面板内容。
+     * @param[in] title 面板标题。
+     * @param[in] body 面板内容。
      * @return 加边框的 FTXUI 元素。
      */
     ftxui::Element panel(const std::string &title, ftxui::Element body)
@@ -84,9 +84,9 @@ namespace
 
     /**
      * @brief 降级提示文案：按模式与决策面板状态说明已被隐藏的面板。
-     * @param size 终端行列。
-     * @param mode 布局分级。
-     * @param bottom_expanded 底部是否为展开的决策面板。
+     * @param[in] size 终端行列。
+     * @param[in] mode 布局分级。
+     * @param[in] bottom_expanded 底部是否为展开的决策面板。
      * @return 尺寸低于 Full 门槛时说明终端过小；仅因决策面板展开而降级时
      *         说明隐藏原因，不误报尺寸问题。
      */
@@ -125,7 +125,7 @@ namespace tkw
 
             /**
              * @brief 棋盘面板：每座一行体力/手牌数/装备/判定/距离，身份局附加角色标签，横置座位附状态标记。
-             * @param snap 值快照。
+             * @param[in] snap 值快照。
              * @return 每座位一行的 vbox；无玩家时单行占位。
              * @note 装备区/判定区为明置信息，经快照值展开牌名，空区回落「无」，与 CLI
              *       status 同措辞；手牌仍只出数量。身份局的隐藏座位已在快照层收敛为
@@ -168,7 +168,7 @@ namespace tkw
 
             /**
              * @brief 手牌面板：viewer 视角的己方手牌逐张展开，他人只出数量。
-             * @param snap 值快照。
+             * @param[in] snap 值快照。
              * @return 手牌行列表；对手视角或空手牌时单行占位。
              */
             ftxui::Element render_hand(const UiSnapshot &snap)
@@ -207,8 +207,8 @@ namespace tkw
 
             /**
              * @brief 日志面板：全部行进可滚动视口。
-             * @param lines 控制器回送的日志值拷贝。
-             * @param ratio 视口位置 0=顶 1=尾；内容溢出时显示滚动条。
+             * @param[in] lines 控制器回送的日志值拷贝。
+             * @param[in] ratio 视口位置 0=顶 1=尾；内容溢出时显示滚动条。
              * @return 带纵向滚动条的可滚动 vbox；无内容时单行占位。
              * @note 不引入可聚焦组件：focusPositionRelative 只写焦点位置，不参与
              *       Container 焦点链，命令输入与决策面板的键位归属不受影响。
@@ -232,7 +232,7 @@ namespace tkw
 
             /**
              * @brief 状态面板：会话进度 / AI 档 / 牌堆规模 / 模式与终局。
-             * @param snap 值快照。
+             * @param[in] snap 值快照。
              * @return 状态行列表。
              */
             ftxui::Element render_status(const UiSnapshot &snap)

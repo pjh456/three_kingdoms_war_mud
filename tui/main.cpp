@@ -42,7 +42,8 @@ namespace
 
     /**
      * @brief 解析 tkw-tui 的 argv 到启动选项。
-     * @param argc/argv 原始命令行。
+     * @param[in] argc 命令行参数个数（含程序名）。
+     * @param[in] argv 命令行参数数组（`argv[0]` 为程序名）。
      * @return 解析成功时 error 为空；否则 error 为中文提示，options 不可用。
      * @note 支持 --human/--no-human/--hero/--players/--seed/--ai/--deck/--autosave/
      *       --hand/--mode；选项值域复用命令栏同一解析器，保证两入口同语义。

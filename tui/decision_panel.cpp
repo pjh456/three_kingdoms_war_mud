@@ -38,10 +38,10 @@ namespace tkw
 
             /**
              * @brief 解析 `card <序号>` 命令缓冲中的 1 基序号。
-             * @param compose 命令缓冲；接受 c<n> / c <n> / card<n> / card <n>，
-             *                空白忽略、大小写不敏感。
-             * @param count   候选数量；序号合法区间为 [1, count]。
-             * @param out     出参：合法时写入 0 基候选下标。
+             * @param[in]  compose 命令缓冲；接受 c<n> / c <n> / card<n> / card <n>，
+             *                     空白忽略、大小写不敏感。
+             * @param[in]  count   候选数量；序号合法区间为 [1, count]。
+             * @param[out] out     出参：合法时写入 0 基候选下标。
              * @return 合法返回 true；缺序号、非数字或越界返回 false。
              */
             bool parse_detail_index(

@@ -40,7 +40,7 @@ namespace tkw
 
             /**
              * @brief 接收新的待决面板并重置选择状态。
-             * @param view 纯值面板视图；候选已在 worker 侧解析成展示文本。
+             * @param[in] view 纯值面板视图；候选已在 worker 侧解析成展示文本。
              */
             void show(DecisionPanelView view);
 
@@ -74,7 +74,7 @@ namespace tkw
 
             /**
              * @brief 处理 `card <序号>` 命令输入态下的按键。
-             * @param event 当前按键。
+             * @param[in] event 当前按键。
              * @return 恒为 true：命令输入期间键盘被独占，数字不落入直选。
              * @note Return 解析缓冲并写详情/提示，Backspace 退格，其余可见字符追加。
              */
