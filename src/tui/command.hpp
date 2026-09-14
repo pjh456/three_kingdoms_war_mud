@@ -1,9 +1,10 @@
 /**
  * @file   command.hpp
  * @brief  TUI 命令栏纯解析：单行文本 → 结构化的会话命令。
- * @details 纯函数、无 FTXUI、无输出副作用：解析失败以中文文案返回 `Result`，
- *          由控制器写入日志面板。行内选项以调用方传入的启动选项为基准继承
- *          （未显式给出的项沿用 `base`），与 REPL 行内命令继承启动选项同语义。
+ * @details 纯函数、无 FTXUI、无输出副作用：解析失败以 `CommandParseError`
+ *          返回（判别类别 + 面向用户的中文提示），由控制器写入日志面板。行内
+ *          选项以调用方传入的启动选项为基准继承（未显式给出的项沿用 `base`），
+ *          与 REPL 行内命令继承启动选项同语义。
  * @ingroup tkw_tui
  */
 #ifndef INCLUDE_TKW_TUI_COMMAND_HPP
@@ -61,8 +62,40 @@ namespace tkw
             int games = 0;                          /**< simulate：局数（≥1）。 */
         };
 
-        /** @brief 解析结果：`Ok(Command)` 或 `Err(中文提示)`。 */
-        using CommandParseResult = tkw::Result<Command, std::string>;
+        /**
+         * @brief 命令栏解析失败：判别类别 + 面向用户的中文提示。
+         * @note  `detail` 逐字沿用解析器既有中文文案，供日志面板直接展示；`kind`
+         *        供调用方/测试按类别判定，不解析文案。
+         */
+        struct CommandParseError
+        {
+            /** @brief 解析失败类别。 */
+            enum class Kind : std::uint8_t
+            {
+                EmptyCommand,       /**< 空命令。 */
+                UnknownCommand,     /**< 命令名不被识别（`detail` 可含建议）。 */
+                UnknownOption,      /**< 未知选项。 */
+                MissingValue,       /**< 选项缺少取值。 */
+                InvalidValue,       /**< 选项/位置参数取值格式或值域非法。 */
+                PlayerOutOfRange,   /**< 玩家数越界（值与合法范围在 `detail`）。 */
+                MissingArgument,    /**< 缺少必需的位置/文件/局数参数。 */
+                TooManyArguments,   /**< 位置/文件/关键词参数超过允许个数。 */
+                UnexpectedArgument, /**< 命令不接受该参数（含多余位置参数）。 */
+            };
+
+            Kind kind = Kind::EmptyCommand; /**< 失败类别。 */
+            std::string detail;             /**< 面向用户的中文提示文案。 */
+
+            /**
+             * @brief  比较两个错误值是否等价。
+             * @param[in] other 另一错误值。
+             * @return `true` 表示 `kind` 与 `detail` 均相等。
+             */
+            bool operator==(const CommandParseError &other) const = default;
+        };
+
+        /** @brief 解析结果：`Ok(Command)` 或 `Err(CommandParseError)`。 */
+        using CommandParseResult = tkw::Result<Command, CommandParseError>;
 
         namespace detail
         {
@@ -140,9 +173,10 @@ namespace tkw
              *         new/CLI 同文案）。
              * @retval Ok(false) 当前 token 不是 `--deck`。
              * @retval Ok(true)  已消费 `--deck` 及其值。
-             * @retval Err       `--deck` 后缺值；`i` 与 `cmd` 不被修改。
+             * @retval Err       `--deck` 后缺值（`MissingValue`）；`i` 与 `cmd`
+             *                   不被修改。
              */
-            tkw::Result<bool, std::string> take_query_deck(
+            tkw::Result<bool, CommandParseError> take_query_deck(
                 const std::vector<std::string> &tokens, std::size_t &i,
                 Command &cmd);
 
@@ -261,17 +295,20 @@ namespace tkw
              * @param[in] name   命令名，用于错误文案。
              * @param[in] tokens 全 token 列表（`tokens[0]` 为命令名）。
              * @param[in] value  无多余参数时返回的值。
-             * @return `Ok(value)`；存在多余参数返回 `Err`。
+             * @return `Ok(value)`；存在多余参数返回 `Err`
+             *         （`UnexpectedArgument`）。
              */
             template <typename T>
-            inline tkw::Result<T, std::string> no_args(
+            inline tkw::Result<T, CommandParseError> no_args(
                 const std::string &name, const std::vector<std::string> &tokens,
                 T value)
             {
                 if (tokens.size() > 1)
-                    return tkw::Result<T, std::string>::Err(
-                        name + " 不接受参数");
-                return tkw::Result<T, std::string>::Ok(std::move(value));
+                    return tkw::Result<T, CommandParseError>::Err(
+                        CommandParseError{
+                            CommandParseError::Kind::UnexpectedArgument,
+                            name + " 不接受参数"});
+                return tkw::Result<T, CommandParseError>::Ok(std::move(value));
             }
 
             /**
@@ -325,7 +362,7 @@ namespace tkw
          * @brief  解析一行命令文本。
          * @param[in] line 用户输入的单行文本（首尾空白忽略）。
          * @param[in] base 启动选项；new/deal 未显式给出的项沿用此基准。
-         * @return `Ok(Command)`；`Err` 为面向用户的中文提示（未知命令/缺参/类型
+         * @return `Ok(Command)`；`Err(CommandParseError)`（未知命令/缺参/类型
          *         或越界/未知选项）。
          * @note   命令名与别名：run/r、status/st、save/w、load/l、quit/q、help/?。
          *         save/load 只取一个文件位置参数；new 只接受行内长选项与

@@ -8,6 +8,7 @@
 #include "tui/command.hpp"
 
 using tkw::tui::CommandKind;
+using tkw::tui::CommandParseError;
 using tkw::tui::parse_command;
 
 namespace
@@ -78,7 +79,7 @@ TEST_CASE("tui: new accepts repeatable human seats and no-human reset")
 
     auto missing = parse_command("new --human", base);
     REQUIRE(missing.is_err());
-    CHECK(missing.unwrap_err().find("需要一个值") != std::string::npos);
+    CHECK(missing.unwrap_err().detail.find("需要一个值") != std::string::npos);
 }
 
 TEST_CASE("tui: parse errors carry chinese hints")
@@ -87,27 +88,34 @@ TEST_CASE("tui: parse errors carry chinese hints")
 
     auto unknown = parse_command("frobnicate", base);
     REQUIRE(unknown.is_err());
-    CHECK(unknown.unwrap_err().find("未知命令") != std::string::npos);
+    CHECK(unknown.unwrap_err().kind == CommandParseError::Kind::UnknownCommand);
+    CHECK(unknown.unwrap_err().detail.find("未知命令") != std::string::npos);
 
     auto bad_option = parse_command("new --bogus 1", base);
     REQUIRE(bad_option.is_err());
-    CHECK(bad_option.unwrap_err().find("未知选项") != std::string::npos);
+    CHECK(bad_option.unwrap_err().kind == CommandParseError::Kind::UnknownOption);
+    CHECK(bad_option.unwrap_err().detail.find("未知选项") != std::string::npos);
 
     auto missing = parse_command("new --players", base);
     REQUIRE(missing.is_err());
-    CHECK(missing.unwrap_err().find("需要一个值") != std::string::npos);
+    CHECK(missing.unwrap_err().kind == CommandParseError::Kind::MissingValue);
+    CHECK(missing.unwrap_err().detail.find("需要一个值") != std::string::npos);
 
     auto out_of_range = parse_command("new --players 99", base);
     REQUIRE(out_of_range.is_err());
-    CHECK(out_of_range.unwrap_err().find("超出范围") != std::string::npos);
+    CHECK(out_of_range.unwrap_err().kind ==
+          CommandParseError::Kind::PlayerOutOfRange);
+    CHECK(out_of_range.unwrap_err().detail.find("超出范围") != std::string::npos);
 
     auto bad_seed = parse_command("new --seed -1", base);
     REQUIRE(bad_seed.is_err());
-    CHECK(bad_seed.unwrap_err().find("非负整数") != std::string::npos);
+    CHECK(bad_seed.unwrap_err().kind == CommandParseError::Kind::InvalidValue);
+    CHECK(bad_seed.unwrap_err().detail.find("非负整数") != std::string::npos);
 
     auto empty = parse_command("   ", base);
     REQUIRE(empty.is_err());
-    CHECK(empty.unwrap_err().find("空命令") != std::string::npos);
+    CHECK(empty.unwrap_err().kind == CommandParseError::Kind::EmptyCommand);
+    CHECK(empty.unwrap_err().detail.find("空命令") != std::string::npos);
 }
 
 TEST_CASE("tui: simulate parses games players and inline options")
@@ -149,36 +157,39 @@ TEST_CASE("tui: simulate parse errors carry chinese hints")
 
     auto missing = parse_command("simulate", base);
     REQUIRE(missing.is_err());
-    CHECK(missing.unwrap_err().find("需要") != std::string::npos);
+    CHECK(missing.unwrap_err().kind == CommandParseError::Kind::MissingArgument);
+    CHECK(missing.unwrap_err().detail.find("需要") != std::string::npos);
 
     auto zero = parse_command("simulate 0", base);
     REQUIRE(zero.is_err());
-    CHECK(zero.unwrap_err().find("正整数") != std::string::npos);
+    CHECK(zero.unwrap_err().detail.find("正整数") != std::string::npos);
 
     auto bad_n = parse_command("simulate x", base);
     REQUIRE(bad_n.is_err());
-    CHECK(bad_n.unwrap_err().find("无效") != std::string::npos);
+    CHECK(bad_n.unwrap_err().detail.find("无效") != std::string::npos);
 
     auto players_range = parse_command("simulate 20 99", base);
     REQUIRE(players_range.is_err());
-    CHECK(players_range.unwrap_err().find("超出范围") != std::string::npos);
+    CHECK(players_range.unwrap_err().detail.find("超出范围") != std::string::npos);
 
     auto bad_players = parse_command("simulate 20 x", base);
     REQUIRE(bad_players.is_err());
-    CHECK(bad_players.unwrap_err().find("无效") != std::string::npos);
+    CHECK(bad_players.unwrap_err().detail.find("无效") != std::string::npos);
 
     auto unknown = parse_command("simulate 20 --bogus", base);
     REQUIRE(unknown.is_err());
-    CHECK(unknown.unwrap_err().find("未知选项") != std::string::npos);
+    CHECK(unknown.unwrap_err().detail.find("未知选项") != std::string::npos);
 
     auto extra = parse_command("simulate 20 2 3", base);
     REQUIRE(extra.is_err());
-    CHECK(extra.unwrap_err().find("两个位置参数") != std::string::npos);
+    CHECK(extra.unwrap_err().kind ==
+          CommandParseError::Kind::UnexpectedArgument);
+    CHECK(extra.unwrap_err().detail.find("两个位置参数") != std::string::npos);
 
     // 未知命令仍走「未知命令」。
     auto frob = parse_command("frobnicate", base);
     REQUIRE(frob.is_err());
-    CHECK(frob.unwrap_err().find("未知命令") != std::string::npos);
+    CHECK(frob.unwrap_err().detail.find("未知命令") != std::string::npos);
 }
 
 TEST_CASE("tui: unknown command suggests nearest command names")
@@ -187,7 +198,7 @@ TEST_CASE("tui: unknown command suggests nearest command names")
 
     auto typo = parse_command("runn", base);
     REQUIRE(typo.is_err());
-    const std::string &hint = typo.unwrap_err();
+    const std::string &hint = typo.unwrap_err().detail;
     CHECK(hint.find("未知命令") != std::string::npos);
     CHECK(hint.find("是否想输入") != std::string::npos);
     CHECK(hint.find("run") != std::string::npos);
@@ -195,7 +206,7 @@ TEST_CASE("tui: unknown command suggests nearest command names")
     // 远距拼写无候选，保持原泛化提示。
     auto far = parse_command("frobnicate", base);
     REQUIRE(far.is_err());
-    CHECK(far.unwrap_err().find("是否想输入") == std::string::npos);
+    CHECK(far.unwrap_err().detail.find("是否想输入") == std::string::npos);
 }
 
 TEST_CASE("tui: command suggestions respect threshold and cap")
@@ -229,7 +240,9 @@ TEST_CASE("tui: help and ? accept at most one keyword")
 
     auto too_many = parse_command("help new run", base);
     REQUIRE(too_many.is_err());
-    CHECK(too_many.unwrap_err().find("只接受一个") != std::string::npos);
+    CHECK(too_many.unwrap_err().kind ==
+          CommandParseError::Kind::TooManyArguments);
+    CHECK(too_many.unwrap_err().detail.find("只接受一个") != std::string::npos);
 }
 
 TEST_CASE("tui: query_help_lines filters without rewriting the full table")
@@ -265,7 +278,7 @@ TEST_CASE("tui: cards/rules/audit parse into query commands")
 
     auto cards_bad = parse_command("cards bogus", base);
     REQUIRE(cards_bad.is_err());
-    CHECK(cards_bad.unwrap_err().find("只接受") != std::string::npos);
+    CHECK(cards_bad.unwrap_err().detail.find("只接受") != std::string::npos);
 
     auto rules = parse_command("rules", base);
     REQUIRE(rules.is_ok());
@@ -279,7 +292,7 @@ TEST_CASE("tui: cards/rules/audit parse into query commands")
 
     auto rules_many = parse_command("rules a b", base);
     REQUIRE(rules_many.is_err());
-    CHECK(rules_many.unwrap_err().find("一个") != std::string::npos);
+    CHECK(rules_many.unwrap_err().detail.find("一个") != std::string::npos);
 
     auto audit = parse_command("audit", base);
     REQUIRE(audit.is_ok());
@@ -287,7 +300,7 @@ TEST_CASE("tui: cards/rules/audit parse into query commands")
 
     auto audit_arg = parse_command("audit x", base);
     REQUIRE(audit_arg.is_err());
-    CHECK(audit_arg.unwrap_err().find("不接受参数") != std::string::npos);
+    CHECK(audit_arg.unwrap_err().detail.find("不接受参数") != std::string::npos);
 }
 
 TEST_CASE("tui: decks parses into a query command")
@@ -307,7 +320,7 @@ TEST_CASE("tui: decks parses into a query command")
 
     auto bad = parse_command("decks x", base);
     REQUIRE(bad.is_err());
-    CHECK(bad.unwrap_err().find("只接受") != std::string::npos);
+    CHECK(bad.unwrap_err().detail.find("只接受") != std::string::npos);
 }
 
 TEST_CASE("tui: query commands accept inline deck override")
@@ -329,7 +342,7 @@ TEST_CASE("tui: query commands accept inline deck override")
 
     auto cards_missing = parse_command("cards --deck", base);
     REQUIRE(cards_missing.is_err());
-    CHECK(cards_missing.unwrap_err().find("需要一个值") != std::string::npos);
+    CHECK(cards_missing.unwrap_err().detail.find("需要一个值") != std::string::npos);
 
     auto rules_before = parse_command("rules --deck /tmp/d 杀", base);
     REQUIRE(rules_before.is_ok());
@@ -350,11 +363,11 @@ TEST_CASE("tui: query commands accept inline deck override")
 
     auto rules_unknown = parse_command("rules --bogus", base);
     REQUIRE(rules_unknown.is_err());
-    CHECK(rules_unknown.unwrap_err().find("未知选项") != std::string::npos);
+    CHECK(rules_unknown.unwrap_err().detail.find("未知选项") != std::string::npos);
 
     auto rules_missing = parse_command("rules --deck", base);
     REQUIRE(rules_missing.is_err());
-    CHECK(rules_missing.unwrap_err().find("需要一个值") != std::string::npos);
+    CHECK(rules_missing.unwrap_err().detail.find("需要一个值") != std::string::npos);
 
     auto audit = parse_command("audit --deck /tmp/d", base);
     REQUIRE(audit.is_ok());
@@ -364,7 +377,7 @@ TEST_CASE("tui: query commands accept inline deck override")
 
     auto audit_missing = parse_command("audit --deck", base);
     REQUIRE(audit_missing.is_err());
-    CHECK(audit_missing.unwrap_err().find("需要一个值") != std::string::npos);
+    CHECK(audit_missing.unwrap_err().detail.find("需要一个值") != std::string::npos);
 
     // 不显式给 --deck 时不得置位，控制器才会沿用会话/启动来源。
     auto cards_plain = parse_command("cards", base);
@@ -384,7 +397,7 @@ TEST_CASE("tui: deal takes positional players and seed")
 
     auto missing = parse_command("deal 3", base_options());
     REQUIRE(missing.is_err());
-    CHECK(missing.unwrap_err().find("两个参数") != std::string::npos);
+    CHECK(missing.unwrap_err().detail.find("两个参数") != std::string::npos);
 }
 
 TEST_CASE("tui: run and control aliases resolve")
@@ -407,7 +420,7 @@ TEST_CASE("tui: run and control aliases resolve")
 
     auto extra = parse_command("step now", base_options());
     REQUIRE(extra.is_err());
-    CHECK(extra.unwrap_err().find("不接受参数") != std::string::npos);
+    CHECK(extra.unwrap_err().detail.find("不接受参数") != std::string::npos);
 }
 
 TEST_CASE("tui: save and load require exactly one file")
@@ -431,11 +444,11 @@ TEST_CASE("tui: save and load require exactly one file")
 
     auto missing = parse_command("save", base_options());
     REQUIRE(missing.is_err());
-    CHECK(missing.unwrap_err().find("需要 <file>") != std::string::npos);
+    CHECK(missing.unwrap_err().detail.find("需要 <file>") != std::string::npos);
 
     auto too_many = parse_command("load a b", base_options());
     REQUIRE(too_many.is_err());
-    CHECK(too_many.unwrap_err().find("只接受一个") != std::string::npos);
+    CHECK(too_many.unwrap_err().detail.find("只接受一个") != std::string::npos);
 }
 
 TEST_CASE("tui: new parses repeatable hero seats with replace semantics")
@@ -469,7 +482,7 @@ TEST_CASE("tui: new parses repeatable hero seats with replace semantics")
 
     auto missing = parse_command("new --hero", base);
     REQUIRE(missing.is_err());
-    CHECK(missing.unwrap_err().find("需要一个值") != std::string::npos);
+    CHECK(missing.unwrap_err().detail.find("需要一个值") != std::string::npos);
 }
 
 TEST_CASE("tui: heroes parses into a query command")
@@ -489,11 +502,11 @@ TEST_CASE("tui: heroes parses into a query command")
 
     auto missing = parse_command("heroes --deck", base);
     REQUIRE(missing.is_err());
-    CHECK(missing.unwrap_err().find("需要一个值") != std::string::npos);
+    CHECK(missing.unwrap_err().detail.find("需要一个值") != std::string::npos);
 
     auto bad = parse_command("heroes x", base);
     REQUIRE(bad.is_err());
-    CHECK(bad.unwrap_err().find("只接受") != std::string::npos);
+    CHECK(bad.unwrap_err().detail.find("只接受") != std::string::npos);
 }
 
 TEST_CASE("tui: help lists hero selection and the heroes query")

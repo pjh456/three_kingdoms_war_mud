@@ -34,7 +34,7 @@ namespace tkw
             auto parsed = parse_command(line, m_base);
             if (parsed.is_err())
             {
-                append_line(parsed.unwrap_err());
+                append_line(parsed.unwrap_err().detail);
                 return;
             }
             const auto &cmd = parsed.unwrap();

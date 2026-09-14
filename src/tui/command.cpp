@@ -114,18 +114,34 @@ namespace tkw
                 return "未知选项: '" + option + "'（help 查看用法）";
             }
 
-            tkw::Result<bool, std::string> take_query_deck(
+            namespace
+            {
+                /**
+                 * @brief 组装结构化解析错误：判别类别 + 逐字保留的中文文案。
+                 * @param[in] kind   失败类别。
+                 * @param[in] detail 面向用户的中文提示。
+                 * @return 组装好的错误值。
+                 */
+                CommandParseError make_error(CommandParseError::Kind kind,
+                                             std::string detail)
+                {
+                    return CommandParseError{kind, std::move(detail)};
+                }
+            }  // namespace
+
+            tkw::Result<bool, CommandParseError> take_query_deck(
                 const std::vector<std::string> &tokens, std::size_t &i,
                 Command &cmd)
             {
                 if (tokens[i] != "--deck")
-                    return tkw::Result<bool, std::string>::Ok(false);
+                    return tkw::Result<bool, CommandParseError>::Ok(false);
                 if (i + 1 >= tokens.size())
-                    return tkw::Result<bool, std::string>::Err(
-                        missing_value_error("--deck"));
+                    return tkw::Result<bool, CommandParseError>::Err(make_error(
+                        CommandParseError::Kind::MissingValue,
+                        missing_value_error("--deck")));
                 cmd.options.deck = tokens[++i];
                 cmd.deck_provided = true;
-                return tkw::Result<bool, std::string>::Ok(true);
+                return tkw::Result<bool, CommandParseError>::Ok(true);
             }
 
             CommandParseResult parse_new(
@@ -155,8 +171,9 @@ namespace tkw
                     {
                         // 可重复累积，与命令行 --human 同语义
                         if (!value_of(value))
-                            return CommandParseResult::Err(
-                                missing_value_error(t));
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::MissingValue,
+                                missing_value_error(t)));
                         cmd.options.humans.push_back(value);
                     }
                     else if (t == "--no-human")
@@ -167,8 +184,9 @@ namespace tkw
                     {
                         // 可重复；首次出现替换启动继承值，后续继续累积
                         if (!value_of(value))
-                            return CommandParseResult::Err(
-                                missing_value_error(t));
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::MissingValue,
+                                missing_value_error(t)));
                         if (!hero_provided)
                         {
                             cmd.options.heroes.clear();
@@ -179,82 +197,97 @@ namespace tkw
                     else if (t == "--players")
                     {
                         if (!value_of(value))
-                            return CommandParseResult::Err(
-                                missing_value_error(t));
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::MissingValue,
+                                missing_value_error(t)));
                         int players = 0;
                         if (!parse_i32(value, players))
-                            return CommandParseResult::Err(
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::InvalidValue,
                                 "选项 '--players' 的值 '" + value +
-                                "' 无效: 期望整数");
+                                    "' 无效: 期望整数"));
                         if (players < tkw::game::RulesConfig{}.min_players ||
                             players > tkw::game::RulesConfig{}.max_players)
-                            return CommandParseResult::Err(
-                                player_range_error(players));
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::PlayerOutOfRange,
+                                player_range_error(players)));
                         cmd.options.players = players;
                     }
                     else if (t == "--seed")
                     {
                         if (!value_of(value))
-                            return CommandParseResult::Err(
-                                missing_value_error(t));
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::MissingValue,
+                                missing_value_error(t)));
                         std::uint32_t seed = 0;
                         if (!parse_u32(value, seed))
-                            return CommandParseResult::Err(
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::InvalidValue,
                                 "选项 '--seed' 的值 '" + value +
-                                "' 无效: 期望非负整数");
+                                    "' 无效: 期望非负整数"));
                         cmd.options.seed = seed;
                     }
                     else if (t == "--hand")
                     {
                         if (!value_of(value))
-                            return CommandParseResult::Err(
-                                missing_value_error(t));
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::MissingValue,
+                                missing_value_error(t)));
                         int hand = 0;
                         if (!parse_i32(value, hand) || hand < 0)
-                            return CommandParseResult::Err(
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::InvalidValue,
                                 "选项 '--hand' 的值 '" + value +
-                                "' 无效: 期望非负整数");
+                                    "' 无效: 期望非负整数"));
                         cmd.options.hand = hand;
                     }
                     else if (t == "--mode")
                     {
                         if (!value_of(value))
-                            return CommandParseResult::Err(
-                                missing_value_error(t));
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::MissingValue,
+                                missing_value_error(t)));
                         tkw::game::GameMode mode = tkw::game::GameMode::Brawl;
                         if (!mode_from(value, mode))
-                            return CommandParseResult::Err(
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::InvalidValue,
                                 "选项 '--mode' 的值 '" + value +
-                                "' 无效: 期望 brawl 或 identity");
+                                    "' 无效: 期望 brawl 或 identity"));
                         cmd.options.mode = mode;
                     }
                     else if (t == "--ai")
                     {
                         if (!value_of(value))
-                            return CommandParseResult::Err(
-                                missing_value_error(t));
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::MissingValue,
+                                missing_value_error(t)));
                         const auto ai = tkw::cli::ai_level_from(value);
                         if (ai.is_none())
-                            return CommandParseResult::Err(
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::InvalidValue,
                                 "选项 '--ai' 的值 '" + value +
-                                "' 无效: 期望 simple 或 aggressive");
+                                    "' 无效: 期望 simple 或 aggressive"));
                         cmd.options.ai = ai.unwrap();
                     }
                     else if (t == "--deck")
                     {
                         if (!value_of(value))
-                            return CommandParseResult::Err(
-                                missing_value_error(t));
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::MissingValue,
+                                missing_value_error(t)));
                         cmd.options.deck = value;
                     }
                     else if (t.rfind("--", 0) == 0)
                     {
-                        return CommandParseResult::Err(unknown_option_error(t));
+                        return CommandParseResult::Err(make_error(
+                            CommandParseError::Kind::UnknownOption,
+                            unknown_option_error(t)));
                     }
                     else
                     {
-                        return CommandParseResult::Err(
-                            "new 不接受位置参数: '" + t + "'");
+                        return CommandParseResult::Err(make_error(
+                            CommandParseError::Kind::UnexpectedArgument,
+                            "new 不接受位置参数: '" + t + "'"));
                     }
                 }
                 return CommandParseResult::Ok(std::move(cmd));
@@ -265,23 +298,28 @@ namespace tkw
                 const tkw::cli::Options &base)
             {
                 if (tokens.size() != 3)
-                    return CommandParseResult::Err(
-                        "deal 需要 <players> <seed> 两个参数");
+                    return CommandParseResult::Err(make_error(
+                        CommandParseError::Kind::MissingArgument,
+                        "deal 需要 <players> <seed> 两个参数"));
 
                 int players = 0;
                 if (!parse_i32(tokens[1], players))
-                    return CommandParseResult::Err(
+                    return CommandParseResult::Err(make_error(
+                        CommandParseError::Kind::InvalidValue,
                         "deal 的 players 值 '" + tokens[1] +
-                        "' 无效: 期望整数");
+                            "' 无效: 期望整数"));
                 if (players < tkw::game::RulesConfig{}.min_players ||
                     players > tkw::game::RulesConfig{}.max_players)
-                    return CommandParseResult::Err(player_range_error(players));
+                    return CommandParseResult::Err(make_error(
+                        CommandParseError::Kind::PlayerOutOfRange,
+                        player_range_error(players)));
 
                 std::uint32_t seed = 0;
                 if (!parse_u32(tokens[2], seed))
-                    return CommandParseResult::Err(
+                    return CommandParseResult::Err(make_error(
+                        CommandParseError::Kind::InvalidValue,
                         "deal 的 seed 值 '" + tokens[2] +
-                        "' 无效: 期望非负整数");
+                            "' 无效: 期望非负整数"));
 
                 Command cmd;
                 cmd.kind = CommandKind::Deal;
@@ -309,9 +347,10 @@ namespace tkw
                         return CommandParseResult::Err(deck.unwrap_err());
                     if (deck.unwrap())
                         continue;
-                    return CommandParseResult::Err(
+                    return CommandParseResult::Err(make_error(
+                        CommandParseError::Kind::UnexpectedArgument,
                         "cards 只接受 --text 或 --deck <路径> 选项: '" +
-                        tokens[i] + "'");
+                            tokens[i] + "'"));
                 }
                 return CommandParseResult::Ok(std::move(cmd));
             }
@@ -329,11 +368,13 @@ namespace tkw
                     if (deck.unwrap())
                         continue;
                     if (tokens[i].rfind("--", 0) == 0)
-                        return CommandParseResult::Err(
-                            unknown_option_error(tokens[i]));
+                        return CommandParseResult::Err(make_error(
+                            CommandParseError::Kind::UnknownOption,
+                            unknown_option_error(tokens[i])));
                     if (!cmd.keyword.empty())
-                        return CommandParseResult::Err(
-                            "rules 只接受一个 <关键词> 参数");
+                        return CommandParseResult::Err(make_error(
+                            CommandParseError::Kind::TooManyArguments,
+                            "rules 只接受一个 <关键词> 参数"));
                     cmd.keyword = tokens[i];
                 }
                 return CommandParseResult::Ok(std::move(cmd));
@@ -351,8 +392,9 @@ namespace tkw
                         return CommandParseResult::Err(deck.unwrap_err());
                     if (deck.unwrap())
                         continue;
-                    return CommandParseResult::Err(
-                        "audit 不接受参数: '" + tokens[i] + "'");
+                    return CommandParseResult::Err(make_error(
+                        CommandParseError::Kind::UnexpectedArgument,
+                        "audit 不接受参数: '" + tokens[i] + "'"));
                 }
                 return CommandParseResult::Ok(std::move(cmd));
             }
@@ -369,8 +411,9 @@ namespace tkw
                         return CommandParseResult::Err(deck.unwrap_err());
                     if (deck.unwrap())
                         continue;
-                    return CommandParseResult::Err(
-                        "decks 只接受 --deck <路径> 选项: '" + tokens[i] + "'");
+                    return CommandParseResult::Err(make_error(
+                        CommandParseError::Kind::UnexpectedArgument,
+                        "decks 只接受 --deck <路径> 选项: '" + tokens[i] + "'"));
                 }
                 return CommandParseResult::Ok(std::move(cmd));
             }
@@ -387,8 +430,10 @@ namespace tkw
                         return CommandParseResult::Err(deck.unwrap_err());
                     if (deck.unwrap())
                         continue;
-                    return CommandParseResult::Err(
-                        "heroes 只接受 --deck <路径> 选项: '" + tokens[i] + "'");
+                    return CommandParseResult::Err(make_error(
+                        CommandParseError::Kind::UnexpectedArgument,
+                        "heroes 只接受 --deck <路径> 选项: '" + tokens[i] +
+                            "'"));
                 }
                 return CommandParseResult::Ok(std::move(cmd));
             }
@@ -425,64 +470,77 @@ namespace tkw
                     if (t == "--seed")
                     {
                         if (!value_of(value))
-                            return CommandParseResult::Err(
-                                missing_value_error(t));
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::MissingValue,
+                                missing_value_error(t)));
                         std::uint32_t seed = 0;
                         if (!parse_u32(value, seed))
-                            return CommandParseResult::Err(
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::InvalidValue,
                                 "选项 '--seed' 的值 '" + value +
-                                "' 无效: 期望非负整数");
+                                    "' 无效: 期望非负整数"));
                         cmd.options.seed = seed;
                     }
                     else if (t == "--hand")
                     {
                         if (!value_of(value))
-                            return CommandParseResult::Err(
-                                missing_value_error(t));
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::MissingValue,
+                                missing_value_error(t)));
                         int hand = 0;
                         if (!parse_i32(value, hand) || hand < 0)
-                            return CommandParseResult::Err(
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::InvalidValue,
                                 "选项 '--hand' 的值 '" + value +
-                                "' 无效: 期望非负整数");
+                                    "' 无效: 期望非负整数"));
                         cmd.options.hand = hand;
                     }
                     else if (t == "--mode")
                     {
                         if (!value_of(value))
-                            return CommandParseResult::Err(
-                                missing_value_error(t));
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::MissingValue,
+                                missing_value_error(t)));
                         tkw::game::GameMode mode = tkw::game::GameMode::Brawl;
                         if (!mode_from(value, mode))
-                            return CommandParseResult::Err(
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::InvalidValue,
                                 "选项 '--mode' 的值 '" + value +
-                                "' 无效: 期望 brawl 或 identity");
+                                    "' 无效: 期望 brawl 或 identity"));
                         cmd.options.mode = mode;
                     }
                     else if (t == "--ai")
                     {
                         if (!value_of(value))
-                            return CommandParseResult::Err(
-                                missing_value_error(t));
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::MissingValue,
+                                missing_value_error(t)));
                         const auto ai = tkw::cli::ai_level_from(value);
                         if (ai.is_none())
-                            return CommandParseResult::Err(
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::InvalidValue,
                                 "选项 '--ai' 的值 '" + value +
-                                "' 无效: 期望 simple 或 aggressive");
+                                    "' 无效: 期望 simple 或 aggressive"));
                         cmd.options.ai = ai.unwrap();
                     }
                     else if (t.rfind("--", 0) == 0)
                     {
-                        return CommandParseResult::Err(unknown_option_error(t));
+                        return CommandParseResult::Err(make_error(
+                            CommandParseError::Kind::UnknownOption,
+                            unknown_option_error(t)));
                     }
                     else if (!games_set)
                     {
                         int games = 0;
                         if (!parse_i32(t, games))
-                            return CommandParseResult::Err(
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::InvalidValue,
                                 "simulate 的局数 '" + t +
-                                "' 无效: 期望正整数");
+                                    "' 无效: 期望正整数"));
                         if (games < 1)
-                            return CommandParseResult::Err("局数须为正整数");
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::InvalidValue,
+                                "局数须为正整数"));
                         cmd.games = games;
                         games_set = true;
                     }
@@ -490,25 +548,30 @@ namespace tkw
                     {
                         int players = 0;
                         if (!parse_i32(t, players))
-                            return CommandParseResult::Err(
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::InvalidValue,
                                 "simulate 的玩家数 '" + t +
-                                "' 无效: 期望整数");
+                                    "' 无效: 期望整数"));
                         if (players < tkw::game::RulesConfig{}.min_players ||
                             players > tkw::game::RulesConfig{}.max_players)
-                            return CommandParseResult::Err(
-                                player_range_error(players));
+                            return CommandParseResult::Err(make_error(
+                                CommandParseError::Kind::PlayerOutOfRange,
+                                player_range_error(players)));
                         cmd.options.players = players;
                         players_set = true;
                     }
                     else
                     {
-                        return CommandParseResult::Err(
+                        return CommandParseResult::Err(make_error(
+                            CommandParseError::Kind::UnexpectedArgument,
                             "simulate 只接受两个位置参数（局数 [玩家数]）: '" +
-                            t + "'");
+                                t + "'"));
                     }
                 }
                 if (!games_set)
-                    return CommandParseResult::Err("simulate 需要 <局数> 参数");
+                    return CommandParseResult::Err(make_error(
+                        CommandParseError::Kind::MissingArgument,
+                        "simulate 需要 <局数> 参数"));
                 return CommandParseResult::Ok(std::move(cmd));
             }
 
@@ -517,8 +580,9 @@ namespace tkw
                 const std::vector<std::string> &tokens)
             {
                 if (tokens.size() > 2)
-                    return CommandParseResult::Err(
-                        name + " 只接受一个 <关键词> 参数");
+                    return CommandParseResult::Err(make_error(
+                        CommandParseError::Kind::TooManyArguments,
+                        name + " 只接受一个 <关键词> 参数"));
                 Command cmd;
                 cmd.kind = CommandKind::Help;
                 if (tokens.size() == 2)
@@ -531,11 +595,13 @@ namespace tkw
                 const std::vector<std::string> &tokens)
             {
                 if (tokens.size() < 2)
-                    return CommandParseResult::Err(
-                        name + " 需要 <file> 参数");
+                    return CommandParseResult::Err(make_error(
+                        CommandParseError::Kind::MissingArgument,
+                        name + " 需要 <file> 参数"));
                 if (tokens.size() > 2)
-                    return CommandParseResult::Err(
-                        name + " 只接受一个 <file> 参数");
+                    return CommandParseResult::Err(make_error(
+                        CommandParseError::Kind::TooManyArguments,
+                        name + " 只接受一个 <file> 参数"));
                 Command cmd;
                 cmd.kind = kind;
                 cmd.file = tokens[1];
@@ -656,7 +722,9 @@ namespace tkw
         {
             const std::string_view text = detail::trim(line);
             if (text.empty())
-                return CommandParseResult::Err("空命令（help 查看用法）");
+                return CommandParseResult::Err(
+                    detail::make_error(CommandParseError::Kind::EmptyCommand,
+                                       "空命令（help 查看用法）"));
 
             const std::vector<std::string> tokens = detail::split_ws(text);
             const std::string &name = tokens[0];
@@ -716,8 +784,9 @@ namespace tkw
             const std::vector<std::string> suggestions =
                 detail::suggest_commands(name);
             if (suggestions.empty())
-                return CommandParseResult::Err("未知命令: '" + name +
-                                               "'（help 查看用法）");
+                return CommandParseResult::Err(detail::make_error(
+                    CommandParseError::Kind::UnknownCommand,
+                    "未知命令: '" + name + "'（help 查看用法）"));
 
             std::string hint = "是否想输入: ";
             for (std::size_t i = 0; i < suggestions.size(); ++i)
@@ -727,8 +796,9 @@ namespace tkw
                 hint += suggestions[i];
             }
             hint += "？ / ";
-            return CommandParseResult::Err("未知命令: '" + name + "'（" + hint +
-                                           "help 查看用法）");
+            return CommandParseResult::Err(detail::make_error(
+                CommandParseError::Kind::UnknownCommand,
+                "未知命令: '" + name + "'（" + hint + "help 查看用法）"));
         }
     }  // namespace tui
 }  // namespace tkw
