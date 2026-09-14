@@ -17,13 +17,13 @@ namespace tkw
         Entity::Entity(
             std::string eid, int in_seat, Hp in_hp, EventBus &injected_bus,
             Gender in_gender, bool in_chained, std::string in_hero) :
-            id(std::move(eid)),
-            seat(in_seat),
-            hp(std::move(in_hp)),
-            bus(&injected_bus),
-            gender(in_gender),
-            hero(std::move(in_hero)),
-            chained(in_chained)
+            m_id(std::move(eid)),
+            m_seat(in_seat),
+            m_hp(std::move(in_hp)),
+            m_bus(&injected_bus),
+            m_gender(in_gender),
+            m_hero(std::move(in_hero)),
+            m_chained(in_chained)
         {
             bind_status_events();
         }
@@ -36,34 +36,34 @@ namespace tkw
                 return 0;
             auto ev = std::make_shared<EntityDamagedEvent>();
             ev->source = source;
-            ev->target = id;
+            ev->target = m_id;
             ev->amount = amount;
             ev->indirect = indirect;
             ev->damage_type = type;
-            bus->publish(ev);
+            m_bus->publish(ev);
 
-            return hp.sub(amount);
+            return m_hp.sub(amount);
         }
 
         int Entity::heal(int amount)
         {
             if (amount <= 0)
                 return 0;
-            const int real = hp.add(amount);
+            const int real = m_hp.add(amount);
             if (real <= 0)
                 return 0;
             auto ev = std::make_shared<EntityHealedEvent>();
-            ev->target = id;
+            ev->target = m_id;
             ev->amount = real;
-            bus->publish(ev);
+            m_bus->publish(ev);
             return real;
         }
 
         void Entity::bind_status_events()
         {
-            const std::string entity_id = id;
-            EventBus *bus = this->bus;
-            hp.on_change(
+            const std::string entity_id = m_id;
+            EventBus *bus = this->m_bus;
+            m_hp.on_change(
                 [entity_id, bus](int old_cur, int cur, int max)
                 {
                     auto ev = std::make_shared<EntityHpChangedEvent>();

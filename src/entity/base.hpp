@@ -41,13 +41,13 @@ namespace tkw
         class Entity
         {
         private:
-            std::string id;
-            int seat = 0;
-            Hp hp;
-            EventBus *bus;
-            Gender gender = Gender::Male;
-            std::string hero;
-            bool chained = false;
+            std::string m_id;
+            int m_seat = 0;
+            Hp m_hp;
+            EventBus *m_bus;
+            Gender m_gender = Gender::Male;
+            std::string m_hero;
+            bool m_chained = false;
 
         public:
             /**
@@ -76,57 +76,57 @@ namespace tkw
              * @brief  返回实体 id。
              * @return 构造时确定的 id 字符串；创建后不变。
              */
-            const std::string &get_id() const noexcept { return id; }
+            const std::string &get_id() const noexcept { return m_id; }
 
             /**
              * @brief  返回座位号。
              * @return 座位号；距离计算与回合序的基础。
              */
-            int get_seat() const noexcept { return seat; }
+            int get_seat() const noexcept { return m_seat; }
 
             /**
              * @brief  返回性别。
              * @return 性别；未显式指定时为 `Gender::Male`。
              */
-            Gender get_gender() const noexcept { return gender; }
+            Gender get_gender() const noexcept { return m_gender; }
 
             /**
              * @brief  返回武将 id（空 = 无名/通用座位）。
              * @return 武将目录中的 id 字符串；静态身份，创建后不可变。
              * @note   行为由 game/query 层按目录解析，实体本身不承载规则。
              */
-            const std::string &get_hero() const noexcept { return hero; }
+            const std::string &get_hero() const noexcept { return m_hero; }
 
             /**
              * @brief  查询是否处于连环状态。
              * @return `true` 表示已横置，属性伤害会沿铁索传导。
              */
-            bool get_chained() const noexcept { return chained; }
+            bool get_chained() const noexcept { return m_chained; }
 
             /**
              * @brief  设置连环状态（横置/重置）。
              * @param[in] value `true` 为横置，`false` 为重置。
              * @note   哑状态：不发事件，展示与传导判定由写层负责。
              */
-            void set_chained(bool value) noexcept { chained = value; }
+            void set_chained(bool value) noexcept { m_chained = value; }
 
             /**
              * @brief  返回当前体力。
              * @return 当前体力值；可为非正 = 濒死值状态。
              */
-            int get_hp() const noexcept { return hp.get_cur(); }
+            int get_hp() const noexcept { return m_hp.get_cur(); }
 
             /**
              * @brief  返回可写血条对象。
              * @return 血条引用，含上限与 `set_cur`/`set_max`/`add`/`sub` 入口。
              */
-            Hp &get_hp_bar() noexcept { return hp; }
+            Hp &get_hp_bar() noexcept { return m_hp; }
 
             /**
              * @brief  返回只读血条对象。
              * @return 血条常量引用。
              */
-            const Hp &get_hp_bar() const noexcept { return hp; }
+            const Hp &get_hp_bar() const noexcept { return m_hp; }
 
             /**
              * @brief  承受伤害（战斗结算入口）。
