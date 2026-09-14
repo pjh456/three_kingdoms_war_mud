@@ -831,8 +831,10 @@ namespace tkw
              * @brief  决策入口：真人座位阻塞等待 UI 提交，其余回落 fallback。
              * @param[in] req 引擎决策请求。
              * @return 真人座位：UI 提交的选择；取消时返回默认选择。
-             * @note   面板在取得锁后、阻塞前折成纯值，随后释放锁再通知 UI 并调用
-             *         即将阻塞回调，避免回调持锁重入。
+             * @note   面板在取得锁后、阻塞前折成纯值；释放锁先调用即将阻塞回调
+             *         投递快照，再在锁内置 pending 可见，最后通知 UI 唤醒，避免
+             *         回调持锁重入；快照先于 pending 可见，保证主线程观测到待决
+             *         后写入的运行中拒绝提示不会被回调快照整段覆盖。
              */
             tkw::game::ai::DecisionChoice decide(
                 const tkw::game::ai::DecisionRequest &req) override
@@ -844,16 +846,23 @@ namespace tkw
                 if (m_cancelled.load())
                     return {};
                 m_panel = make_panel(req);
-                has_pending_ = true;
                 m_taken = false;
                 m_submitted = false;
                 std::function<void()> notify = m_notify;
                 std::function<void()> on_wait = on_wait_;
                 lock.unlock();
-                if (notify)
-                    notify();
+                // 先投递快照再发布待决：主线程只能在 pending 可见后写运行中
+                // 提示，故该提示不会先于快照写入而被后续整段覆盖丢行。
                 if (on_wait)
                     on_wait();
+                lock.lock();
+                if (m_cancelled.load())
+                    return {};
+                has_pending_ = true;
+                lock.unlock();
+                // notify 必须在 pending 可见之后，UI 唤醒后 fetch_new 才能取到面板。
+                if (notify)
+                    notify();
                 lock.lock();
                 m_cv.wait(lock, [this]
                          { return m_submitted || m_cancelled.load(); });
