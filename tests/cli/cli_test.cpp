@@ -931,7 +931,8 @@ TEST_CASE("cli: rules lists and filters card effect text")
 
     auto all = repl.run("rules --deck " + deck);
     CHECK(all.ok);
-    CHECK(all.out.find("牌表: " + deck) != std::string::npos);
+    CHECK(all.out.find("牌表: " + std::filesystem::path(deck).string()) !=
+          std::string::npos);
     CHECK(all.out.find("卡牌说明（") != std::string::npos);
     CHECK(all.out.find("杀(sha): ") != std::string::npos);
 
@@ -1240,7 +1241,9 @@ TEST_CASE("cli: repl read-only commands inherit startup deck")
     auto overridden =
         repl.run("cards --deck " + std::string(TKW_TEST_RESOURCE_DIR));
     CHECK(overridden.ok);
-    CHECK(overridden.out.find("牌表: " + std::string(TKW_TEST_RESOURCE_DIR)) !=
+    CHECK(overridden.out.find(
+              "牌表: " +
+              std::filesystem::path(TKW_TEST_RESOURCE_DIR).string()) !=
           std::string::npos);
     CHECK(overridden.out.find("标准版") != std::string::npos);
 
@@ -1710,7 +1713,9 @@ TEST_CASE("cli: status shows the session deck source")
     CHECK(repl.session.deck == std::filesystem::path(TKW_TEST_RESOURCE_DIR));
     auto status = repl.run("status");
     CHECK(status.ok);
-    CHECK(status.out.find("牌表: " + std::string(TKW_TEST_RESOURCE_DIR)) !=
+    CHECK(status.out.find(
+              "牌表: " +
+              std::filesystem::path(TKW_TEST_RESOURCE_DIR).string()) !=
           std::string::npos);
 
     // 行内 --deck 覆盖启动选项并记入会话；status 展示行内来源。

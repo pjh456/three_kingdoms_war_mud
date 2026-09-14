@@ -546,8 +546,9 @@ TEST_CASE("tui: simulate without session uses startup deck")
     c.wait_idle();
 
     CHECK_FALSE(c.running());
-    CHECK(log_contains(c.log_lines(),
-                       "牌表: " + std::string(TKW_TEST_RESOURCE_DIR)));
+    CHECK(log_contains(
+        c.log_lines(),
+        "牌表: " + std::filesystem::path(TKW_TEST_RESOURCE_DIR).string()));
     CHECK(log_contains(c.log_lines(), "模拟 1 局"));
 }
 
