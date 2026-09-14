@@ -179,11 +179,11 @@ namespace tkw
                     // 候选（真响应牌优先在前，同张真杀不重复；转化合法性由
                     // 引擎按武将 + 牌面识别）
                     if (kind == card::ResponseKind::Sha)
-                        for (const auto &c : sha_conversion_cards(ctx, entity))
+                        for (const auto &c : HeroQuery::sha_conversion_cards(ctx, entity))
                             req.options.push_back(c);
                     // 单张转化当闪（龙胆杀）：闪响应窗口并入单牌候选
                     if (kind == card::ResponseKind::Jink)
-                        for (const auto &c : jink_conversion_cards(ctx, entity))
+                        for (const auto &c : HeroQuery::jink_conversion_cards(ctx, entity))
                             req.options.push_back(c);
                     // 杀响应窗口：携带两张当杀 pair 候选（与主动侧同一枚举口径）
                     if (kind == card::ResponseKind::Sha)

@@ -70,7 +70,7 @@ namespace tkw
             const ReadOnlyContext &ctx, const std::string &player)
         {
             std::vector<std::pair<card::Card, card::Card>> out;
-            if (!has_ability(ctx, player, card::Ability::TwoCardsAsSha))
+            if (!EquipQuery::has_ability(ctx, player, card::Ability::TwoCardsAsSha))
                 return out;
             const auto &hand = ctx.cards->hand(player);
             if (hand.size() < 2 || find_sha_def(ctx).is_none())
@@ -124,7 +124,7 @@ namespace tkw
 
                 case PlayClass::DelayedTrick:
                 {
-                    for (const auto &t : delayed_legal_targets(ctx, player, def))
+                    for (const auto &t : JudgeQuery::delayed_legal_targets(ctx, player, def))
                         out.push_back(LegalAction{c, {t}});
                     continue;
                 }
@@ -149,7 +149,7 @@ namespace tkw
                         const std::string &holder = e->get_id();
                         if (holder == player)
                             continue;
-                        if (!has_equip_slot(ctx, holder, card::EquipSlot::Weapon))
+                        if (!EquipQuery::has_equip_slot(ctx, holder, card::EquipSlot::Weapon))
                             continue;
                         for (const auto *b : view)
                         {
@@ -191,7 +191,7 @@ namespace tkw
                         // 多目标动作（原目标 + 至多 2 名其他在范围内角色，
                         // 按实体序确定性截断，避免组合爆炸）
                         if (kind == card::CardEffectKind::Damage &&
-                            sha_multi_target(ctx, player))
+                            EquipQuery::sha_multi_target(ctx, player))
                         {
                             std::vector<std::string> combo{t};
                             for (const auto &u : targets)
@@ -245,7 +245,7 @@ namespace tkw
             {
                 const auto sha_def = find_sha_def(ctx);
                 const auto targets = valid_targets(ctx, player, *sha_def.unwrap());
-                const bool multi = sha_multi_target(ctx, player, 2);
+                const bool multi = EquipQuery::sha_multi_target(ctx, player, 2);
                 for (const auto &[first, second] : pairs)
                     for (const auto &t : targets)
                     {
@@ -283,12 +283,12 @@ namespace tkw
 
             // 单张转化当杀（武圣红牌 / 龙胆闪，真杀已有普通动作不重复；
             // 杀次数/目标合法性经 validate_virtual_sha 过滤）
-            const auto conversion_cards = sha_conversion_cards(ctx, player);
+            const auto conversion_cards = HeroQuery::sha_conversion_cards(ctx, player);
             const auto sha_def = find_sha_def(ctx);
             if (!conversion_cards.empty() && sha_def.is_some())
             {
                 const auto targets = valid_targets(ctx, player, *sha_def.unwrap());
-                const bool multi = sha_multi_target(ctx, player);
+                const bool multi = EquipQuery::sha_multi_target(ctx, player);
                 for (const auto &c : conversion_cards)
                     for (const auto &t : targets)
                     {

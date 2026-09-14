@@ -427,7 +427,7 @@ namespace tkw
             if (!ai.trigger_effect(ctx, target, card::Ability::JudgementJink))
                 return false;
             const card::CardDef *armor =
-                find_equipment(ctx, target, card::Ability::JudgementJink);
+                EquipQuery::find_equipment(ctx, target, card::Ability::JudgementJink);
             if (!armor || armor->judge.is_none())
                 return false;
             auto judge = perform_judgement(ctx);
@@ -656,7 +656,7 @@ namespace tkw
                 if (h.phase != phase)
                     continue;
                 const std::string &owner = h.attacker_side ? sc.attacker : sc.target;
-                if (has_ability(sc.ctx, owner, h.ability))
+                if (EquipQuery::has_ability(sc.ctx, owner, h.ability))
                     h.fn(sc);
             }
         }
@@ -679,7 +679,7 @@ namespace tkw
             const ResponsePrompt &prompt)
         {
             // 有对应防具才询问发动，避免对未装备者多开触发窗口
-            if (has_ability(ctx, target, card::Ability::JudgementJink) &&
+            if (EquipQuery::has_ability(ctx, target, card::Ability::JudgementJink) &&
                 trigger_bagua_jink(ctx, ai, target))
                 return true;
 
@@ -693,7 +693,7 @@ namespace tkw
             ShaContext sc{m_ctx, m_ai, request.sha, request.attacker,
                           request.target, request.damage_val};
             sc.ignore_armor =
-                has_ability(m_ctx, request.attacker, card::Ability::IgnoreArmor);
+                EquipQuery::has_ability(m_ctx, request.attacker, card::Ability::IgnoreArmor);
             sc.target_count = request.target_count;
             sc.virtual_sha = request.virtual_sha;
             sc.damage_type = request.damage_type;
@@ -703,7 +703,7 @@ namespace tkw
             // 朱雀羽扇：普通杀使用时可转为火焰伤害。非锁定技、可放弃、无每回合
             // 限制；火杀/雷杀属性非普通，不询问（只能转化普通杀）
             if (sc.damage_type == card::DamageType::Normal &&
-                has_ability(m_ctx, request.attacker, card::Ability::FireShaConvert) &&
+                EquipQuery::has_ability(m_ctx, request.attacker, card::Ability::FireShaConvert) &&
                 m_ai.trigger_effect(m_ctx, request.attacker,
                                     card::Ability::FireShaConvert))
                 sc.damage_type = card::DamageType::Fire;

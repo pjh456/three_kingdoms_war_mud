@@ -421,7 +421,7 @@ namespace tkw
             // 白银狮子：单次伤害至多 1 点；青釭剑结算窗内无视防具则不封顶
             int amount = spec.damage_val;
             if (!spec.ignore_armor && amount > 1 &&
-                has_ability(m_ctx, target, card::Ability::SilverLion))
+                EquipQuery::has_ability(m_ctx, target, card::Ability::SilverLion))
                 amount = 1;
 
             const int applied =

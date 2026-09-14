@@ -149,7 +149,7 @@ namespace tkw
                         out.end());
                 }
                 else if (eff.kind == card::CardEffectKind::Steal &&
-                         !ignores_trick_distance(ctx, player))
+                         !HeroQuery::ignores_trick_distance(ctx, player))
                 {
                     out.erase(
                         std::remove_if(out.begin(), out.end(),
@@ -199,7 +199,7 @@ namespace tkw
                         return GameResult<void>::Err(EffectError::OutOfRange);
             }
             else if (eff.kind == card::CardEffectKind::Steal &&
-                     !ignores_trick_distance(ctx, player))
+                     !HeroQuery::ignores_trick_distance(ctx, player))
             {
                 for (const auto &t : targets)
                     if (!DistanceQuery::distance_le(ctx, player, t, eff.range))
@@ -218,7 +218,7 @@ namespace tkw
                     ctx.entities->find(holder).is_none() ||
                     ctx.entities->find(victim).is_none())
                     return GameResult<void>::Err(EffectError::InvalidTarget);
-                if (!has_equip_slot(ctx, holder, card::EquipSlot::Weapon))
+                if (!EquipQuery::has_equip_slot(ctx, holder, card::EquipSlot::Weapon))
                     return GameResult<void>::Err(EffectError::InvalidTarget);
                 if (!DistanceQuery::in_attack_range(ctx, holder, victim))
                     return GameResult<void>::Err(EffectError::OutOfRange);
@@ -242,7 +242,7 @@ namespace tkw
                     // （唯一目标 + 额外至多 2 名，卡面）；成员合法性由下方统一检查
                     const bool multi_sha =
                         eff.kind == card::CardEffectKind::Damage &&
-                        sha_multi_target(ctx, player, cards_consumed);
+                        EquipQuery::sha_multi_target(ctx, player, cards_consumed);
                     const std::size_t multi_max = static_cast<std::size_t>(
                         rules_of(ctx).sha_multi_target_max);
 
@@ -345,9 +345,9 @@ namespace tkw
             case PlayClass::DelayedTrick:
                 if (targets.size() != 1)
                     return GameResult<void>::Err(EffectError::InvalidTarget);
-                if (!is_delayed_scope_target(ctx, player, def, targets.front()))
+                if (!JudgeQuery::is_delayed_scope_target(ctx, player, def, targets.front()))
                     return GameResult<void>::Err(EffectError::InvalidTarget);
-                if (has_same_delayed(ctx, targets.front(), def.id))
+                if (JudgeQuery::has_same_delayed(ctx, targets.front(), def.id))
                     return GameResult<void>::Err(EffectError::DelayedDuplicate);
                 return GameResult<void>::Ok();
 
@@ -430,14 +430,14 @@ namespace tkw
             std::size_t cards_consumed = 2;
             if (two_cards)
             {
-                if (!has_ability(ctx, player, card::Ability::TwoCardsAsSha))
+                if (!EquipQuery::has_ability(ctx, player, card::Ability::TwoCardsAsSha))
                     return GameResult<void>::Err(EffectError::UnsupportedKind);
             }
             else
             {
                 const auto first_def = ctx.catalog->find(first_card.def_id);
                 if (first_def.is_none() ||
-                    !can_convert_card_to_sha(ctx, player, first_card,
+                    !HeroQuery::can_convert_card_to_sha(ctx, player, first_card,
                                              *first_def.unwrap()))
                     return GameResult<void>::Err(EffectError::UnsupportedKind);
                 cards_consumed = 1;

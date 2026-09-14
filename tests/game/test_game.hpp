@@ -155,7 +155,7 @@ namespace tkw
                 }
                 // 无真响应牌：丈八蛇矛两张手牌当杀（确定性首 pair，与主动侧一致）
                 if (kind == ResponseKind::Sha &&
-                    has_ability(ctx, entity, Ability::TwoCardsAsSha))
+                    EquipQuery::has_ability(ctx, entity, Ability::TwoCardsAsSha))
                 {
                     const auto &hand = ctx.cards->hand(entity);
                     if (hand.size() >= 2)

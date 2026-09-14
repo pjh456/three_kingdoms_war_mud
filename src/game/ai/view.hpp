@@ -113,7 +113,7 @@ namespace tkw
                     ev.hand_size = static_cast<int>(ctx.cards->hand_size(ev.id));
                     ev.equip_count = static_cast<int>(ctx.cards->equip_size(ev.id));
                     ev.has_weapon =
-                        has_equip_slot(ctx, ev.id, card::EquipSlot::Weapon);
+                        EquipQuery::has_equip_slot(ctx, ev.id, card::EquipSlot::Weapon);
                     ev.distance =
                         DistanceQuery::distance_between(ctx, player, ev.id);
                     ev.in_attack_range =

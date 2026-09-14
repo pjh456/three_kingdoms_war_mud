@@ -223,7 +223,7 @@ namespace tkw
                 {
                     // 藤甲：普通伤害的群体锦囊（南蛮/万箭）对该角色无效，
                     // 不进入响应窗口（与仁王盾「无效则不响应」同口径）
-                    if (has_ability(e.ctx, t, card::Ability::VineArmor) &&
+                    if (EquipQuery::has_ability(e.ctx, t, card::Ability::VineArmor) &&
                         e.eff.damage_type == card::DamageType::Normal)
                         continue;
                     if (e.nullified({t}))
@@ -568,7 +568,7 @@ namespace tkw
 
                 // 火焰伤害：藤甲火焰脆弱 +1（杀管线之外的直伤在此补足）
                 int amount = e.eff.amount;
-                if (has_ability(e.ctx, target, card::Ability::VineArmor))
+                if (EquipQuery::has_ability(e.ctx, target, card::Ability::VineArmor))
                     amount += 1;
                 CombatResolver(e.ctx, e.ai)
                     .deal_damage(
@@ -852,7 +852,7 @@ namespace tkw
                     }
                 }
                 // 能力/两牌在手闸；结算目标引擎固定，不复核（见 @note）
-                if (!has_ability(ctx, entity, card::Ability::TwoCardsAsSha) ||
+                if (!EquipQuery::has_ability(ctx, entity, card::Ability::TwoCardsAsSha) ||
                     find_sha_def(ctx).is_none() || !in_first || !in_second)
                     return false;
 
@@ -895,7 +895,7 @@ namespace tkw
                     cdef.is_some() &&
                     is_response_def(*cdef.unwrap(), card::ResponseKind::Sha);
                 if (cdef.is_some() && !real_sha &&
-                    can_convert_card_to_sha(ctx, entity, *chosen_card,
+                    HeroQuery::can_convert_card_to_sha(ctx, entity, *chosen_card,
                                             *cdef.unwrap()))
                 {
                     // 有结算目标：虚拟杀接管（消费 + 逐目标结算，跳过目标复验）

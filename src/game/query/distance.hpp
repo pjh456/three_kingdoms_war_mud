@@ -160,7 +160,7 @@ namespace tkw
                 ++d;
 
             // 锁定技「马术」：from 计算到其他角色的距离再 -1（下限 1 不变）
-            if (has_hero_skill(ctx, from, hero::HeroSkill::MaShu))
+            if (HeroQuery::has_hero_skill(ctx, from, hero::HeroSkill::MaShu))
                 --d;
             return std::max(d, 1);
         }

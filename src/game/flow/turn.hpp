@@ -162,7 +162,7 @@ namespace tkw
             case card::JudgeAction::PassToNext:
             {
                 const std::string next =
-                    next_delayed_target(ctx, player, delayed_card.def_id);
+                    JudgeQuery::next_delayed_target(ctx, player, delayed_card.def_id);
                 if (next.empty())
                 {
                     // 异常残留态下无空位：弃置而非丢牌
@@ -290,9 +290,9 @@ namespace tkw
             if (targets.size() != 1)
                 return TurnResult<void>::Err(TurnError::InvalidTarget);
             const std::string &target = targets.front();
-            if (!is_delayed_scope_target(ctx, player, def, target))
+            if (!JudgeQuery::is_delayed_scope_target(ctx, player, def, target))
                 return TurnResult<void>::Err(TurnError::InvalidTarget);
-            if (has_same_delayed(ctx, target, def.id))
+            if (JudgeQuery::has_same_delayed(ctx, target, def.id))
                 return TurnResult<void>::Err(TurnError::DelayedDuplicate);
 
             auto removed = ctx.cards->remove_from_hand(player, card.instance_id);
@@ -403,7 +403,7 @@ namespace tkw
          */
         inline void run_draw_phase(GameContext &ctx, const std::string &player)
         {
-            apply_draw(ctx, player, draw_phase_count(ctx, player));
+            apply_draw(ctx, player, HeroQuery::draw_phase_count(ctx, player));
         }
 
         /**
@@ -427,7 +427,7 @@ namespace tkw
                     return TurnResult<void>::Ok();
                 // 每轮重采样杀上限：回合中途装连弩要当轮生效，与引擎侧强制检查一致
                 const TurnContext turn{
-                    player, sha_played, sha_limit(ctx, player), ctx.jiu_used};
+                    player, sha_played, EquipQuery::sha_limit(ctx, player), ctx.jiu_used};
                 auto action = ai.choose_play(ctx, turn);
                 if (action.is_none())
                     break;

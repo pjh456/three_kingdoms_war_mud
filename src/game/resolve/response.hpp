@@ -49,11 +49,11 @@ namespace tkw
                     { return is_response_def(def, kind); }))
                 return true;
             if (kind != card::ResponseKind::Sha)
-                return !jink_conversion_cards(ctx, entity_id).empty();
-            if (has_ability(ctx, entity_id, card::Ability::TwoCardsAsSha) &&
+                return !HeroQuery::jink_conversion_cards(ctx, entity_id).empty();
+            if (EquipQuery::has_ability(ctx, entity_id, card::Ability::TwoCardsAsSha) &&
                 ctx.cards->hand_size(entity_id) >= 2)
                 return true;
-            return !sha_conversion_cards(ctx, entity_id).empty();
+            return !HeroQuery::sha_conversion_cards(ctx, entity_id).empty();
         }
 
         /**
@@ -91,7 +91,7 @@ namespace tkw
                 {
                     return is_response_def(def, kind) ||
                            (kind == card::ResponseKind::Jink &&
-                            can_convert_card_to_jink(ctx, entity_id, c, def));
+                            HeroQuery::can_convert_card_to_jink(ctx, entity_id, c, def));
                 },
                 DiscardKind::Response);
         }

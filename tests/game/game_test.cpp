@@ -1465,8 +1465,8 @@ TEST_CASE("game: paoxiao lifts sha limit only for the hero seat")
     g.give("a", "sha", "s#2");
 
     // 锁定技只作用于绑定咆哮的座位，其他座位仍受 rules.sha_limit 约束
-    CHECK(sha_limit(g.ctx, "a") == std::numeric_limits<int>::max());
-    CHECK(sha_limit(g.ctx, "b") == g.rules.sha_limit);
+    CHECK(EquipQuery::sha_limit(g.ctx, "a") == std::numeric_limits<int>::max());
+    CHECK(EquipQuery::sha_limit(g.ctx, "b") == g.rules.sha_limit);
 
     TestDecider decider;
     decider.plays = {PlayAction{"s#1", {"b"}}, PlayAction{"s#2", {"b"}}};
@@ -1678,16 +1678,16 @@ TEST_CASE("game: delayed legal targets respect scope and dedup")
     g.add_player("c", 2, 4);
 
     const CardDef &shandian = *g.catalog.find("shandian").unwrap();
-    CHECK((delayed_legal_targets(g.ctx, "a", shandian) ==
+    CHECK((JudgeQuery::delayed_legal_targets(g.ctx, "a", shandian) ==
            std::vector<std::string>{"a"}));
 
     const CardDef &lesi = *g.catalog.find("lesi").unwrap();
-    CHECK((delayed_legal_targets(g.ctx, "a", lesi) ==
+    CHECK((JudgeQuery::delayed_legal_targets(g.ctx, "a", lesi) ==
            std::vector<std::string>{"b", "c"}));
 
     // 判定区已有同名延时锦囊的目标被排除
     g.cards.add_to_judge("b", Card{"L#0", "lesi", Suit::Spade, 6});
-    CHECK((delayed_legal_targets(g.ctx, "a", lesi) ==
+    CHECK((JudgeQuery::delayed_legal_targets(g.ctx, "a", lesi) ==
            std::vector<std::string>{"c"}));
 }
 
@@ -1861,7 +1861,7 @@ TEST_CASE("game: bingliang rejects out-of-range target")
 
     const CardDef &bingliang = *g.catalog.find("bingliang").unwrap();
     // 座次环上 a 到 c 距离 2 不合法；b/d 距离 1 合法
-    CHECK((delayed_legal_targets(g.ctx, "a", bingliang) ==
+    CHECK((JudgeQuery::delayed_legal_targets(g.ctx, "a", bingliang) ==
            std::vector<std::string>{"b", "d"}));
 
     TestDecider decider;
@@ -6619,17 +6619,17 @@ TEST_CASE("game: yingzi query adds one to the draw count")
     g.add_player("b", 1, 4);
 
     // 锁定技只作用于绑定英姿的座位，其他座位仍取 rules.draw_per_turn
-    CHECK(draw_phase_count(g.ctx, "a") == g.rules.draw_per_turn + 1);
-    CHECK(draw_phase_count(g.ctx, "b") == g.rules.draw_per_turn);
+    CHECK(HeroQuery::draw_phase_count(g.ctx, "a") == g.rules.draw_per_turn + 1);
+    CHECK(HeroQuery::draw_phase_count(g.ctx, "b") == g.rules.draw_per_turn);
 
     g.rules.draw_per_turn = 3;
-    CHECK(draw_phase_count(g.ctx, "a") == 4);
-    CHECK(draw_phase_count(g.ctx, "b") == 3);
+    CHECK(HeroQuery::draw_phase_count(g.ctx, "a") == 4);
+    CHECK(HeroQuery::draw_phase_count(g.ctx, "b") == 3);
 
     // 无武将目录：同名座位不加成
     TestGame plain("deck");
     plain.add_player("a", 0, 4);
-    CHECK(draw_phase_count(plain.ctx, "a") == plain.rules.draw_per_turn);
+    CHECK(HeroQuery::draw_phase_count(plain.ctx, "a") == plain.rules.draw_per_turn);
 }
 
 TEST_CASE("game: yingzi draws one extra card in the draw phase")
@@ -6903,13 +6903,13 @@ TEST_CASE("game: qicai lifts the delayed trick range limit for the hero seat")
     const CardDef &def = *bingliang.unwrap();
 
     // 兵粮寸断 range 1；奇才座位可对距离 2 的 c 置入
-    CHECK(is_delayed_scope_target(g.ctx, "a", def, "c"));
-    const auto legal = delayed_legal_targets(g.ctx, "a", def);
+    CHECK(JudgeQuery::is_delayed_scope_target(g.ctx, "a", def, "c"));
+    const auto legal = JudgeQuery::delayed_legal_targets(g.ctx, "a", def);
     CHECK(std::find(legal.begin(), legal.end(), "c") != legal.end());
 
     // 无奇才座位对距离 2 的 d 仍不合法
-    CHECK_FALSE(is_delayed_scope_target(g.ctx, "b", def, "d"));
-    const auto legal_b = delayed_legal_targets(g.ctx, "b", def);
+    CHECK_FALSE(JudgeQuery::is_delayed_scope_target(g.ctx, "b", def, "d"));
+    const auto legal_b = JudgeQuery::delayed_legal_targets(g.ctx, "b", def);
     CHECK(std::find(legal_b.begin(), legal_b.end(), "d") == legal_b.end());
 }
 

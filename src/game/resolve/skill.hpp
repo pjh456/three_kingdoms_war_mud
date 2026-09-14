@@ -104,7 +104,7 @@ namespace tkw
             if (applied <= 0)
                 return;
 
-            if (!has_hero_skill(ctx, victim, hero::HeroSkill::FanKui))
+            if (!HeroQuery::has_hero_skill(ctx, victim, hero::HeroSkill::FanKui))
                 return;
             trigger_fankui(ctx, ai, victim, source);
         }
