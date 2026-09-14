@@ -130,15 +130,20 @@ TEST_CASE("effect: take_damage drives hp negative, Entity emits no Dying/Died")
 TEST_CASE("effect: indirect damage is flagged on the reason event")
 {
     EventBus bus;
-    const EntityDamagedEvent *dmg = nullptr;
+    bool damaged = false;
+    bool indirect = false;
     auto h = bus.subscribe(Handler<EntityDamagedEvent>(
-        [&](HandlerContext<EntityDamagedEvent> &ctx) { dmg = &ctx.event; }));
+        [&](HandlerContext<EntityDamagedEvent> &ctx)
+        {
+            damaged = true;
+            indirect = ctx.event.indirect;
+        }));
 
     auto e = make_entity("fx_indirect", 2, bus);
     e.take_damage("caocao", 1, true);  // 连环传导：间接伤害
 
-    REQUIRE(dmg != nullptr);
-    CHECK(dmg->indirect);
+    CHECK(damaged);
+    CHECK(indirect);
     CHECK(e.get_hp() == 1);
 }
 
