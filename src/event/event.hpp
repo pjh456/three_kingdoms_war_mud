@@ -45,7 +45,7 @@ namespace tkw
          * @return 可读的类型名字符串视图；基类固定返回 `"Event"`。
          * @note   派生类经 `DEFINE_EVENT_END` 覆盖为各自的类型名。
          */
-        virtual std::string_view type_tag() const noexcept { return "Event"; }
+        virtual std::string_view type_tag() const noexcept;
 
         /**
          * @brief  返回全局发布序号。
