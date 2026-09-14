@@ -314,7 +314,7 @@ namespace tkw
              *         后写入的运行中拒绝提示不会被回调快照整段覆盖。
              */
             tkw::game::ai::DecisionChoice decide(
-                const tkw::game::ai::DecisionRequest &req);
+                const tkw::game::ai::DecisionRequest &req) override;
 
             /**
              * @brief  取走当前待决面板（每个待决仅返回真一次）。
