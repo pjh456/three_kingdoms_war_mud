@@ -122,11 +122,16 @@ target_link_libraries(tkw_game_flow PUBLIC tkw_game_core tkw_game_query
                                              tkw_game_resolve tkw_card tkw_entity
                                              tkw_event pjh_result tkw_util)
 
-add_library(tkw_game_ai INTERFACE)
+add_library(tkw_game_ai STATIC
+    game/ai/view.cpp
+    game/ai/legal.cpp
+    game/ai/evaluator.cpp
+    game/ai/decider.cpp
+)
 
-target_include_directories(tkw_game_ai INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(tkw_game_ai PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(tkw_game_ai INTERFACE tkw_game_core tkw_game_query
+target_link_libraries(tkw_game_ai PUBLIC tkw_game_core tkw_game_query
                                             tkw_game_resolve tkw_card tkw_entity
                                             tkw_event pjh_result)
 

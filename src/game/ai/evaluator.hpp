@@ -41,36 +41,7 @@ namespace tkw
              * @post 本接口不改变任何状态。
              * @note 数值唯一事实源为上方 `kCardValue*` 常量。
              */
-            inline int card_value(const card::CardDef &def)
-            {
-                using E = card::CardEffectKind;
-                if (def.type == card::CardType::Equipment)
-                    return kCardValueEquipment;
-                if (def.effect.is_none())
-                    return def.counter ? kCardValueCounter : kCardValueLow;  // 无懈可击价值高
-                switch (def.effect.unwrap().kind)
-                {
-                case E::Heal:
-                    return kCardValueHeal;
-                case E::Draw:
-                case E::Steal:
-                case E::AoeDamage:
-                case E::RevealPick:
-                case E::Chain:
-                    return kCardValueUtility;
-                case E::Damage:
-                case E::DiscardTarget:
-                case E::Duel:
-                case E::Analeptic:
-                case E::FireAttack:
-                    return kCardValueOffense;
-                case E::Jink:
-                    return kCardValueJink;
-                case E::BorrowedSword:
-                    return kCardValueBorrowedSword;
-                }
-                return kCardValueLow;
-            }
+            int card_value(const card::CardDef &def);
         }
     }
 }
