@@ -93,6 +93,7 @@ target_include_directories(tkw_game_query PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(tkw_game_query PUBLIC tkw_game_core tkw_card pjh_result)
 
 add_library(tkw_game_resolve STATIC
+    game/resolve/resolver.cpp
     game/resolve/combat.cpp
     game/resolve/response.cpp
     game/resolve/counter.cpp
