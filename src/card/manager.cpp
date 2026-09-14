@@ -32,9 +32,9 @@ namespace tkw
         CardManagerSnapshot CardManager::snapshot() const
         {
             CardManagerSnapshot s;
-            s.instance_seq = instance_seq;
-            s.draw = draw_pile.view();
-            s.discard = discard_pile.view();
+            s.instance_seq = m_instance_seq;
+            s.draw = m_draw_pile.view();
+            s.discard = m_discard_pile.view();
             s.hand = zone_snapshot(zones_of(Zone::Hand));
             s.equip = zone_snapshot(zones_of(Zone::Equip));
             s.judge = zone_snapshot(zones_of(Zone::Judge));
@@ -44,11 +44,11 @@ namespace tkw
         void CardManager::restore(const CardManagerSnapshot &s)
         {
             clear();
-            instance_seq = s.instance_seq;
+            m_instance_seq = s.instance_seq;
             for (const auto &c : s.draw)
-                draw_pile.push(c);
+                m_draw_pile.push(c);
             for (const auto &c : s.discard)
-                discard_pile.push(c);
+                m_discard_pile.push(c);
             restore_zone(zones_of(Zone::Hand), s.hand);
             restore_zone(zones_of(Zone::Equip), s.equip);
             restore_zone(zones_of(Zone::Judge), s.judge);
@@ -56,10 +56,10 @@ namespace tkw
 
         void CardManager::clear()
         {
-            instance_seq = 0;
-            draw_pile = CardStack{};
-            discard_pile = CardStack{};
-            for (auto &zones : entity_zones)
+            m_instance_seq = 0;
+            m_draw_pile = CardStack{};
+            m_discard_pile = CardStack{};
+            for (auto &zones : m_entity_zones)
                 zones.clear();
         }
 
@@ -67,13 +67,13 @@ namespace tkw
         {
             while (true)
             {
-                auto c = discard_pile.pop();
+                auto c = m_discard_pile.pop();
                 if (c.is_none())
                     break;
-                draw_pile.push(std::move(c).unwrap());
+                m_draw_pile.push(std::move(c).unwrap());
             }
-            if (draw_pile.size() > 1)
-                draw_pile.shuffle(rng);
+            if (m_draw_pile.size() > 1)
+                m_draw_pile.shuffle(rng);
         }
 
         Option<Card> CardManager::remove_from_any(
@@ -121,7 +121,7 @@ namespace tkw
                 for (auto &c : cards)
                 {
                     out.push_back(c);
-                    discard_pile.push(std::move(c));
+                    m_discard_pile.push(std::move(c));
                 }
                 zones.erase(it);
             }
@@ -178,7 +178,7 @@ namespace tkw
         Card CardManager::make_card(const std::string &def_id, const CardCopy &copy)
         {
             return Card{
-                def_id + "#" + std::to_string(instance_seq++), def_id, copy.suit,
+                def_id + "#" + std::to_string(m_instance_seq++), def_id, copy.suit,
                 copy.number};
         }
     }

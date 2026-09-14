@@ -119,11 +119,11 @@ namespace tkw
             template <typename DefRange>
             void build_deck(const DefRange &defs)
             {
-                draw_pile = CardStack{};
+                m_draw_pile = CardStack{};
                 for (const auto &def : defs)
                 {
                     for (const auto &copy : def.copies)
-                        draw_pile.push(make_card(def.id, copy));
+                        m_draw_pile.push(make_card(def.id, copy));
                 }
             }
 
@@ -150,13 +150,13 @@ namespace tkw
              * @retval Some 已从摸牌堆移除的牌。
              * @retval None 摸牌堆为空。
              */
-            Option<Card> draw() { return draw_pile.pop(); }
+            Option<Card> draw() { return m_draw_pile.pop(); }
 
             /**
              * @brief  弃牌（置弃牌堆顶）。
              * @param[in] card 要弃置的牌。
              */
-            void discard(Card card) { discard_pile.push(std::move(card)); }
+            void discard(Card card) { m_discard_pile.push(std::move(card)); }
 
             /**
              * @brief  从弃牌堆取回一张牌（结算回滚用）。
@@ -165,7 +165,7 @@ namespace tkw
              */
             Option<Card> remove_from_discard(const std::string &instance_id)
             {
-                return discard_pile.remove(instance_id);
+                return m_discard_pile.remove(instance_id);
             }
 
             /**
@@ -175,14 +175,14 @@ namespace tkw
              */
             Option<Card> remove_from_draw(const std::string &instance_id)
             {
-                return draw_pile.remove(instance_id);
+                return m_draw_pile.remove(instance_id);
             }
 
             /**
              * @brief  置摸牌堆顶（种牌堆/结算后回置等）。
              * @param[in] card 要放入堆顶的牌。
              */
-            void add_to_draw(Card card) { draw_pile.push(std::move(card)); }
+            void add_to_draw(Card card) { m_draw_pile.push(std::move(card)); }
 
             /**
              * @brief  弃牌堆整体洗回摸牌堆（判定/摸牌时牌堆空的补牌）。
@@ -195,25 +195,25 @@ namespace tkw
              * @brief  摸牌堆张数。
              * @return 摸牌堆当前张数。
              */
-            std::size_t draw_size() const noexcept { return draw_pile.size(); }
+            std::size_t draw_size() const noexcept { return m_draw_pile.size(); }
 
             /**
              * @brief  弃牌堆张数。
              * @return 弃牌堆当前张数。
              */
-            std::size_t discard_size() const noexcept { return discard_pile.size(); }
+            std::size_t discard_size() const noexcept { return m_discard_pile.size(); }
 
             /**
              * @brief  原地洗摸牌堆。
              * @param[in,out] rng 随机源。
              */
-            void shuffle_draw(Rng &rng) { draw_pile.shuffle(rng); }
+            void shuffle_draw(Rng &rng) { m_draw_pile.shuffle(rng); }
 
             /**
              * @brief  看摸牌堆顶。
              * @return 堆顶指针；`None` = 空。
              */
-            Option<const Card *> draw_top() const { return draw_pile.top(); }
+            Option<const Card *> draw_top() const { return m_draw_pile.top(); }
 
             // ── 手牌区 ──────────────────────────────────────────────────
 
@@ -380,10 +380,10 @@ namespace tkw
         private:
             using ZoneMap = std::unordered_map<std::string, CardZone>;
 
-            std::uint64_t instance_seq = 0;
-            CardStack draw_pile;
-            CardStack discard_pile;
-            std::array<ZoneMap, 3> entity_zones; /**< 槽位顺序见 kSlotZones */
+            std::uint64_t m_instance_seq = 0;
+            CardStack m_draw_pile;
+            CardStack m_discard_pile;
+            std::array<ZoneMap, 3> m_entity_zones; /**< 槽位顺序见 kSlotZones */
 
             /** @brief 槽位 → 区域表：跨区操作与 zone_slot 统一按此序（Hand → Equip → Judge）。 */
             static constexpr std::array<Zone, 3> kSlotZones = {
@@ -406,11 +406,11 @@ namespace tkw
                 return -1;
             }
 
-            ZoneMap &zones_of(Zone zone) { return entity_zones[zone_slot(zone)]; }
+            ZoneMap &zones_of(Zone zone) { return m_entity_zones[zone_slot(zone)]; }
 
             const ZoneMap &zones_of(Zone zone) const
             {
-                return entity_zones[zone_slot(zone)];
+                return m_entity_zones[zone_slot(zone)];
             }
 
             static std::vector<std::pair<std::string, std::vector<Card>>> zone_snapshot(

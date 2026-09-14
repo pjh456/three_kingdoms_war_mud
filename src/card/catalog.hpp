@@ -358,16 +358,16 @@ namespace tkw
              * @brief  O(1) 按卡牌 id 查询（经内部索引）。
              * @param[in] id 卡牌定义 id。
              * @return 定义指针；`None` = 未收录。
-             * @retval Some 指针指向内部 `defs`，生命周期同本目录。
+             * @retval Some 指针指向内部 `m_defs`，生命周期同本目录。
              * @retval None 目录中无此 id。
              */
             Option<const CardDef *> find(const std::string &id) const;
 
             /**
              * @brief  收录的定义数。
-             * @return `defs` 中的定义条数。
+             * @return `m_defs` 中的定义条数。
              */
-            std::size_t size() const noexcept { return defs.size(); }
+            std::size_t size() const noexcept { return m_defs.size(); }
 
             /**
              * @brief  牌堆物理张数（所有定义副本数之和）。
@@ -379,17 +379,17 @@ namespace tkw
              * @brief  按 `deck.json` 引用顺序迭代。
              * @return 指向首元素的迭代器。
              */
-            auto begin() const noexcept { return defs.begin(); }
+            auto begin() const noexcept { return m_defs.begin(); }
 
             /**
              * @brief  迭代尾标。
              * @return 尾后迭代器。
              */
-            auto end() const noexcept { return defs.end(); }
+            auto end() const noexcept { return m_defs.end(); }
 
         private:
-            std::vector<CardDef> defs; /**< deck.json 引用顺序（build_deck 等依赖此序） */
-            std::unordered_map<std::string, std::size_t> index; /**< id → defs 下标 */
+            std::vector<CardDef> m_defs; /**< deck.json 引用顺序（build_deck 等依赖此序） */
+            std::unordered_map<std::string, std::size_t> m_index; /**< id → m_defs 下标 */
         };
 
         /**

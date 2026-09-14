@@ -514,14 +514,14 @@ namespace tkw
         }
 
         CardDefCatalog::CardDefCatalog(CardDefCatalog &&other) noexcept
-            : defs(std::move(other.defs)), index(std::move(other.index))
+            : m_defs(std::move(other.m_defs)), m_index(std::move(other.m_index))
         {
         }
 
         CardDefCatalog &CardDefCatalog::operator=(CardDefCatalog &&other) noexcept
         {
-            defs = std::move(other.defs);
-            index = std::move(other.index);
+            m_defs = std::move(other.m_defs);
+            m_index = std::move(other.m_index);
             return *this;
         }
 
@@ -545,7 +545,7 @@ namespace tkw
                         cfg::ConfigErrorKind::TypeMismatch, std::string(ip));
                 const std::string cid(*id_s);
 
-                if (catalog.index.find(cid) != catalog.index.end())
+                if (catalog.m_index.find(cid) != catalog.m_index.end())
                     return cfg::fail<void>(
                         cfg::ConfigErrorKind::InvalidValue,
                         std::string(ip) + " 重复引用卡牌 " + cid);
@@ -563,8 +563,8 @@ namespace tkw
                     return cfg::fail<void>(
                         cfg::ConfigErrorKind::InvalidValue, file + ".id");
 
-                catalog.index.emplace(cid, catalog.defs.size());
-                catalog.defs.push_back(std::move(def).unwrap());
+                catalog.m_index.emplace(cid, catalog.m_defs.size());
+                catalog.m_defs.push_back(std::move(def).unwrap());
                 return cfg::ConfigResult<void>::Ok();
             });
             if (er.is_err())
@@ -581,16 +581,16 @@ namespace tkw
 
         Option<const CardDef *> CardDefCatalog::find(const std::string &id) const
         {
-            auto it = index.find(id);
-            if (it == index.end())
+            auto it = m_index.find(id);
+            if (it == m_index.end())
                 return Option<const CardDef *>::None();
-            return Option<const CardDef *>::Some(&defs[it->second]);
+            return Option<const CardDef *>::Some(&m_defs[it->second]);
         }
 
         std::size_t CardDefCatalog::total_copies() const noexcept
         {
             std::size_t n = 0;
-            for (const auto &def : defs)
+            for (const auto &def : m_defs)
                 n += def.copies.size();
             return n;
         }

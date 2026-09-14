@@ -59,26 +59,26 @@ namespace tkw
              * @brief  当前牌数。
              * @return 牌序列中的张数。
              */
-            std::size_t size() const noexcept { return cards.size(); }
+            std::size_t size() const noexcept { return m_cards.size(); }
 
             /**
              * @brief  是否为空。
              * @return `true` = 无牌。
              */
-            bool empty() const noexcept { return cards.empty(); }
+            bool empty() const noexcept { return m_cards.empty(); }
 
             /**
              * @brief  底层牌序列（堆底→堆顶）只读视图，供快照/存档。
              * @return 引用指向内部序列，生命周期同本对象。
              */
-            const std::vector<Card> &view() const noexcept { return cards; }
+            const std::vector<Card> &view() const noexcept { return m_cards; }
 
             /**
              * @brief  置顶。
              * @param[in] card 要放入堆顶的牌。
              * @note   弃牌/置入牌堆底语义由调用方决定。
              */
-            void push(Card card) { cards.push_back(std::move(card)); }
+            void push(Card card) { m_cards.push_back(std::move(card)); }
 
             /**
              * @brief  取顶。
@@ -112,7 +112,7 @@ namespace tkw
             void shuffle(Rng &rng);
 
         private:
-            std::vector<Card> cards;
+            std::vector<Card> m_cards;
         };
     }
 }
