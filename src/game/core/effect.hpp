@@ -201,20 +201,7 @@ namespace tkw
          * @param[in] kind 响应牌类别（杀 = effect.kind == Damage，闪 = Jink）。
          * @return 可作为该响应牌时为 true；无主动效果时为 false。
          */
-        inline bool is_response_def(const card::CardDef &def, card::ResponseKind kind)
-        {
-            if (def.effect.is_none())
-                return false;
-            const auto k = def.effect.unwrap().kind;
-            switch (kind)
-            {
-            case card::ResponseKind::Sha:
-                return is_sha_kind(k);
-            case card::ResponseKind::Jink:
-                return k == card::CardEffectKind::Jink;
-            }
-            return false;
-        }
+        bool is_response_def(const card::CardDef &def, card::ResponseKind kind);
 
         /**
          * @brief  该定义是否可作濒死救场牌。
@@ -275,16 +262,7 @@ namespace tkw
          *        「杀」是状态规则（依赖回合上下文），保持正交谓词
          *        `is_sha_kind`，不作第 5 个分类值。
          */
-        inline PlayClass classify_action(const card::CardDef &def)
-        {
-            if (def.type == card::CardType::Equipment)
-                return PlayClass::Equipment;
-            if (is_delayed_trick(def))
-                return PlayClass::DelayedTrick;
-            if (def.effect.is_some())
-                return PlayClass::Active;
-            return PlayClass::None;
-        }
+        PlayClass classify_action(const card::CardDef &def);
     }
 }
 

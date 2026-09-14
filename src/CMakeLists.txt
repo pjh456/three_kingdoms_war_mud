@@ -65,15 +65,21 @@ target_include_directories(tkw_hero PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(tkw_hero PUBLIC tkw_config tkw_entity pjh_json)
 
 # game 分层：core（值类型/原语）→ query（只读查询）→ resolve（效果引擎）
-# → flow（流程/运行时）；ai 只读依赖前三层。目标仅作分层文档与聚合，头文件
-# 经统一 src 根 include 目录引用。
+# → flow（流程/运行时）；ai 只读依赖前三层。core 的状态原语/上下文/属性表/
+# 事件发布函数体定义在 game/core/*.cpp，模板与 constexpr 保持头内。
 
-add_library(tkw_game_core INTERFACE)
+add_library(tkw_game_core STATIC
+    game/core/state.cpp
+    game/core/context.cpp
+    game/core/roles.cpp
+    game/core/effect.cpp
+    game/core/card_event.cpp
+)
 
-target_include_directories(tkw_game_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(tkw_game_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(tkw_game_core INTERFACE tkw_entity tkw_card tkw_hero
-                                               tkw_event pjh_result tkw_util)
+target_link_libraries(tkw_game_core PUBLIC tkw_entity tkw_card tkw_hero
+                                            tkw_event pjh_result tkw_util)
 
 add_library(tkw_game_query INTERFACE)
 

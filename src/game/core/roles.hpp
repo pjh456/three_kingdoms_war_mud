@@ -56,13 +56,7 @@ namespace tkw
          * @param[in] id    玩家 id。
          * @return 命中返回对应角色；空表或未命中返回 `Role::None`。
          */
-        inline Role role_of(const RoleTable *roles, const std::string &id)
-        {
-            if (roles == nullptr)
-                return Role::None;
-            const auto it = roles->find(id);
-            return it == roles->end() ? Role::None : it->second;
-        }
+        Role role_of(const RoleTable *roles, const std::string &id);
 
         /** @brief 身份局角色配比（主公恒 1 名，其余为忠臣/反贼/内奸）。 */
         struct RoleCounts
@@ -81,24 +75,7 @@ namespace tkw
          * @retval None 其余人数无标准配比。
          * @note 主公恒 1 名，故 1 + loyalist + rebel + traitor == n。
          */
-        inline Option<RoleCounts> roles_for_count(int n)
-        {
-            switch (n)
-            {
-            case 4:
-                return Option<RoleCounts>::Some(RoleCounts{1, 1, 1});
-            case 5:
-                return Option<RoleCounts>::Some(RoleCounts{1, 2, 1});
-            case 6:
-                return Option<RoleCounts>::Some(RoleCounts{1, 3, 1});
-            case 7:
-                return Option<RoleCounts>::Some(RoleCounts{2, 3, 1});
-            case 8:
-                return Option<RoleCounts>::Some(RoleCounts{2, 4, 1});
-            default:
-                return Option<RoleCounts>::None();
-            }
-        }
+        Option<RoleCounts> roles_for_count(int n);
     }
 }
 

@@ -89,19 +89,9 @@ public:
          * @param[in] kind   摸牌来源语义。
          * @post  仅当 `ctx.bus` 非空时投递事件。
          */
-        inline void emit_card_drawn(
+        void emit_card_drawn(
             GameContext &ctx, const std::string &entity, const card::Card &c,
-            DrawKind kind = DrawKind::Normal)
-        {
-            if (!ctx.bus)
-                return;
-            auto ev = std::make_shared<CardDrawnEvent>();
-            ev->entity = entity;
-            ev->instance_id = c.instance_id;
-            ev->def_id = c.def_id;
-            ev->kind = kind;
-            ctx.bus->publish(ev);
-        }
+            DrawKind kind = DrawKind::Normal);
 
         /**
          * @brief  发布打出事件。
@@ -110,17 +100,8 @@ public:
          * @param[in] c    打出的牌。
          * @post  仅当 `ctx.bus` 非空时投递事件。
          */
-        inline void emit_card_played(
-            GameContext &ctx, const std::string &user, const card::Card &c)
-        {
-            if (!ctx.bus)
-                return;
-            auto ev = std::make_shared<CardPlayedEvent>();
-            ev->user = user;
-            ev->instance_id = c.instance_id;
-            ev->def_id = c.def_id;
-            ctx.bus->publish(ev);
-        }
+        void emit_card_played(
+            GameContext &ctx, const std::string &user, const card::Card &c);
 
         /**
          * @brief  发布弃置事件。
@@ -130,19 +111,9 @@ public:
          * @param[in] kind   进弃牌堆的来源语义。
          * @post  仅当 `ctx.bus` 非空时投递事件。
          */
-        inline void emit_card_discarded(
+        void emit_card_discarded(
             GameContext &ctx, const std::string &entity, const card::Card &c,
-            DiscardKind kind = DiscardKind::Normal)
-        {
-            if (!ctx.bus)
-                return;
-            auto ev = std::make_shared<CardDiscardedEvent>();
-            ev->entity = entity;
-            ev->instance_id = c.instance_id;
-            ev->def_id = c.def_id;
-            ev->kind = kind;
-            ctx.bus->publish(ev);
-        }
+            DiscardKind kind = DiscardKind::Normal);
 
         /**
          * @brief  发布区域转移事件。
@@ -154,21 +125,9 @@ public:
          * @param[in] to          目的区域。
          * @post  仅当 `ctx.bus` 非空时投递事件。
          */
-        inline void emit_card_moved(
+        void emit_card_moved(
             GameContext &ctx, const std::string &from_entity,
-            const std::string &to_entity, const card::Card &c, Zone from, Zone to)
-        {
-            if (!ctx.bus)
-                return;
-            auto ev = std::make_shared<CardMovedEvent>();
-            ev->from_entity = from_entity;
-            ev->to_entity = to_entity;
-            ev->instance_id = c.instance_id;
-            ev->def_id = c.def_id;
-            ev->from = from;
-            ev->to = to;
-            ctx.bus->publish(ev);
-        }
+            const std::string &to_entity, const card::Card &c, Zone from, Zone to);
     }
 }
 

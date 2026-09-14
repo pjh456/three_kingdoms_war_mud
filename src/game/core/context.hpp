@@ -92,20 +92,14 @@ namespace tkw
          * @param[in] ctx 对局上下文。
          * @return 绑定的对局模式；未绑定模式时回落 `GameMode::Brawl`。
          */
-        inline GameMode mode_of(const GameContext &ctx)
-        {
-            return ctx.mode ? *ctx.mode : GameMode::Brawl;
-        }
+        GameMode mode_of(const GameContext &ctx);
 
         /**
          * @brief  取对局模式（只读视图）。
          * @param[in] ctx 只读上下文。
          * @return 绑定的对局模式；未绑定模式时回落 `GameMode::Brawl`。
          */
-        inline GameMode mode_of(const ReadOnlyContext &ctx)
-        {
-            return ctx.mode ? *ctx.mode : GameMode::Brawl;
-        }
+        GameMode mode_of(const ReadOnlyContext &ctx);
 
         /**
          * @brief  取玩家角色。
@@ -114,10 +108,7 @@ namespace tkw
          * @return 绑定的角色表中该玩家的角色；未绑定角色表或未命中时回落
          *         `Role::None`。
          */
-        inline Role role_of(const GameContext &ctx, const std::string &id)
-        {
-            return role_of(ctx.roles, id);
-        }
+        Role role_of(const GameContext &ctx, const std::string &id);
     }
 }
 
