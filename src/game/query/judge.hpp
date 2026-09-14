@@ -81,7 +81,7 @@ namespace tkw
             if (target == player)
                 return false;
             return judge.range <= 0 || ignores_trick_distance(ctx, player) ||
-                   DistanceQuery(ctx).distance_le(player, target, judge.range);
+                   DistanceQuery::distance_le(ctx, player, target, judge.range);
         }
 
         /**

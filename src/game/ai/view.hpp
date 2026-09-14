@@ -114,9 +114,10 @@ namespace tkw
                     ev.equip_count = static_cast<int>(ctx.cards->equip_size(ev.id));
                     ev.has_weapon =
                         has_equip_slot(ctx, ev.id, card::EquipSlot::Weapon);
-                    const DistanceQuery dist(ctx);
-                    ev.distance = dist.distance_between(player, ev.id);
-                    ev.in_attack_range = dist.in_attack_range(player, ev.id);
+                    ev.distance =
+                        DistanceQuery::distance_between(ctx, player, ev.id);
+                    ev.in_attack_range =
+                        DistanceQuery::in_attack_range(ctx, player, ev.id);
                     ev.equip = ctx.cards->equip(ev.id);
                     ev.judge = ctx.cards->judge(ev.id);
                     v.others.push_back(std::move(ev));

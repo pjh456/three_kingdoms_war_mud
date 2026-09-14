@@ -155,7 +155,7 @@ namespace tkw
                         {
                             const std::string &victim = b->get_id();
                             if (victim != holder &&
-                                DistanceQuery(ctx).in_attack_range(holder, victim))
+                                DistanceQuery::in_attack_range(ctx, holder, victim))
                                 out.push_back(LegalAction{c, {holder, victim}});
                         }
                     }
