@@ -18,11 +18,14 @@ target_include_directories(tkw_io PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(tkw_io PUBLIC pjh_result pjh_platform)
 
-add_library(tkw_config INTERFACE)
+add_library(tkw_config STATIC
+    config/resource.cpp
+    config/fields.cpp
+)
 
-target_include_directories(tkw_config INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(tkw_config PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(tkw_config INTERFACE tkw_io pjh_json)
+target_link_libraries(tkw_config PUBLIC tkw_io pjh_json)
 
 add_library(tkw_entity INTERFACE)
 

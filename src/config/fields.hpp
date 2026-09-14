@@ -33,22 +33,14 @@ namespace tkw
          * @param[in] key  字段名。
          * @return `path` 为空时返回 `key` 本身，否则返回 `path.key`。
          */
-        inline std::string field_path(std::string_view path, std::string_view key)
-        {
-            if (path.empty())
-                return std::string(key);
-            return std::string(path) + "." + std::string(key);
-        }
+        std::string field_path(std::string_view path, std::string_view key);
 
         /**
          * @brief  规整容器自身路径。
          * @param[in] path 容器自身路径；空串表示顶层。
          * @return `path` 为空时返回 `root`，否则原样返回。
          */
-        inline std::string container_path(std::string_view path)
-        {
-            return path.empty() ? std::string("root") : std::string(path);
-        }
+        std::string container_path(std::string_view path);
 
         /**
          * @brief  构造携带字段路径错误的 `ConfigResult`。
@@ -73,23 +65,8 @@ namespace tkw
          * @retval Err(ConfigErrorKind::MissingField) 字段缺失，detail 为字段路径。
          * @retval Err(ConfigErrorKind::TypeMismatch) 容器非对象或字段非整数。
          */
-        inline ConfigResult<std::int64_t> require_int(
-            const json::Json &obj, std::string_view key, std::string_view path = {})
-        {
-            const auto *o = obj.try_as_object();
-            if (!o)
-                return fail<std::int64_t>(
-                    ConfigErrorKind::TypeMismatch, container_path(path));
-            if (!o->contains(key))
-                return fail<std::int64_t>(
-                    ConfigErrorKind::MissingField, field_path(path, key));
-            const json::Json &v = (*o)[key];
-            auto r = v.try_as_int();
-            if (!r)
-                return fail<std::int64_t>(
-                    ConfigErrorKind::TypeMismatch, field_path(path, key));
-            return ConfigResult<std::int64_t>::Ok(*r);
-        }
+        ConfigResult<std::int64_t> require_int(
+            const json::Json &obj, std::string_view key, std::string_view path = {});
 
         /**
          * @brief  必填字符串字段（拷贝出来，不依赖 Document 生命周期）。
@@ -101,23 +78,8 @@ namespace tkw
          * @retval Err(ConfigErrorKind::MissingField) 字段缺失，detail 为字段路径。
          * @retval Err(ConfigErrorKind::TypeMismatch) 容器非对象或字段非字符串。
          */
-        inline ConfigResult<std::string> require_string(
-            const json::Json &obj, std::string_view key, std::string_view path = {})
-        {
-            const auto *o = obj.try_as_object();
-            if (!o)
-                return fail<std::string>(
-                    ConfigErrorKind::TypeMismatch, container_path(path));
-            if (!o->contains(key))
-                return fail<std::string>(
-                    ConfigErrorKind::MissingField, field_path(path, key));
-            const json::Json &v = (*o)[key];
-            auto r = v.try_as_string();
-            if (!r)
-                return fail<std::string>(
-                    ConfigErrorKind::TypeMismatch, field_path(path, key));
-            return ConfigResult<std::string>::Ok(std::string(*r));
-        }
+        ConfigResult<std::string> require_string(
+            const json::Json &obj, std::string_view key, std::string_view path = {});
 
         /**
          * @brief  必填布尔字段。
@@ -129,20 +91,8 @@ namespace tkw
          * @retval Err(ConfigErrorKind::MissingField) 字段缺失，detail 为字段路径。
          * @retval Err(ConfigErrorKind::TypeMismatch) 容器非对象或字段非布尔。
          */
-        inline ConfigResult<bool> require_bool(
-            const json::Json &obj, std::string_view key, std::string_view path = {})
-        {
-            const auto *o = obj.try_as_object();
-            if (!o)
-                return fail<bool>(ConfigErrorKind::TypeMismatch, container_path(path));
-            if (!o->contains(key))
-                return fail<bool>(ConfigErrorKind::MissingField, field_path(path, key));
-            const json::Json &v = (*o)[key];
-            auto r = v.try_as_boolean();
-            if (!r)
-                return fail<bool>(ConfigErrorKind::TypeMismatch, field_path(path, key));
-            return ConfigResult<bool>::Ok(*r);
-        }
+        ConfigResult<bool> require_bool(
+            const json::Json &obj, std::string_view key, std::string_view path = {});
 
         /**
          * @brief  必填对象字段。
@@ -154,22 +104,8 @@ namespace tkw
          * @retval Err(ConfigErrorKind::MissingField) 字段缺失，detail 为字段路径。
          * @retval Err(ConfigErrorKind::TypeMismatch) 容器非对象或字段非对象。
          */
-        inline ConfigResult<const json::Json *> require_object(
-            const json::Json &obj, std::string_view key, std::string_view path = {})
-        {
-            const auto *o = obj.try_as_object();
-            if (!o)
-                return fail<const json::Json *>(
-                    ConfigErrorKind::TypeMismatch, container_path(path));
-            if (!o->contains(key))
-                return fail<const json::Json *>(
-                    ConfigErrorKind::MissingField, field_path(path, key));
-            const json::Json &v = (*o)[key];
-            if (!v.try_as_object())
-                return fail<const json::Json *>(
-                    ConfigErrorKind::TypeMismatch, field_path(path, key));
-            return ConfigResult<const json::Json *>::Ok(&v);
-        }
+        ConfigResult<const json::Json *> require_object(
+            const json::Json &obj, std::string_view key, std::string_view path = {});
 
         /**
          * @brief  必填数组字段。
@@ -181,23 +117,8 @@ namespace tkw
          * @retval Err(ConfigErrorKind::MissingField) 字段缺失，detail 为字段路径。
          * @retval Err(ConfigErrorKind::TypeMismatch) 容器非对象或字段非数组。
          */
-        inline ConfigResult<const json::Array *> require_array(
-            const json::Json &obj, std::string_view key, std::string_view path = {})
-        {
-            const auto *o = obj.try_as_object();
-            if (!o)
-                return fail<const json::Array *>(
-                    ConfigErrorKind::TypeMismatch, container_path(path));
-            if (!o->contains(key))
-                return fail<const json::Array *>(
-                    ConfigErrorKind::MissingField, field_path(path, key));
-            const json::Json &v = (*o)[key];
-            const auto *arr = v.try_as_array();
-            if (!arr)
-                return fail<const json::Array *>(
-                    ConfigErrorKind::TypeMismatch, field_path(path, key));
-            return ConfigResult<const json::Array *>::Ok(arr);
-        }
+        ConfigResult<const json::Array *> require_array(
+            const json::Json &obj, std::string_view key, std::string_view path = {});
 
         /**
          * @brief  可选整型字段：缺失回落默认值；**类型不符仍失败**。
@@ -209,25 +130,11 @@ namespace tkw
          * @retval Ok  字段存在则为字段值，缺失则为 `def`。
          * @retval Err(ConfigErrorKind::TypeMismatch) 容器非对象或字段非整数。
          */
-        inline ConfigResult<std::int64_t> opt_int(
+        ConfigResult<std::int64_t> opt_int(
             const json::Json &obj,
             std::string_view key,
             std::int64_t def,
-            std::string_view path = {})
-        {
-            const auto *o = obj.try_as_object();
-            if (!o)
-                return fail<std::int64_t>(
-                    ConfigErrorKind::TypeMismatch, container_path(path));
-            if (!o->contains(key))
-                return ConfigResult<std::int64_t>::Ok(def);
-            const json::Json &v = (*o)[key];
-            auto r = v.try_as_int();
-            if (!r)
-                return fail<std::int64_t>(
-                    ConfigErrorKind::TypeMismatch, field_path(path, key));
-            return ConfigResult<std::int64_t>::Ok(*r);
-        }
+            std::string_view path = {});
 
         /**
          * @brief  可选整型字段，收窄为 int：缺失回落默认值。
@@ -241,21 +148,11 @@ namespace tkw
          * @retval Err(ConfigErrorKind::InvalidValue) 数值超出 `int` 可表示范围
          *         （收窄前检查，不静默截断）。
          */
-        inline ConfigResult<int> opt_int_range(
+        ConfigResult<int> opt_int_range(
             const json::Json &obj,
             std::string_view key,
             int def,
-            std::string_view path = {})
-        {
-            auto r = opt_int(obj, key, def, path);
-            if (r.is_err())
-                return ConfigResult<int>::Err(r.unwrap_err());
-            const std::int64_t v = r.unwrap();
-            if (v < std::numeric_limits<int>::min() ||
-                v > std::numeric_limits<int>::max())
-                return fail<int>(ConfigErrorKind::InvalidValue, field_path(path, key));
-            return ConfigResult<int>::Ok(static_cast<int>(v));
-        }
+            std::string_view path = {});
 
         /**
          * @brief  可选字符串字段：缺失回落默认值；类型不符仍失败。
@@ -267,25 +164,11 @@ namespace tkw
          * @retval Ok  字段存在则为字段值，缺失则为 `def`。
          * @retval Err(ConfigErrorKind::TypeMismatch) 容器非对象或字段非字符串。
          */
-        inline ConfigResult<std::string> opt_string(
+        ConfigResult<std::string> opt_string(
             const json::Json &obj,
             std::string_view key,
             std::string_view def,
-            std::string_view path = {})
-        {
-            const auto *o = obj.try_as_object();
-            if (!o)
-                return fail<std::string>(
-                    ConfigErrorKind::TypeMismatch, container_path(path));
-            if (!o->contains(key))
-                return ConfigResult<std::string>::Ok(std::string(def));
-            const json::Json &v = (*o)[key];
-            auto r = v.try_as_string();
-            if (!r)
-                return fail<std::string>(
-                    ConfigErrorKind::TypeMismatch, field_path(path, key));
-            return ConfigResult<std::string>::Ok(std::string(*r));
-        }
+            std::string_view path = {});
 
         /**
          * @brief  可选布尔字段：缺失回落默认值；类型不符仍失败。
@@ -297,23 +180,11 @@ namespace tkw
          * @retval Ok  字段存在则为字段值，缺失则为 `def`。
          * @retval Err(ConfigErrorKind::TypeMismatch) 容器非对象或字段非布尔。
          */
-        inline ConfigResult<bool> opt_bool(
+        ConfigResult<bool> opt_bool(
             const json::Json &obj,
             std::string_view key,
             bool def,
-            std::string_view path = {})
-        {
-            const auto *o = obj.try_as_object();
-            if (!o)
-                return fail<bool>(ConfigErrorKind::TypeMismatch, container_path(path));
-            if (!o->contains(key))
-                return ConfigResult<bool>::Ok(def);
-            const json::Json &v = (*o)[key];
-            auto r = v.try_as_boolean();
-            if (!r)
-                return fail<bool>(ConfigErrorKind::TypeMismatch, field_path(path, key));
-            return ConfigResult<bool>::Ok(*r);
-        }
+            std::string_view path = {});
 
         /**
          * @brief  迭代数组字段：对每个元素调用 `f(element, item_path)`。
