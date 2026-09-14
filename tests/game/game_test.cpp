@@ -94,11 +94,11 @@ TEST_CASE("game: seat distance on a circle")
     g.add_player("c", 2, 4);
     g.add_player("d", 3, 4);
 
-    CHECK(seat_distance(g.ctx, "a", "a") == 0);
-    CHECK(seat_distance(g.ctx, "a", "b") == 1);
-    CHECK(seat_distance(g.ctx, "a", "c") == 2);
-    CHECK(seat_distance(g.ctx, "a", "d") == 1);
-    CHECK(seat_distance(g.ctx, "b", "d") == 2);
+    CHECK(DistanceQuery::seat_distance(g.ctx, "a", "a") == 0);
+    CHECK(DistanceQuery::seat_distance(g.ctx, "a", "b") == 1);
+    CHECK(DistanceQuery::seat_distance(g.ctx, "a", "c") == 2);
+    CHECK(DistanceQuery::seat_distance(g.ctx, "a", "d") == 1);
+    CHECK(DistanceQuery::seat_distance(g.ctx, "b", "d") == 2);
 }
 
 TEST_CASE("game: seat distance follows the living ring after a death")
@@ -114,12 +114,12 @@ TEST_CASE("game: seat distance follows the living ring after a death")
     // 存活环序 [a, b, d, e]，环上下标 [0, 1, 2, 3]。
     g.ctx.entities->remove("c");
 
-    CHECK(seat_distance(g.ctx, "b", "d") == 1);
-    CHECK(seat_distance(g.ctx, "b", "e") == 2);
-    CHECK(seat_distance(g.ctx, "a", "d") == 2);
-    CHECK(seat_distance(g.ctx, "a", "e") == 1);
-    CHECK(seat_distance(g.ctx, "a", "b") == 1);
-    CHECK(seat_distance(g.ctx, "d", "e") == 1);
+    CHECK(DistanceQuery::seat_distance(g.ctx, "b", "d") == 1);
+    CHECK(DistanceQuery::seat_distance(g.ctx, "b", "e") == 2);
+    CHECK(DistanceQuery::seat_distance(g.ctx, "a", "d") == 2);
+    CHECK(DistanceQuery::seat_distance(g.ctx, "a", "e") == 1);
+    CHECK(DistanceQuery::seat_distance(g.ctx, "a", "b") == 1);
+    CHECK(DistanceQuery::seat_distance(g.ctx, "d", "e") == 1);
 }
 
 TEST_CASE("game: seat distance on the eight-player cap ring")
@@ -129,12 +129,12 @@ TEST_CASE("game: seat distance on the eight-player cap ring")
     for (int i = 0; i < 8; ++i)
         g.add_player("P" + std::to_string(i), i, 4);
 
-    CHECK(seat_distance(g.ctx, "P0", "P0") == 0);
-    CHECK(seat_distance(g.ctx, "P0", "P4") == 4);  // 对径 min(4, 8-4)
-    CHECK(seat_distance(g.ctx, "P0", "P5") == 3);  // min(5, 3)
-    CHECK(seat_distance(g.ctx, "P0", "P6") == 2);
-    CHECK(seat_distance(g.ctx, "P0", "P7") == 1);  // 座位 7 回绕紧邻座位 0
-    CHECK(seat_distance(g.ctx, "P1", "P7") == 2);  // min(6, 2)
+    CHECK(DistanceQuery::seat_distance(g.ctx, "P0", "P0") == 0);
+    CHECK(DistanceQuery::seat_distance(g.ctx, "P0", "P4") == 4);  // 对径 min(4, 8-4)
+    CHECK(DistanceQuery::seat_distance(g.ctx, "P0", "P5") == 3);  // min(5, 3)
+    CHECK(DistanceQuery::seat_distance(g.ctx, "P0", "P6") == 2);
+    CHECK(DistanceQuery::seat_distance(g.ctx, "P0", "P7") == 1);  // 座位 7 回绕紧邻座位 0
+    CHECK(DistanceQuery::seat_distance(g.ctx, "P1", "P7") == 2);  // min(6, 2)
 }
 
 TEST_CASE("game: attack range base and weapon")
@@ -146,13 +146,13 @@ TEST_CASE("game: attack range base and weapon")
     g.add_player("d", 3, 4);
 
     // 无武器：基础攻击距离 1
-    CHECK(in_attack_range(g.ctx, "a", "b"));
-    CHECK(in_attack_range(g.ctx, "a", "d"));
-    CHECK(!in_attack_range(g.ctx, "a", "c"));
+    CHECK(DistanceQuery::in_attack_range(g.ctx, "a", "b"));
+    CHECK(DistanceQuery::in_attack_range(g.ctx, "a", "d"));
+    CHECK(!DistanceQuery::in_attack_range(g.ctx, "a", "c"));
 
     // 青龙偃月刀 range 3
     g.equip("a", "qinglong", "e#0");
-    CHECK(in_attack_range(g.ctx, "a", "c"));
+    CHECK(DistanceQuery::in_attack_range(g.ctx, "a", "c"));
 }
 
 TEST_CASE("game: horses adjust attack distance")
@@ -165,13 +165,13 @@ TEST_CASE("game: horses adjust attack distance")
 
     // a 装 -1马（赤兔）：a 到 c 距离 2-1=1 ≤ 1
     g.equip("a", "chitu", "h#1");
-    CHECK(in_attack_range(g.ctx, "a", "c"));
+    CHECK(DistanceQuery::in_attack_range(g.ctx, "a", "c"));
 
     // b 装 +1马（绝影）：c 到 b 距离 1+1=2 > 1
     g.equip("b", "jueying", "h#2");
-    CHECK(!in_attack_range(g.ctx, "c", "b"));
+    CHECK(!DistanceQuery::in_attack_range(g.ctx, "c", "b"));
     // a→b 仍为 1（-1 与 +1 相抵）
-    CHECK(in_attack_range(g.ctx, "a", "b"));
+    CHECK(DistanceQuery::in_attack_range(g.ctx, "a", "b"));
 }
 
 TEST_CASE("game: distance_le uses the living ring when seats are not adjacent")
@@ -186,10 +186,10 @@ TEST_CASE("game: distance_le uses the living ring when seats are not adjacent")
     g.ctx.entities->remove("b");
     g.equip("d", "jueying", "h#1");  // d 的 +1马
 
-    CHECK(seat_distance(g.ctx, "a", "d") == 1);
-    CHECK(distance_between(g.ctx, "a", "d") == 2);
-    CHECK_FALSE(distance_le(g.ctx, "a", "d", 1));
-    CHECK_FALSE(in_attack_range(g.ctx, "a", "d"));
+    CHECK(DistanceQuery::seat_distance(g.ctx, "a", "d") == 1);
+    CHECK(DistanceQuery::distance_between(g.ctx, "a", "d") == 2);
+    CHECK_FALSE(DistanceQuery::distance_le(g.ctx, "a", "d", 1));
+    CHECK_FALSE(DistanceQuery::in_attack_range(g.ctx, "a", "d"));
 }
 
 TEST_CASE("game: offensive and defensive horses coexist")
@@ -208,10 +208,10 @@ TEST_CASE("game: offensive and defensive horses coexist")
     auto r = execute_turn(g.ctx, decider, "a");
     REQUIRE(r.is_ok());
     CHECK(g.cards.equip_size("a") == 2);      // 两个坐骑槽互不替换
-    CHECK(in_attack_range(g.ctx, "a", "c"));  // a→c: 2-1=1
+    CHECK(DistanceQuery::in_attack_range(g.ctx, "a", "c"));  // a→c: 2-1=1
 
     g.equip("c", "jueying", "h#3");           // c 的 +1马
-    CHECK(!in_attack_range(g.ctx, "a", "c")); // 1+1=2
+    CHECK(!DistanceQuery::in_attack_range(g.ctx, "a", "c")); // 1+1=2
 }
 
 TEST_CASE("game: same-direction horse replaces previous")
@@ -6839,16 +6839,16 @@ TEST_CASE("game: mashu reduces distance from the hero seat by one")
     g.add_player("d", 3, 4);
 
     // 存活环 a0 b1 c2 d3：a→c 座次距离 2；马术 -1 后为 1
-    CHECK(seat_distance(g.ctx, "a", "c") == 2);
-    CHECK(distance_between(g.ctx, "a", "c") == 1);
+    CHECK(DistanceQuery::seat_distance(g.ctx, "a", "c") == 2);
+    CHECK(DistanceQuery::distance_between(g.ctx, "a", "c") == 1);
     // 无马术座位不受影响：相邻仍 1，隔座仍 2（含反向）
-    CHECK(distance_between(g.ctx, "b", "c") == 1);
-    CHECK(distance_between(g.ctx, "b", "d") == 2);
-    CHECK(distance_between(g.ctx, "d", "b") == 2);
+    CHECK(DistanceQuery::distance_between(g.ctx, "b", "c") == 1);
+    CHECK(DistanceQuery::distance_between(g.ctx, "b", "d") == 2);
+    CHECK(DistanceQuery::distance_between(g.ctx, "d", "b") == 2);
 
     // 下限仍为 1：自身与相邻座位不会因马术降到 0
-    CHECK(distance_between(g.ctx, "a", "b") == 1);
-    CHECK(distance_between(g.ctx, "a", "a") == 1);
+    CHECK(DistanceQuery::distance_between(g.ctx, "a", "b") == 1);
+    CHECK(DistanceQuery::distance_between(g.ctx, "a", "a") == 1);
 
     // 无武将目录：同名座位距离不变
     TestGame plain("deck");
@@ -6856,7 +6856,7 @@ TEST_CASE("game: mashu reduces distance from the hero seat by one")
     plain.add_player("b", 1, 4);
     plain.add_player("c", 2, 4);
     plain.add_player("d", 3, 4);
-    CHECK(distance_between(plain.ctx, "a", "c") == 2);
+    CHECK(DistanceQuery::distance_between(plain.ctx, "a", "c") == 2);
 }
 
 TEST_CASE("game: qicai lifts the trick distance limit for the hero seat")
@@ -6873,7 +6873,7 @@ TEST_CASE("game: qicai lifts the trick distance limit for the hero seat")
     const CardDef &def = *shunshou.unwrap();
 
     // 顺手牵羊 range 1；a→c 座次距离 2
-    CHECK(distance_between(g.ctx, "a", "c") == 2);
+    CHECK(DistanceQuery::distance_between(g.ctx, "a", "c") == 2);
 
     // 奇才座位：目标枚举与预校验都不再按距离拒绝
     const auto legal = valid_targets(g.ctx, "a", def);
@@ -6886,7 +6886,7 @@ TEST_CASE("game: qicai lifts the trick distance limit for the hero seat")
     CHECK(validate_effect_targets(g.ctx, "b", def, {"d"}).is_err());
 
     // 奇才只放宽锦囊：杀的攻击范围仍受距离限制
-    CHECK_FALSE(in_attack_range(g.ctx, "a", "c"));
+    CHECK_FALSE(DistanceQuery::in_attack_range(g.ctx, "a", "c"));
 }
 
 TEST_CASE("game: qicai lifts the delayed trick range limit for the hero seat")
