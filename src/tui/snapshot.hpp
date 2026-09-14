@@ -134,9 +134,9 @@ namespace tkw
                 row.hand = visible_hand(ro, viewer, id);
                 row.equip = public_zone(ro, ro.cards->equip(id));
                 row.judge = public_zone(ro, ro.cards->judge(id));
-                row.distance = tkw::game::distance_between(ro, viewer, id);
-                row.in_attack_range =
-                    tkw::game::in_attack_range(ro, viewer, id);
+                const tkw::game::DistanceQuery dist(ro);
+                row.distance = dist.distance_between(viewer, id);
+                row.in_attack_range = dist.in_attack_range(viewer, id);
                 const tkw::game::Role role = tkw::game::role_of(ro.roles, id);
                 row.role = role_visible(s.humans, snap.over, id, role)
                                ? role

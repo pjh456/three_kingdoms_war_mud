@@ -144,7 +144,8 @@ namespace tkw
                     out.erase(
                         std::remove_if(out.begin(), out.end(),
                                        [&](const std::string &t)
-                                       { return !in_attack_range(ctx, player, t); }),
+                                       { return !DistanceQuery(ctx).in_attack_range(
+                                             player, t); }),
                         out.end());
                 }
                 else if (eff.kind == card::CardEffectKind::Steal &&
@@ -153,7 +154,8 @@ namespace tkw
                     out.erase(
                         std::remove_if(out.begin(), out.end(),
                                        [&](const std::string &t)
-                                       { return !distance_le(ctx, player, t, eff.range); }),
+                                       { return !DistanceQuery(ctx).distance_le(
+                                             player, t, eff.range); }),
                         out.end());
                 }
                 break;
@@ -193,14 +195,14 @@ namespace tkw
             if (eff.kind == card::CardEffectKind::Damage)
             {
                 for (const auto &t : targets)
-                    if (!in_attack_range(ctx, player, t))
+                    if (!DistanceQuery(ctx).in_attack_range(player, t))
                         return GameResult<void>::Err(EffectError::OutOfRange);
             }
             else if (eff.kind == card::CardEffectKind::Steal &&
                      !ignores_trick_distance(ctx, player))
             {
                 for (const auto &t : targets)
-                    if (!distance_le(ctx, player, t, eff.range))
+                    if (!DistanceQuery(ctx).distance_le(player, t, eff.range))
                         return GameResult<void>::Err(EffectError::OutOfRange);
             }
 
@@ -218,7 +220,7 @@ namespace tkw
                     return GameResult<void>::Err(EffectError::InvalidTarget);
                 if (!has_equip_slot(ctx, holder, card::EquipSlot::Weapon))
                     return GameResult<void>::Err(EffectError::InvalidTarget);
-                if (!in_attack_range(ctx, holder, victim))
+                if (!DistanceQuery(ctx).in_attack_range(holder, victim))
                     return GameResult<void>::Err(EffectError::OutOfRange);
             }
             else

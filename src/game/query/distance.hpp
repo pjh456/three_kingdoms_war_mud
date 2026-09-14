@@ -37,19 +37,76 @@ namespace tkw
         };
 
         /**
-         * @brief  座次距离（存活者环）：min(|i-j|, n-|i-j|)。
-         * @param[in] ctx 只读上下文。
-         * @param[in] a   实体 id。
-         * @param[in] b   实体 id。
-         * @return 两实体都在容器内时返回环上最短弧长；任一不存在时返回 0。
-         * @note   i/j 为 `ordered_ids()` 中按座位升序的下标。死亡者已从容器
-         *         移除但座位号不回填，故不能拿「绝对座位差」与「存活数」直接
-         *         相减，须先取存活者座位环上的下标。
+         * @brief 距离与攻击范围只读查询操作类。
+         * @details 持只读上下文，各方法不再逐个传 `ctx`；本类不改变任何状态。
+         * @warning 上下文以值拷贝持有；被其引用的容器/目录须比本对象存活更久。
          */
-        inline int seat_distance(
-            const ReadOnlyContext &ctx, const std::string &a, const std::string &b)
+        class DistanceQuery
         {
-            const auto ids = ctx.entities->ordered_ids();
+        public:
+            /**
+             * @brief  绑定只读上下文。
+             * @param[in] ctx 只读上下文（值拷贝七个 const 容器指针）。
+             */
+            explicit DistanceQuery(ReadOnlyContext ctx) : m_ctx(ctx) {}
+
+            /**
+             * @brief  座次距离（存活者环）：min(|i-j|, n-|i-j|)。
+             * @param[in] a 实体 id。
+             * @param[in] b 实体 id。
+             * @return 两实体都在容器内时返回环上最短弧长；任一不存在时返回 0。
+             * @note   i/j 为 `ordered_ids()` 中按座位升序的下标。死亡者已从容器
+             *         移除但座位号不回填，故不能拿「绝对座位差」与「存活数」直接
+             *         相减，须先取存活者座位环上的下标。
+             */
+            int seat_distance(const std::string &a, const std::string &b) const;
+
+            /**
+             * @brief  解析某实体装备区：武器 range 与坐骑方向（经 catalog）。
+             * @param[in] entity_id 实体 id。
+             * @return 距离相关摘要；无武器时 `weapon_range == 0`。
+             * @post  本接口不改变任何状态。
+             */
+            EquipSummary summarize_equipment(const std::string &entity_id) const;
+
+            /**
+             * @brief  from 到 to 的调整后距离。
+             * @param[in] from 起点实体 id。
+             * @param[in] to   终点实体 id。
+             * @return 含进攻/防御马与「马术」修正后的距离，下限 1。
+             * @post  本接口不改变任何状态。
+             */
+            int distance_between(const std::string &from, const std::string &to) const;
+
+            /**
+             * @brief  距离判定：from 到 to 的距离（含马修正）是否 ≤ range。
+             * @param[in] from  起点实体 id。
+             * @param[in] to    终点实体 id。
+             * @param[in] range 距离上限。
+             * @return 调整后距离不超过 `range` 时为 true。
+             * @note  顺手牵羊（`range == 1`）等按距离结算的牌走这里。
+             * @post  本接口不改变任何状态。
+             */
+            bool distance_le(
+                const std::string &from, const std::string &to, int range) const;
+
+            /**
+             * @brief  攻击距离判定：from 能否攻击 to。
+             * @param[in] from 攻击方实体 id。
+             * @param[in] to   目标实体 id。
+             * @return 距离在武器攻击范围内时为 true（无武器时范围 1）。
+             * @post  本接口不改变任何状态。
+             */
+            bool in_attack_range(const std::string &from, const std::string &to) const;
+
+        private:
+            ReadOnlyContext m_ctx; /**< 只读上下文（值拷贝）。 */
+        };
+
+        inline int DistanceQuery::seat_distance(
+            const std::string &a, const std::string &b) const
+        {
+            const auto ids = m_ctx.entities->ordered_ids();
             const auto ia = std::find(ids.begin(), ids.end(), a);
             const auto ib = std::find(ids.begin(), ids.end(), b);
             if (ia == ids.end() || ib == ids.end())
@@ -61,20 +118,13 @@ namespace tkw
             return std::min(d, n - d);
         }
 
-        /**
-         * @brief  解析某实体装备区：武器 range 与坐骑方向（经 catalog）。
-         * @param[in] ctx       只读上下文。
-         * @param[in] entity_id 实体 id。
-         * @return 距离相关摘要；无武器时 `weapon_range == 0`。
-         * @post  本接口不改变任何状态。
-         */
-        inline EquipSummary summarize_equipment(
-            const ReadOnlyContext &ctx, const std::string &entity_id)
+        inline EquipSummary DistanceQuery::summarize_equipment(
+            const std::string &entity_id) const
         {
             EquipSummary s;
-            for (const auto &c : ctx.cards->equip(entity_id))
+            for (const auto &c : m_ctx.cards->equip(entity_id))
             {
-                const auto def = ctx.catalog->find(c.def_id);
+                const auto def = m_ctx.catalog->find(c.def_id);
                 if (def.is_none())
                     continue;
                 const auto &eq = def.unwrap()->equip;
@@ -91,61 +141,105 @@ namespace tkw
             return s;
         }
 
-        /**
-         * @brief  from 到 to 的调整后距离。
-         * @param[in] ctx  只读上下文。
-         * @param[in] from 起点实体 id。
-         * @param[in] to   终点实体 id。
-         * @return 含进攻/防御马与「马术」修正后的距离，下限 1。
-         * @post  本接口不改变任何状态。
-         */
-        inline int distance_between(
-            const ReadOnlyContext &ctx, const std::string &from, const std::string &to)
+        inline int DistanceQuery::distance_between(
+            const std::string &from, const std::string &to) const
         {
-            int d = seat_distance(ctx, from, to);
-            const auto fs = summarize_equipment(ctx, from);
-            const auto ts = summarize_equipment(ctx, to);
+            int d = seat_distance(from, to);
+            const auto fs = summarize_equipment(from);
+            const auto ts = summarize_equipment(to);
             if (fs.offensive_horse)
                 --d;
             if (ts.defensive_horse)
                 ++d;
 
             // 锁定技「马术」：from 计算到其他角色的距离再 -1（下限 1 不变）
-            if (has_hero_skill(ctx, from, hero::HeroSkill::MaShu))
+            if (has_hero_skill(m_ctx, from, hero::HeroSkill::MaShu))
                 --d;
             return std::max(d, 1);
         }
 
+        inline bool DistanceQuery::distance_le(
+            const std::string &from, const std::string &to, int range) const
+        {
+            return distance_between(from, to) <= range;
+        }
+
+        inline bool DistanceQuery::in_attack_range(
+            const std::string &from, const std::string &to) const
+        {
+            const int range = summarize_equipment(from).weapon_range;
+            return distance_le(from, to, range > 0 ? range : 1);
+        }
+
         /**
-         * @brief  距离判定：from 到 to 的距离（含马修正）是否 ≤ range。
+         * @brief  座次距离（便捷转发）。
+         * @param[in] ctx 只读上下文。
+         * @param[in] a   实体 id。
+         * @param[in] b   实体 id。
+         * @return 环上最短弧长；任一不存在时为 0。
+         * @see   DistanceQuery::seat_distance
+         */
+        inline int seat_distance(
+            const ReadOnlyContext &ctx, const std::string &a, const std::string &b)
+        {
+            return DistanceQuery(ctx).seat_distance(a, b);
+        }
+
+        /**
+         * @brief  解析装备摘要（便捷转发）。
+         * @param[in] ctx       只读上下文。
+         * @param[in] entity_id 实体 id。
+         * @return 距离相关摘要。
+         * @see   DistanceQuery::summarize_equipment
+         */
+        inline EquipSummary summarize_equipment(
+            const ReadOnlyContext &ctx, const std::string &entity_id)
+        {
+            return DistanceQuery(ctx).summarize_equipment(entity_id);
+        }
+
+        /**
+         * @brief  调整后距离（便捷转发）。
+         * @param[in] ctx  只读上下文。
+         * @param[in] from 起点实体 id。
+         * @param[in] to   终点实体 id。
+         * @return 调整后距离，下限 1。
+         * @see   DistanceQuery::distance_between
+         */
+        inline int distance_between(
+            const ReadOnlyContext &ctx, const std::string &from, const std::string &to)
+        {
+            return DistanceQuery(ctx).distance_between(from, to);
+        }
+
+        /**
+         * @brief  距离判定（便捷转发）。
          * @param[in] ctx   只读上下文。
          * @param[in] from  起点实体 id。
          * @param[in] to    终点实体 id。
          * @param[in] range 距离上限。
          * @return 调整后距离不超过 `range` 时为 true。
-         * @note  顺手牵羊（`range == 1`）等按距离结算的牌走这里。
-         * @post  本接口不改变任何状态。
+         * @see   DistanceQuery::distance_le
          */
         inline bool distance_le(
             const ReadOnlyContext &ctx, const std::string &from,
             const std::string &to, int range)
         {
-            return distance_between(ctx, from, to) <= range;
+            return DistanceQuery(ctx).distance_le(from, to, range);
         }
 
         /**
-         * @brief  攻击距离判定：from 能否攻击 to。
+         * @brief  攻击距离判定（便捷转发）。
          * @param[in] ctx  只读上下文。
          * @param[in] from 攻击方实体 id。
          * @param[in] to   目标实体 id。
-         * @return 距离在武器攻击范围内时为 true（无武器时范围 1）。
-         * @post  本接口不改变任何状态。
+         * @return 距离在武器攻击范围内时为 true。
+         * @see   DistanceQuery::in_attack_range
          */
         inline bool in_attack_range(
             const ReadOnlyContext &ctx, const std::string &from, const std::string &to)
         {
-            const int range = summarize_equipment(ctx, from).weapon_range;
-            return distance_le(ctx, from, to, range > 0 ? range : 1);
+            return DistanceQuery(ctx).in_attack_range(from, to);
         }
     }
 }
