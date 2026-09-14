@@ -213,6 +213,26 @@ namespace tkw
         {
         public:
             /**
+             * @brief 显式声明移动/拷贝：vector 与 unordered_map 的移动只窃取内部
+             *        指针、实际不抛，但标准未把容器移动标为 noexcept。显式 noexcept
+             *        移动使目录可放入 Result（其存储要求 T 移动构造为 noexcept）。
+             * @note 自定义移动会抑制隐式拷贝，故拷贝一并 = default 保留。
+             */
+            HeroCatalog() = default;
+            HeroCatalog(const HeroCatalog &) = default;
+            HeroCatalog &operator=(const HeroCatalog &) = default;
+            HeroCatalog(HeroCatalog &&other) noexcept
+                : defs(std::move(other.defs)), index(std::move(other.index))
+            {
+            }
+            HeroCatalog &operator=(HeroCatalog &&other) noexcept
+            {
+                defs = std::move(other.defs);
+                index = std::move(other.index);
+                return *this;
+            }
+
+            /**
              * @brief 从 ResourceStore 加载：先读 <hero_name>.json（武将构成），
              *        再逐个加载 heroes/<id>.json。
              * @return Ok 为目录；Err 为 config 层错误（文件缺失/非法 JSON/
