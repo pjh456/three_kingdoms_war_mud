@@ -237,7 +237,7 @@ tkw --deck resources/junzheng repl       # 或进 REPL 逐回合玩
 
 军争篇是独立牌表，不会叠加标准版。它目录里没有 `heroes.json`，所以切到军争篇不会加载武将（玩家将是无名座位）。
 
-## 武将
+## 武将（实验性功能）
 
 `tkw heroes` 可以一览。用 `--hero <座位>=<武将>` 指定：
 
@@ -299,13 +299,3 @@ tkw --deck resources/junzheng repl   # 再 load save.json
 - 不指定 `--hero` 时座位是无名角色；此时性别按座位奇偶占位（P0 男、P1 女…），并非真实设定。
 - 军争篇牌表没有武将数据，切过去就没有武将可用。
 - TUI 在 Windows/MSVC 下未经验证。
-
-## 接口文档
-
-API 文档由 Doxygen 从 `src/**/*.hpp` 生成，配置在 `docs/doxygen/`。需要 `doxygen` 和 `graphviz`（用于类图）：
-
-```sh
-doxygen docs/doxygen/Doxyfile   # 产物 build/docs/html/index.html
-```
-
-推送 `main` 后由 CI 自动重建，并发布到 <https://pjh456.github.io/three_kingdoms_war_mud/>。
