@@ -116,6 +116,8 @@ target_compile_definitions(
 
 doctest_discover_tests(tui_tests)
 
+# CLI 端到端（跨平台）：以下用例直跑二进制、不含 shell，Windows 侧亦注册。
+
 # CLI 端到端：选项可置于子命令名之后，前置写法与未知选项行为不变。
 add_test(NAME cli_option_after_subcommand
          COMMAND tkw new --human P0 --players 2 --seed 1)
@@ -149,6 +151,23 @@ set_tests_properties(cli_deal_option_after_positional PROPERTIES
     PASS_REGULAR_EXPRESSION "胜者|平局"
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# audit：钉退出码与结果关键词；未实现卡集合随引擎演进而变，不钉具体卡名。
+add_test(NAME cli_audit_ok COMMAND tkw audit)
+set_tests_properties(cli_audit_ok PROPERTIES
+    PASS_REGULAR_EXPRESSION "牌堆全部可结算|未实现卡"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# 批量入口模糊匹配：唯一近距手误自动纠错到 audit；钉纠错后真跑到 audit。
+add_test(NAME cli_fuzzy_typo_resolves COMMAND tkw audti)
+set_tests_properties(cli_fuzzy_typo_resolves PROPERTIES
+    PASS_REGULAR_EXPRESSION "牌堆全部可结算|未实现卡"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# ── 以下 E2E 依赖 POSIX shell（sh/grep/awk/printf/mktemp/ln -s）与 util-linux
+#    script；Windows 无这些工具，整段仅在 Unix 注册。Windows 侧由上方直跑二进制
+#    的 E2E 与全部 doctest 目标覆盖。
+if(UNIX)
+
 # 执行错误（无会话）应只打印纯中文消息并退出 1，不得带解析错误前缀（中文或英文）。
 add_test(NAME cli_step_without_session_plain_error
          COMMAND sh -c
@@ -161,12 +180,6 @@ add_test(NAME cli_load_missing_file_reports_reason
          COMMAND sh -c
                  "out=$($<TARGET_FILE:tkw> load /nonexistent-tkw-save.json 2>&1); rc=$?; printf '%s' \"$out\" | grep -Fq '读取存档失败（文件不存在）' && printf '%s' \"$out\" | grep -q '/nonexistent-tkw-save.json' && [ $rc -eq 1 ]")
 set_tests_properties(cli_load_missing_file_reports_reason PROPERTIES
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-
-# audit：钉退出码与结果关键词；未实现卡集合随引擎演进而变，不钉具体卡名。
-add_test(NAME cli_audit_ok COMMAND tkw audit)
-set_tests_properties(cli_audit_ok PROPERTIES
-    PASS_REGULAR_EXPRESSION "牌堆全部可结算|未实现卡"
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_test(NAME cli_audit_bad_deck
@@ -360,12 +373,6 @@ add_test(NAME cli_cards_bad_deck_json
                   out=$($<TARGET_FILE:tkw> cards --deck $d 2>&1); rc=$?; rm -rf $d; \
                   printf '%s' \"$out\" | grep -Fq '加载牌堆失败（JSON 非法）' && [ $rc -eq 1 ]")
 set_tests_properties(cli_cards_bad_deck_json PROPERTIES
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-
-# 批量入口模糊匹配：唯一近距手误自动纠错到 audit；钉纠错后真跑到 audit。
-add_test(NAME cli_fuzzy_typo_resolves COMMAND tkw audti)
-set_tests_properties(cli_fuzzy_typo_resolves PROPERTIES
-    PASS_REGULAR_EXPRESSION "牌堆全部可结算|未实现卡"
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # 短别名精确命中：st → status（无会话时打印会话: 无并退出 0），不再落入模糊歧义。
@@ -1031,6 +1038,8 @@ add_test(NAME cli_repl_load_ignores_active_deck
 set_tests_properties(cli_repl_load_ignores_active_deck PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+endif()
+
 # 可选 TUI 端到端：仅 TKW_ENABLE_TUI=ON 时注册。add_test 里的 $<TARGET_FILE:tkw-tui>
 # 在 generate 期求值，tui/ 虽后于 tests/ 注册也能解析；门控必须用根级 option 变量，
 # configure 到此 if(TARGET tkw-tui) 尚为假。默认 OFF 时本块整体不存在，ctest 与
@@ -1047,32 +1056,36 @@ if(TKW_ENABLE_TUI)
   target_link_libraries(tui_panel_tests PRIVATE ftxui::ftxui tkw_tui doctest)
   doctest_discover_tests(tui_panel_tests)
 
-  # 非 TTY 守卫：ctest 的输出本就是管道，直接运行即触发 stdin/stdout 双 fd 守卫；
-  # 包装 sh -c 只为把子进程 rc=1 转成断言结果，不需 script。
-  add_test(NAME tui_non_tty_guard
-           COMMAND sh -c
-                   "out=$($<TARGET_FILE:tkw-tui> 2>&1); rc=$?; printf '%s' \"$out\" | grep -Fq '需要交互式终端' && [ $rc -eq 1 ]")
-  set_tests_properties(tui_non_tty_guard PROPERTIES
-      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  # 非 TTY 守卫与 --help 用例用 sh -c 包装 rc 断言，仅 Unix 注册；Windows 侧 TUI
+  # 覆盖交给跨平台的 tui_panel_tests。
+  if(UNIX)
+    # 非 TTY 守卫：ctest 的输出本就是管道，直接运行即触发 stdin/stdout 双 fd 守卫；
+    # 包装 sh -c 只为把子进程 rc=1 转成断言结果，不需 script。
+    add_test(NAME tui_non_tty_guard
+             COMMAND sh -c
+                     "out=$($<TARGET_FILE:tkw-tui> 2>&1); rc=$?; printf '%s' \"$out\" | grep -Fq '需要交互式终端' && [ $rc -eq 1 ]")
+    set_tests_properties(tui_non_tty_guard PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-  # --help/-h 必须在非 TTY 守卫前短路：ctest 下本就是管道，rc=0 且打出命令表即为
-  # 绕过守卫的证据（无参走守卫则是 rc=1）。不启 pty。
-  add_test(NAME tui_help_flag
-           COMMAND sh -c
-                   "out=$($<TARGET_FILE:tkw-tui> --help 2>&1); rc=$?; \
-                    printf '%s' \"$out\" | grep -Fq 'TUI 命令' && \
-                    printf '%s' \"$out\" | grep -Fq 'cards' && [ $rc -eq 0 ] && \
-                    out2=$($<TARGET_FILE:tkw-tui> -h 2>&1); rc2=$?; \
-                    printf '%s' \"$out2\" | grep -Fq 'TUI 命令' && [ $rc2 -eq 0 ]")
-  set_tests_properties(tui_help_flag PROPERTIES
-      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    # --help/-h 必须在非 TTY 守卫前短路：ctest 下本就是管道，rc=0 且打出命令表即为
+    # 绕过守卫的证据（无参走守卫则是 rc=1）。不启 pty。
+    add_test(NAME tui_help_flag
+             COMMAND sh -c
+                     "out=$($<TARGET_FILE:tkw-tui> --help 2>&1); rc=$?; \
+                      printf '%s' \"$out\" | grep -Fq 'TUI 命令' && \
+                      printf '%s' \"$out\" | grep -Fq 'cards' && [ $rc -eq 0 ] && \
+                      out2=$($<TARGET_FILE:tkw-tui> -h 2>&1); rc2=$?; \
+                      printf '%s' \"$out2\" | grep -Fq 'TUI 命令' && [ $rc2 -eq 0 ]")
+    set_tests_properties(tui_help_flag PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  endif()
 
   # PTY 冒烟：依赖 util-linux script 提供 pty，缺失则整条不注册（照抄 raw 冒烟先例）。
   # ctest 下 script 继承的终端窗口是 0x0，须先在 pty 内 stty 固定尺寸。
   # 在临时目录建 resources 符号链接并 cd 进去跑：牌表可加载、退出自动存档落临时
   # 目录（不污染源码树、不覆盖开发者存档）。只钉 rc 与面板标题，不钉布局/动态值；
   # grep -a 处理 FTXUI 输出里的 ANSI 转义，避免被当作二进制而静默不匹配。
-  if(TKW_SCRIPT_EXE)
+  if(UNIX AND TKW_SCRIPT_EXE)
     add_test(NAME tui_pty_smoke
              COMMAND sh -c
                      "d=$(mktemp -d); ln -s '${CMAKE_SOURCE_DIR}/resources' $d/resources; \

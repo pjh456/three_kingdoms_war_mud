@@ -8,6 +8,13 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# 项目源码与资源均为无 BOM 的 UTF-8。MSVC 默认按系统代码页解释源文件，会使中文
+# 字面量与磁盘 JSON 解析出的字节不一致（doctest 断言与 CTest 正则失配）。FTXUI 对
+# 自身及消费方已 PUBLIC 带 /utf-8，这里补齐项目其余目标。
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
+
 option(TKW_ENABLE_TESTS "Compile three_kingdoms_war tests" ON)
 option(TKW_ENABLE_TUI "构建基于 FTXUI 的可选终端界面 tkw-tui" OFF)
 
