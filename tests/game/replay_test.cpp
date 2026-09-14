@@ -51,7 +51,7 @@ namespace
 
         EventLog log(g.bus);
         tkw::game::SimpleAI ai;
-        auto r = tkw::game::play_game(g.ctx, ai, "P0");
+        auto r = tkw::game::GameLoop(g.ctx, ai).play_game("P0");
         if (r.is_err())
             REQUIRE(r.unwrap_err() == tkw::game::LoopError::MaxRounds);
         return log.lines();
@@ -66,7 +66,7 @@ namespace
             g.add_player("P" + std::to_string(i), i, 4);
 
         EventLog log(g.bus);
-        auto r = tkw::game::play_game(g.ctx, ai, "P0");
+        auto r = tkw::game::GameLoop(g.ctx, ai).play_game("P0");
         if (r.is_err())
             REQUIRE(r.unwrap_err() == tkw::game::LoopError::MaxRounds);
         return log.lines();
@@ -82,10 +82,10 @@ namespace
         EventLog log(g.bus);
         tkw::game::SimpleAI ai;
         tkw::game::GameSession session;
-        REQUIRE(tkw::game::start_session(g.ctx, session, "P0").is_ok());
-        while (!tkw::game::session_over(g.ctx))
+        REQUIRE(tkw::game::GameSetup(g.ctx).start_session(session, "P0").is_ok());
+        while (!tkw::game::SessionQuery::session_over(g.ctx))
         {
-            auto r = tkw::game::step_session(g.ctx, ai, session);
+            auto r = tkw::game::GameLoop(g.ctx, ai).step_session(session);
             if (r.is_err())
             {
                 REQUIRE(r.unwrap_err() == tkw::game::LoopError::MaxRounds);
@@ -140,7 +140,7 @@ namespace
         opt.players = players;
         opt.seed = seed;
         opt.mode = tkw::game::GameMode::Identity;
-        auto built = tkw::game::build_game(opt);
+        auto built = tkw::game::GameFactory::build(opt);
         REQUIRE(built.is_ok());
         auto game = std::move(built).unwrap();
 
@@ -156,7 +156,7 @@ namespace
             [&](tkw::HandlerContext<tkw::EntityDiedEvent> &) { ++run.deaths; }));
 
         auto ctx = game->context();
-        auto r = tkw::game::play_game(ctx, ai, "P0");
+        auto r = tkw::game::GameLoop(ctx, ai).play_game("P0");
         run.lines = log.lines();
         run.roles = game->roles;
         if (r.is_ok())
@@ -423,7 +423,7 @@ TEST_CASE("replay: four-player seed 42 reaches a decisive result")
         g.add_player("P" + std::to_string(i), i, 4);
 
     tkw::game::SimpleAI ai;
-    const auto r = tkw::game::play_game(g.ctx, ai, "P0");
+    const auto r = tkw::game::GameLoop(g.ctx, ai).play_game("P0");
     REQUIRE(r.is_ok());
     const auto outcome = r.unwrap();
     CHECK(outcome.winner == "P3");
@@ -444,7 +444,7 @@ TEST_CASE("replay: two-player games stay consistent across seeds")
 
         EventLog log(g.bus);
         tkw::game::SimpleAI ai;
-        const auto r = tkw::game::play_game(g.ctx, ai, "P0");
+        const auto r = tkw::game::GameLoop(g.ctx, ai).play_game("P0");
 
         // 事件流非空：每局至少含开局发牌
         CHECK(!log.lines().empty());
@@ -455,8 +455,8 @@ TEST_CASE("replay: two-player games stay consistent across seeds")
 
         if (r.is_ok())
         {
-            CHECK(tkw::game::session_over(g.ctx));
-            const auto winner = tkw::game::session_winner(g.ctx);
+            CHECK(tkw::game::SessionQuery::session_over(g.ctx));
+            const auto winner = tkw::game::SessionQuery::session_winner(g.ctx);
             const bool winner_alive =
                 winner.empty() || g.ctx.entities->find(winner).is_some();
             CHECK(winner_alive);
@@ -472,7 +472,7 @@ TEST_CASE("replay: two-player games stay consistent across seeds")
         again.add_player("P1", 1, 4);
         EventLog log2(again.bus);
         tkw::game::SimpleAI ai2;
-        (void)tkw::game::play_game(again.ctx, ai2, "P0");
+        (void)tkw::game::GameLoop(again.ctx, ai2).play_game("P0");
         CHECK(log.lines() == log2.lines());
     }
 }
@@ -589,7 +589,7 @@ TEST_CASE("replay: aggressive two-player scan stays consistent")
 
         EventLog log(g.bus);
         tkw::game::AggressiveAI ai;
-        const auto r = tkw::game::play_game(g.ctx, ai, "P0");
+        const auto r = tkw::game::GameLoop(g.ctx, ai).play_game("P0");
 
         CHECK(!log.lines().empty());
 
@@ -598,8 +598,8 @@ TEST_CASE("replay: aggressive two-player scan stays consistent")
 
         if (r.is_ok())
         {
-            CHECK(tkw::game::session_over(g.ctx));
-            const auto winner = tkw::game::session_winner(g.ctx);
+            CHECK(tkw::game::SessionQuery::session_over(g.ctx));
+            const auto winner = tkw::game::SessionQuery::session_winner(g.ctx);
             const bool winner_alive =
                 winner.empty() || g.ctx.entities->find(winner).is_some();
             CHECK(winner_alive);
@@ -615,7 +615,7 @@ TEST_CASE("replay: aggressive two-player scan stays consistent")
         again.add_player("P1", 1, 4);
         EventLog log2(again.bus);
         tkw::game::AggressiveAI ai2;
-        (void)tkw::game::play_game(again.ctx, ai2, "P0");
+        (void)tkw::game::GameLoop(again.ctx, ai2).play_game("P0");
         CHECK(log.lines() == log2.lines());
     }
 }

@@ -24,7 +24,7 @@ namespace
         opt.players = players;
         opt.seed = seed;
         opt.mode = mode;
-        auto r = tkw::game::build_game(opt);
+        auto r = tkw::game::GameFactory::build(opt);
         REQUIRE(r.is_ok());
         return std::move(r).unwrap();
     }
@@ -39,7 +39,7 @@ namespace
         s.deck = TKW_TEST_RESOURCE_DIR;
         s.game = make_game(players, seed, mode);
         auto ctx = s.game->context();
-        REQUIRE(tkw::game::start_session(ctx, s.state, "P0", hand).is_ok());
+        REQUIRE(tkw::game::GameSetup(ctx).start_session(s.state, "P0", hand).is_ok());
         return s;
     }
 
@@ -112,7 +112,7 @@ TEST_CASE("tui: snapshot advances turn progress after one step")
     auto s = started_session(2, 1, 2);
     tkw::game::SimpleAI ai;
     auto ctx = s.game->context();
-    REQUIRE(tkw::game::step_session(ctx, ai, s.state).is_ok());
+    REQUIRE(tkw::game::GameLoop(ctx, ai).step_session(s.state).is_ok());
 
     const auto snap = tkw::tui::make_snapshot(s, "P0");
     CHECK(snap.turns == 1);
@@ -158,7 +158,7 @@ TEST_CASE("tui: finished session reports over and a winner label")
     auto s = raw_session(2, 1);
     tkw::game::SimpleAI ai;
     auto ctx = s.game->context();
-    auto r = tkw::game::play_game(ctx, ai, "P0", 2);
+    auto r = tkw::game::GameLoop(ctx, ai).play_game("P0", 2);
     REQUIRE(r.is_ok());
 
     const auto snap = tkw::tui::make_snapshot(s, "P0");
@@ -174,7 +174,7 @@ TEST_CASE("tui: snapshot exposes hero display name per seat")
     opt.players = 2;
     opt.seed = 1;
     opt.heroes["P0"] = "zhangfei";
-    auto built = tkw::game::build_game(opt);
+    auto built = tkw::game::GameFactory::build(opt);
     REQUIRE(built.is_ok());
 
     tkw::cli::Session s;
@@ -182,7 +182,7 @@ TEST_CASE("tui: snapshot exposes hero display name per seat")
     s.deck = TKW_TEST_RESOURCE_DIR;
     s.game = std::move(built).unwrap();
     auto ctx = s.game->context();
-    REQUIRE(tkw::game::start_session(ctx, s.state, "P0", 2).is_ok());
+    REQUIRE(tkw::game::GameSetup(ctx).start_session(s.state, "P0", 2).is_ok());
 
     const auto snap = tkw::tui::make_snapshot(s, "P0");
     REQUIRE(snap.players.size() == 2);

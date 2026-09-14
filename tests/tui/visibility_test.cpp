@@ -21,7 +21,7 @@ namespace
         opt.deck = TKW_TEST_RESOURCE_DIR;
         opt.players = players;
         opt.seed = seed;
-        auto r = tkw::game::build_game(opt);
+        auto r = tkw::game::GameFactory::build(opt);
         REQUIRE(r.is_ok());
         return std::move(r).unwrap();
     }
@@ -32,7 +32,7 @@ TEST_CASE("tui: visible_hand hides opponent hand but reveals own")
     auto game = make_game(2, 1);
     auto ctx = game->context();
     tkw::game::GameSession state;
-    REQUIRE(tkw::game::start_session(ctx, state, "P0", 2).is_ok());
+    REQUIRE(tkw::game::GameSetup(ctx).start_session(state, "P0", 2).is_ok());
 
     // 额外给 P1 一张，验证数量口径取自真实手牌而非展开副本。
     game->cards.add_to_hand("P1", tkw::card::Card{
@@ -59,7 +59,7 @@ TEST_CASE("tui: public_zone reveals equipment and judge zones")
     auto game = make_game(2, 1);
     auto ctx = game->context();
     tkw::game::GameSession state;
-    REQUIRE(tkw::game::start_session(ctx, state, "P0", 2).is_ok());
+    REQUIRE(tkw::game::GameSetup(ctx).start_session(state, "P0", 2).is_ok());
 
     game->cards.add_to_equip("P0", tkw::card::Card{
         "eq#0", "sha", tkw::card::Suit::Spade, 1});
@@ -102,7 +102,7 @@ TEST_CASE("tui: visible_hand tolerates unknown viewer without leaking")
     auto game = make_game(2, 1);
     auto ctx = game->context();
     tkw::game::GameSession state;
-    REQUIRE(tkw::game::start_session(ctx, state, "P0", 2).is_ok());
+    REQUIRE(tkw::game::GameSetup(ctx).start_session(state, "P0", 2).is_ok());
     const tkw::game::ReadOnlyContext ro = ctx;
 
     const auto view = tkw::tui::visible_hand(ro, "PX", "P0");

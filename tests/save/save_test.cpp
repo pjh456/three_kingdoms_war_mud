@@ -109,9 +109,9 @@ TEST_CASE("save: round-trips a mid-game state and continues identically")
     auto ctxa = a->context();
     GameSession sa;
     SimpleAI ai;
-    REQUIRE(start_session(ctxa, sa, "P0").is_ok());
-    for (int i = 0; i < 7 && !session_over(ctxa); ++i)
-        REQUIRE(step_session(ctxa, ai, sa).is_ok());
+    REQUIRE(GameSetup(ctxa).start_session(sa, "P0").is_ok());
+    for (int i = 0; i < 7 && !SessionQuery::session_over(ctxa); ++i)
+        REQUIRE(GameLoop(ctxa, ai).step_session(sa).is_ok());
 
     const std::string text = save::write(*a, sa, "deck");
 
@@ -126,10 +126,10 @@ TEST_CASE("save: round-trips a mid-game state and continues identically")
     // 续跑：RNG 与全量状态一致 → 后续状态逐字一致
     SimpleAI ai2;
     SimpleAI ai3;
-    for (int i = 0; i < 5 && !session_over(ctxa); ++i)
-        REQUIRE(step_session(ctxa, ai2, sa).is_ok());
-    for (int i = 0; i < 5 && !session_over(ctxb); ++i)
-        REQUIRE(step_session(ctxb, ai3, sb).is_ok());
+    for (int i = 0; i < 5 && !SessionQuery::session_over(ctxa); ++i)
+        REQUIRE(GameLoop(ctxa, ai2).step_session(sa).is_ok());
+    for (int i = 0; i < 5 && !SessionQuery::session_over(ctxb); ++i)
+        REQUIRE(GameLoop(ctxb, ai3).step_session(sb).is_ok());
     CHECK(save::write(*a, sa, "deck") == save::write(*b, sb, "deck"));
 }
 
@@ -139,9 +139,9 @@ TEST_CASE("save: legacy saves without gender load as all male")
     auto ctxa = a->context();
     GameSession sa;
     SimpleAI ai;
-    REQUIRE(start_session(ctxa, sa, "P0").is_ok());
-    for (int i = 0; i < 3 && !session_over(ctxa); ++i)
-        REQUIRE(step_session(ctxa, ai, sa).is_ok());
+    REQUIRE(GameSetup(ctxa).start_session(sa, "P0").is_ok());
+    for (int i = 0; i < 3 && !SessionQuery::session_over(ctxa); ++i)
+        REQUIRE(GameLoop(ctxa, ai).step_session(sa).is_ok());
 
     const std::string text = save::write(*a, sa, "deck");
     REQUIRE(text.find("\"gender\"") != std::string::npos);
@@ -172,7 +172,7 @@ TEST_CASE("save: female gender survives the round trip")
     auto a = make_game_mixed(42);
     auto ctxa = a->context();
     GameSession sa;
-    REQUIRE(start_session(ctxa, sa, "P0").is_ok());
+    REQUIRE(GameSetup(ctxa).start_session(sa, "P0").is_ok());
 
     const std::string text = save::write(*a, sa, "deck");
     REQUIRE(text.find("\"gender\":\"female\"") != std::string::npos);
@@ -389,9 +389,9 @@ TEST_CASE("save: session meta round-trips ai and stats")
     auto ctxa = a->context();
     GameSession sa;
     SimpleAI ai;
-    REQUIRE(start_session(ctxa, sa, "P0").is_ok());
-    for (int i = 0; i < 4 && !session_over(ctxa); ++i)
-        REQUIRE(step_session(ctxa, ai, sa).is_ok());
+    REQUIRE(GameSetup(ctxa).start_session(sa, "P0").is_ok());
+    for (int i = 0; i < 4 && !SessionQuery::session_over(ctxa); ++i)
+        REQUIRE(GameLoop(ctxa, ai).step_session(sa).is_ok());
 
     save::SessionMeta meta;
     meta.ai = "aggressive";
@@ -505,9 +505,9 @@ TEST_CASE("save: failed rng restore leaves the target untouched")
     auto ctxa = a->context();
     GameSession sa;
     SimpleAI ai;
-    REQUIRE(start_session(ctxa, sa, "P0").is_ok());
-    for (int i = 0; i < 7 && !session_over(ctxa); ++i)
-        REQUIRE(step_session(ctxa, ai, sa).is_ok());
+    REQUIRE(GameSetup(ctxa).start_session(sa, "P0").is_ok());
+    for (int i = 0; i < 7 && !SessionQuery::session_over(ctxa); ++i)
+        REQUIRE(GameLoop(ctxa, ai).step_session(sa).is_ok());
     std::string bad = save::write(*a, sa, "deck");
 
     // 破坏 rng 状态首字符（十进制数字变 x）→ load_state 必失败
@@ -795,8 +795,8 @@ TEST_CASE("save: identity save round-trips after a player death")
     declare_death(ctxa, "P2");
     REQUIRE(a->entities.find("P2").is_none());
 
-    const WinCamp camp = session_camp(ctxa);
-    const std::string winner = session_winner(ctxa);
+    const WinCamp camp = SessionQuery::session_camp(ctxa);
+    const std::string winner = SessionQuery::session_winner(ctxa);
     REQUIRE(camp == WinCamp::RebelCamp);
     REQUIRE(winner == "P2");  // 阵营代表允许已阵亡
 
@@ -815,8 +815,8 @@ TEST_CASE("save: identity save round-trips after a player death")
     CHECK(b->roles.count("P2") == 1);
 
     // 阵营代表稳定：读档前后终局口径与代表 id 均不变
-    CHECK(session_camp(ctxb) == camp);
-    CHECK(session_winner(ctxb) == winner);
+    CHECK(SessionQuery::session_camp(ctxb) == camp);
+    CHECK(SessionQuery::session_winner(ctxb) == winner);
     CHECK(save::write(*b, sb, "deck") == text);  // 规范化往返稳定
 }
 

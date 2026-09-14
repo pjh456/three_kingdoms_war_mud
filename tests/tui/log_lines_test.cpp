@@ -23,7 +23,7 @@ namespace
         opt.deck = TKW_TEST_RESOURCE_DIR;
         opt.players = players;
         opt.seed = seed;
-        auto r = tkw::game::build_game(opt);
+        auto r = tkw::game::GameFactory::build(opt);
         REQUIRE(r.is_ok());
         return std::move(r).unwrap();
     }
@@ -109,12 +109,12 @@ TEST_CASE("tui: log buffer captures subscribed events and survives unbind")
 
     auto ctx = game->context();
     tkw::game::GameSession state;
-    REQUIRE(tkw::game::start_session(ctx, state, "P0", 2).is_ok());
+    REQUIRE(tkw::game::GameSetup(ctx).start_session(state, "P0", 2).is_ok());
     REQUIRE_FALSE(buffer.lines().empty());
     CHECK(buffer.lines().front().find("[摸牌]") == 0);
 
     tkw::game::SimpleAI ai;
-    REQUIRE(tkw::game::step_session(ctx, ai, state).is_ok());
+    REQUIRE(tkw::game::GameLoop(ctx, ai).step_session(state).is_ok());
     CHECK_FALSE(buffer.lines().empty());
 
     // 先退订再销毁 Game：句柄生命周期 ⊆ 总线生命周期。
@@ -131,7 +131,7 @@ TEST_CASE("tui: log buffer hides card names of non-human seats")
 
     auto ctx = game->context();
     tkw::game::GameSession state;
-    REQUIRE(tkw::game::start_session(ctx, state, "P0", 2).is_ok());
+    REQUIRE(tkw::game::GameSetup(ctx).start_session(state, "P0", 2).is_ok());
 
     bool human_named = false;
     bool other_hidden = false;

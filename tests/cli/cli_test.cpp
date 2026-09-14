@@ -1043,7 +1043,7 @@ TEST_CASE("cli: identity human status reveals roles once the game is over")
     REQUIRE(repl.run("new --mode identity --players 4 --seed 1 --human P1").ok);
     auto ctx = repl.session.game->context();
     tkw::game::declare_death(ctx, "P0");
-    REQUIRE(tkw::game::session_over(ctx));
+    REQUIRE(tkw::game::SessionQuery::session_over(ctx));
 
     auto status = repl.run("status");
     REQUIRE(status.ok);
@@ -1158,8 +1158,8 @@ TEST_CASE("cli: all-dead session reports the mutual destruction draw label")
     auto ctx = repl.session.game->context();
     tkw::game::declare_death(ctx, "P0");
     tkw::game::declare_death(ctx, "P1");
-    CHECK(tkw::game::session_over(ctx));
-    CHECK(tkw::game::session_winner(ctx).empty());
+    CHECK(tkw::game::SessionQuery::session_over(ctx));
+    CHECK(tkw::game::SessionQuery::session_winner(ctx).empty());
 
     // 对已结束会话 step：胜者行回落平局标签，不留空串
     auto stepped = repl.run("step");
@@ -1693,7 +1693,7 @@ TEST_CASE("cli: identity terminal labels use camp names")
     auto ctx = repl.session.game->context();
     // 只手杀主公：终局为反贼阵营；反贼代表 id 可能已阵亡，不展示。
     tkw::game::declare_death(ctx, "P0");
-    CHECK(tkw::game::session_over(ctx));
+    CHECK(tkw::game::SessionQuery::session_over(ctx));
 
     auto finished = repl.run("status");
     CHECK(finished.ok);

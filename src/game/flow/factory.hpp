@@ -249,28 +249,6 @@ namespace tkw
 
             return BuildResult<std::unique_ptr<Game>>::Ok(std::move(game));
         }
-
-        /**
-         * @brief  性别占位（兼容转发）。
-         * @details 等价于 `GameFactory::gender_for_seat(seat)`。
-         * @param[in] seat 座位下标。
-         * @return 偶数座位 `Male`，奇数座位 `Female`。
-         */
-        inline entity::Gender gender_for_seat(int seat)
-        {
-            return GameFactory::gender_for_seat(seat);
-        }
-
-        /**
-         * @brief  装配一局（兼容转发）。
-         * @details 等价于 `GameFactory::build(opt)`；语义与返回码见该类方法。
-         * @param[in] opt 建局入参。
-         * @return 建局结果。
-         */
-        inline BuildResult<std::unique_ptr<Game>> build_game(const BuildOptions &opt)
-        {
-            return GameFactory::build(opt);
-        }
     }
 }
 

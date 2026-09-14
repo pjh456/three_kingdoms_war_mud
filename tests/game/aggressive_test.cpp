@@ -89,7 +89,7 @@ TEST_CASE("aggressive: fangtian multi-target when sha is the whole hand")
     g.give("a", "sha", "s#1");  // 唯一手牌，杀天然消耗完全部手牌
 
     tkw::game::AggressiveAI ai;
-    auto r = tkw::game::execute_turn(g.ctx, ai, "a");
+    auto r = tkw::game::TurnFlow(g.ctx, ai).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 3);
     CHECK(c->get_hp() == 3);
@@ -110,7 +110,7 @@ TEST_CASE("aggressive: fangtian stays single-target when the sha is not the whol
     g.give("d", "shan", "ds#1");  // 贪心档按手牌序先拆（杀成最后手牌触发多目标）
 
     tkw::game::AggressiveAI ai;
-    auto r = tkw::game::execute_turn(g.ctx, ai, "a");
+    auto r = tkw::game::TurnFlow(g.ctx, ai).execute_turn("a");
     REQUIRE(r.is_ok());
     // 攻击优先档先打杀：手牌 2 张 > 消耗 1，无多目标枚举，集火最低血 b
     CHECK(b->get_hp() == 3);

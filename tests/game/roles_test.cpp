@@ -23,7 +23,7 @@ namespace
         opt.players = players;
         opt.seed = seed;
         opt.mode = mode;
-        auto r = build_game(opt);
+        auto r = GameFactory::build(opt);
         REQUIRE(r.is_ok());
         return std::move(r).unwrap();
     }
@@ -125,7 +125,7 @@ TEST_CASE("game: identity build rejects unsupported player counts")
     for (int players : {2, 3})
     {
         opt.players = players;
-        auto r = build_game(opt);
+        auto r = GameFactory::build(opt);
         REQUIRE(r.is_err());
         CHECK(r.unwrap_err().kind == BuildError::Kind::IdentityPlayerCount);
         CHECK(r.unwrap_err().player_index == players);

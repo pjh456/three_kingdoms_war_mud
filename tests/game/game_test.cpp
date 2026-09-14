@@ -205,7 +205,7 @@ TEST_CASE("game: offensive and defensive horses coexist")
 
     TestDecider decider;
     decider.plays = {PlayAction{"h#1", {}}, PlayAction{"h#2", {}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(g.cards.equip_size("a") == 2);      // 两个坐骑槽互不替换
     CHECK(DistanceQuery::in_attack_range(g.ctx, "a", "c"));  // a→c: 2-1=1
@@ -225,7 +225,7 @@ TEST_CASE("game: same-direction horse replaces previous")
 
     TestDecider decider;
     decider.plays = {PlayAction{"h#1", {}}, PlayAction{"h#2", {}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(g.cards.equip_size("a") == 1);              // 同方向坐骑互相替换
     CHECK(g.cards.equip("a")[0].def_id == "dawan");
@@ -245,7 +245,7 @@ TEST_CASE("game: equip clears every old same-slot card when the first is not las
 
     TestDecider decider;
     decider.plays = {PlayAction{"h#4", {}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
 
     CHECK(g.cards.equip_size("a") == 2);  // 两件旧 -1马全清，只剩 bagua + 新马
@@ -304,7 +304,7 @@ TEST_CASE("game: full hp self heal is rejected")
 
     TestDecider decider;
     decider.plays = {PlayAction{"t#0", {"a"}}};
-    auto tr = execute_turn(g.ctx, decider, "a");
+    auto tr = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(tr.is_err());
     CHECK(tr.unwrap_err() == TurnError::InvalidTarget);
     CHECK(g.cards.hand_size("a") == 1);  // 拒绝不消耗
@@ -340,7 +340,7 @@ TEST_CASE("game: wounded self heal is allowed and applied")
 
     TestDecider decider;
     decider.plays = {PlayAction{"t#0", {"a"}}};
-    auto tr = execute_turn(g.ctx, decider, "a");
+    auto tr = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(tr.is_ok());
     CHECK(a->get_hp() == 4);
     CHECK(g.cards.hand_size("a") == 0);
@@ -356,7 +356,7 @@ TEST_CASE("game: dying rescue ignores the full hp self heal rule")
 
     TestDecider decider;
     decider.save = true;
-    deal_damage(g.ctx, decider, "b", "a", 4);  // a: 4 → 0
+    CombatResolver(g.ctx, decider).deal_damage("a", DamageSpec{.source = "b", .damage_val = 4});  // a: 4 → 0
     CHECK(a->get_hp() == 1);                   // 桃救回
     CHECK(g.entities.find("a").is_some());
     CHECK(g.cards.hand_size("a") == 0);        // 桃已消耗
@@ -1248,7 +1248,7 @@ TEST_CASE("game: jiedao self-target can kill the user in their own turn")
     GameSession session;
     session.current = "a";
     session.started = true;
-    auto r = step_session(g.ctx, decider, session);
+    auto r = GameLoop(g.ctx, decider).step_session(session);
     REQUIRE(r.is_ok());  // 回合内死亡不是回合错误
     CHECK(g.entities.find("a").is_none());
     CHECK(session.current == "b");  // 死亡者按座位推进
@@ -1394,7 +1394,7 @@ TEST_CASE("game: turn draws two and trims to hand limit")
     g.give("a", "shan", "s#3");
 
     TestDecider decider;  // 不出牌
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(g.cards.hand_size("a") == 3);   // 3 + 摸2 = 5，弃到上限 3
     CHECK(g.cards.discard_size() == 2);   // 弃了 2 张
@@ -1412,7 +1412,7 @@ TEST_CASE("game: turn trims to current hp rather than max hp")
     g.give("a", "shan", "s#3");
 
     TestDecider decider;  // 不出牌
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(g.cards.hand_size("a") == 2);   // 3 + 摸2 = 5，弃到当前体力 2
     CHECK(g.cards.discard_size() == 3);   // 弃了 3 张
@@ -1429,7 +1429,7 @@ TEST_CASE("game: sha limit one per turn")
 
     TestDecider decider;
     decider.plays = {PlayAction{"s#1", {"b"}}, PlayAction{"s#2", {"b"}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == TurnError::ShaLimitExceeded);
     CHECK(b->get_hp() == 3);            // 第一刀命中
@@ -1448,7 +1448,7 @@ TEST_CASE("game: liangnu lifts sha limit")
 
     TestDecider decider;
     decider.plays = {PlayAction{"s#1", {"b"}}, PlayAction{"s#2", {"b"}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 2);            // 两刀全中
     CHECK(g.cards.hand_size("a") == 2); // 4 - 2 = 2（上限 4 不弃）
@@ -1470,7 +1470,7 @@ TEST_CASE("game: paoxiao lifts sha limit only for the hero seat")
 
     TestDecider decider;
     decider.plays = {PlayAction{"s#1", {"b"}}, PlayAction{"s#2", {"b"}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 2);            // 两刀全中
     CHECK(g.cards.hand_size("a") == 2); // 2 + 摸2 - 打出2
@@ -1492,7 +1492,7 @@ TEST_CASE("game: mid-turn liangnu allows further sha this turn")
                 if (c.instance_id != next.instance_id)
                     continue;
                 const auto def = ctx.catalog->find(c.def_id);
-                if (def.is_some() && is_sha(*def.unwrap()) &&
+                if (def.is_some() && TurnQuery::is_sha(*def.unwrap()) &&
                     turn.sha_played >= turn.sha_limit)
                     return Option<PlayAction>::None();
                 break;
@@ -1515,7 +1515,7 @@ TEST_CASE("game: mid-turn liangnu allows further sha this turn")
         PlayAction{"e#0", {}},
         PlayAction{"s#2", {"b"}}
     };
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 2);            // 两刀全中：回合中途装连弩当回合生效
     CHECK(g.cards.hand_size("a") == 2); // 3 + 摸 2 - 打出 3 = 2
@@ -1537,7 +1537,7 @@ TEST_CASE("game: rules config drives draw and sha limit")
 
     TestDecider decider;
     decider.plays = {PlayAction{"s#1", {"b"}}, PlayAction{"s#2", {"b"}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 3);             // 杀上限 2 → 两刀
     CHECK(g.cards.hand_size("a") == 4);  // 3 张杀打出 2 张 + 摸 3 张
@@ -1572,7 +1572,7 @@ TEST_CASE("game: equip weapon and replace same slot")
 
     TestDecider decider;
     decider.plays = {PlayAction{"e#1", {}}, PlayAction{"e#2", {}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(g.cards.equip_size("a") == 1);              // 同槽位只留一件
     CHECK(g.cards.equip("a")[0].def_id == "qinggang");
@@ -1594,7 +1594,7 @@ TEST_CASE("game: lesi non-heart skips play phase")
 
     TestDecider decider;
     decider.plays = {PlayAction{"s#1", {"b"}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 4);            // 出牌阶段被跳过
     CHECK(g.cards.hand_size("a") == 3); // 杀 + 摸的 2 张
@@ -1615,7 +1615,7 @@ TEST_CASE("game: lesi heart judge allows play")
 
     TestDecider decider;
     decider.plays = {PlayAction{"s#1", {"b"}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 3);            // 杀正常打出
     CHECK(g.cards.hand_size("a") == 2); // 杀打出，剩摸的 2 张
@@ -1631,7 +1631,7 @@ TEST_CASE("game: lesi can be played onto another player's judge zone")
 
     TestDecider decider;
     decider.plays = {PlayAction{"L#0", {"b"}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(g.cards.judge_size("b") == 1);
     CHECK(g.cards.judge("b")[0].def_id == "lesi");
@@ -1648,7 +1648,7 @@ TEST_CASE("game: shandian is placed on self")
 
     TestDecider decider;
     decider.plays = {PlayAction{"S#0", {"a"}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(g.cards.judge_size("a") == 1);
     CHECK(g.cards.judge("a")[0].def_id == "shandian");
@@ -1665,7 +1665,7 @@ TEST_CASE("game: duplicate delayed trick is rejected")
 
     TestDecider decider;
     decider.plays = {PlayAction{"L#0", {"b"}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == TurnError::DelayedDuplicate);
 }
@@ -1703,7 +1703,7 @@ TEST_CASE("game: delayed trick nullified at placement is discarded")
     TestDecider decider;
     decider.counter = true;
     decider.plays = {PlayAction{"L#0", {"b"}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(g.cards.judge_size("b") == 0);  // 未进入判定区
     CHECK(g.cards.hand_size("b") == 0);   // 无懈被消耗
@@ -1723,7 +1723,7 @@ TEST_CASE("game: delayed trick can be nullified at resolution")
     TestDecider decider;
     decider.counter = true;  // 用无懈抵消自己的乐不思蜀
     decider.plays = {PlayAction{"s#1", {"b"}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(a->get_hp() == 4);
     CHECK(b->get_hp() == 3);             // 出牌阶段未被跳过
@@ -1743,7 +1743,7 @@ TEST_CASE("game: bingliang non-club skips draw phase")
     g.cards.add_to_draw(Card{"j#0", "sha", Suit::Spade, 8});
 
     TestDecider decider;  // 无出牌脚本
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(g.cards.hand_size("a") == 1);  // 摸牌被跳过，只剩手牌杀
     CHECK(g.cards.judge_size("a") == 0);
@@ -1761,7 +1761,7 @@ TEST_CASE("game: bingliang club judge draws normally")
     g.cards.add_to_draw(Card{"j#0", "shan", Suit::Club, 5});  // 梅花 → 不跳过
 
     TestDecider decider;
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(g.cards.hand_size("a") == 3);  // 手牌杀 + 正常摸 2 张
     CHECK(g.cards.judge_size("a") == 0);
@@ -1781,7 +1781,7 @@ TEST_CASE("game: bingliang skips draw but leaves play phase intact")
 
     TestDecider decider;
     decider.plays = {PlayAction{"s#1", {"b"}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 3);             // 出牌阶段照常
     CHECK(g.cards.hand_size("a") == 0);  // 摸牌被跳过，杀已打出
@@ -1825,7 +1825,7 @@ TEST_CASE("game: bingliang and lesi stack in one judgement phase")
 
     TestDecider decider;
     decider.plays = {PlayAction{"s#1", {"b"}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 4);             // 出牌被跳过
     CHECK(g.cards.hand_size("a") == 1);  // 摸牌被跳过，杀仍在手
@@ -1842,7 +1842,7 @@ TEST_CASE("game: bingliang can be played onto another player within distance")
 
     TestDecider decider;
     decider.plays = {PlayAction{"B#0", {"b"}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(g.cards.judge_size("b") == 1);
     CHECK(g.cards.judge("b")[0].def_id == "bingliang");
@@ -1866,7 +1866,7 @@ TEST_CASE("game: bingliang rejects out-of-range target")
 
     TestDecider decider;
     decider.plays = {PlayAction{"B#0", {"c"}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == TurnError::InvalidTarget);
     CHECK(g.cards.judge_size("c") == 0);
@@ -1883,7 +1883,7 @@ TEST_CASE("game: duplicate bingliang is rejected")
 
     TestDecider decider;
     decider.plays = {PlayAction{"B#0", {"b"}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == TurnError::DelayedDuplicate);
 }
@@ -1900,7 +1900,7 @@ TEST_CASE("game: lightning strikes on spade 2-9")
     g.cards.add_to_draw(Card{"j#0", "sha", Suit::Spade, 8});
 
     TestDecider decider;
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(a->get_hp() == 1);            // 雷伤 3
     CHECK(g.cards.judge_size("a") == 0);
@@ -1928,7 +1928,7 @@ TEST_CASE("game: lightning damage has no source")
         }));
 
     TestDecider decider;
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     REQUIRE(sources.size() == 1);
     CHECK(sources[0].empty());  // 闪电为无来源伤害
@@ -1944,8 +1944,8 @@ TEST_CASE("game: fire slash and thunder slash carry their damage type")
     g.add_player("a", 0, 4);
 
     // 扩展牌表的属性杀按「杀」结算（Damage 效果 + 杀属性）
-    CHECK(is_sha(*g.catalog.find("huosha").unwrap()));
-    CHECK(is_sha(*g.catalog.find("leisha").unwrap()));
+    CHECK(TurnQuery::is_sha(*g.catalog.find("huosha").unwrap()));
+    CHECK(TurnQuery::is_sha(*g.catalog.find("leisha").unwrap()));
 
     std::vector<tkw::card::DamageType> types;
     auto h = g.bus.subscribe(tkw::Handler<tkw::EntityDamagedEvent>(
@@ -1999,7 +1999,7 @@ TEST_CASE("game: lightning passes to next player")
     g.cards.add_to_draw(Card{"j#0", "sha", Suit::Heart, 5});
 
     TestDecider decider;
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(a->get_hp() == 4);              // 未劈中
     CHECK(g.cards.judge_size("a") == 0);
@@ -2020,7 +2020,7 @@ TEST_CASE("game: passed lightning skips a player who already has one")
 
     TestDecider decider;
     const Card sd = g.cards.judge("a")[0];
-    auto r = resolve_delayed(g.ctx, decider, "a", sd);
+    auto r = TurnFlow(g.ctx, decider).resolve_delayed("a", sd);
     REQUIRE(r.is_ok());
     CHECK(r.unwrap() == DelayedOutcome::PassedToNext);
     CHECK(g.cards.judge_size("a") == 0);
@@ -2041,7 +2041,7 @@ TEST_CASE("game: passed lightning wraps back when only the other player has one"
 
     TestDecider decider;
     const Card sd = g.cards.judge("a")[0];
-    auto r = resolve_delayed(g.ctx, decider, "a", sd);
+    auto r = TurnFlow(g.ctx, decider).resolve_delayed("a", sd);
     REQUIRE(r.is_ok());
     CHECK(r.unwrap() == DelayedOutcome::PassedToNext);
     CHECK(g.cards.judge_size("a") == 1);  // 跳过 b → 回到 a
@@ -2057,7 +2057,7 @@ TEST_CASE("game: delayed trick is discarded when judgement deck is empty")
 
     TestDecider decider;
     const Card sd = g.cards.judge("a")[0];
-    auto r = resolve_delayed(g.ctx, decider, "a", sd);
+    auto r = TurnFlow(g.ctx, decider).resolve_delayed("a", sd);
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == TurnError::JudgeEmptyDeck);
     CHECK(g.cards.judge_size("a") == 0);  // 已移出
@@ -2120,7 +2120,7 @@ TEST_CASE("game: dying rescue starts from the current turn player")
     TestDecider d;
     d.save = true;
     d.plays = {PlayAction{"s#0", {"c"}}};
-    auto tr = execute_turn(g.ctx, d, "a");
+    auto tr = TurnFlow(g.ctx, d).execute_turn("a");
     REQUIRE(tr.is_ok());
 
     // 回合角色 a 先被询问：a 的桃救回 c，c 自持的桃保留。
@@ -2143,7 +2143,7 @@ TEST_CASE("game: direct deal_damage keeps querying from the dying player")
     TestDecider d;
     d.save = true;
     // 无回合上下文（ctx.turn_player 为空）→ 回落濒死者 c 起问，c 自理。
-    deal_damage(g.ctx, d, "a", "c", 1);
+    CombatResolver(g.ctx, d).deal_damage("c", DamageSpec{.source = "a", .damage_val = 1});
 
     CHECK(g.entities.find("c").is_some());
     CHECK(c->get_hp() == 1);
@@ -2164,7 +2164,7 @@ TEST_CASE("game: dying rescue uses the turn player not the damage source")
 
     TestDecider d;
     d.save = true;
-    deal_damage(g.ctx, d, "b", "c", 1);
+    CombatResolver(g.ctx, d).deal_damage("c", DamageSpec{.source = "b", .damage_val = 1});
 
     // 座位序 c(0) → a(1) → b(2)：从回合角色 a 起问，消耗 a 的桃而非来源 b 的桃。
     CHECK(g.entities.find("c").is_some());
@@ -2265,7 +2265,7 @@ TEST_CASE("game: dying rescue is bounded by dying_rounds")
     TestDecider decider;
     decider.save = true;  // 有桃就救
     // 空来源：避免击杀奖励 apply_draw 洗回弃牌堆污染牌数
-    deal_damage(g.ctx, decider, /*source=*/"", "a", 3);  // a: 1-3 = -2
+    CombatResolver(g.ctx, decider).deal_damage("a", DamageSpec{.source = /*source=*/"", .damage_val = 3});  // a: 1-3 = -2
     CHECK(g.entities.find("a").is_none());  // 2 轮后仍 ≤0 → 判死
     CHECK(g.cards.discard_size() == 3);     // 2 张消耗救场 + 1 张死亡清场
 }
@@ -2281,7 +2281,7 @@ TEST_CASE("game: identity rebel kill rewards three draws")
     g.entities.find("b").unwrap()->take_damage("a", 3, false);  // b: 1
 
     TestDecider decider;  // save=false
-    deal_damage(g.ctx, decider, "a", "b", 1);
+    CombatResolver(g.ctx, decider).deal_damage("b", DamageSpec{.source = "a", .damage_val = 1});
     CHECK(g.entities.find("b").is_none());
     CHECK(g.cards.hand_size("a") == 4);  // 1 + 3
 }
@@ -2302,7 +2302,7 @@ TEST_CASE("game: identity kill reward draws are tagged for the log")
         { kinds.push_back(c.event.kind); }));
 
     TestDecider decider;
-    deal_damage(g.ctx, decider, "a", "b", 1);  // 击杀反贼 → 摸 3
+    CombatResolver(g.ctx, decider).deal_damage("b", DamageSpec{.source = "a", .damage_val = 1});  // 击杀反贼 → 摸 3
 
     REQUIRE(kinds.size() == 3);
     for (auto k : kinds)
@@ -2325,7 +2325,7 @@ TEST_CASE("game: identity non-lord killing a loyalist gives no reward")
     g.entities.find("b").unwrap()->take_damage("a", 3, false);  // b: 1
 
     TestDecider decider;
-    deal_damage(g.ctx, decider, "a", "b", 1);
+    CombatResolver(g.ctx, decider).deal_damage("b", DamageSpec{.source = "a", .damage_val = 1});
     CHECK(g.entities.find("b").is_none());
     CHECK(g.cards.hand_size("a") == 1);  // 非主公杀忠臣：无奖励
 }
@@ -2344,7 +2344,7 @@ TEST_CASE("game: identity lord killing a loyalist discards hand and equipment")
     const auto discard_before = g.cards.discard_size();
 
     TestDecider decider;
-    deal_damage(g.ctx, decider, "a", "b", 1);
+    CombatResolver(g.ctx, decider).deal_damage("b", DamageSpec{.source = "a", .damage_val = 1});
     CHECK(g.entities.find("b").is_none());
     CHECK(g.cards.hand_size("a") == 0);
     CHECK(g.cards.equip_size("a") == 0);
@@ -2362,7 +2362,7 @@ TEST_CASE("game: identity traitor kill gives no reward")
     g.entities.find("b").unwrap()->take_damage("a", 3, false);  // b: 1
 
     TestDecider decider;
-    deal_damage(g.ctx, decider, "a", "b", 1);
+    CombatResolver(g.ctx, decider).deal_damage("b", DamageSpec{.source = "a", .damage_val = 1});
     CHECK(g.entities.find("b").is_none());
     CHECK(g.cards.hand_size("a") == 1);  // 击杀内奸：无奖励
 }
@@ -2377,7 +2377,7 @@ TEST_CASE("game: brawl kill still rewards three draws")
     g.entities.find("b").unwrap()->take_damage("a", 3, false);  // b: 1
 
     TestDecider decider;
-    deal_damage(g.ctx, decider, "a", "b", 1);
+    CombatResolver(g.ctx, decider).deal_damage("b", DamageSpec{.source = "a", .damage_val = 1});
     CHECK(g.entities.find("b").is_none());
     CHECK(g.cards.hand_size("a") == 4);  // 1 + 3
 }
@@ -2397,7 +2397,7 @@ TEST_CASE("game: brawl kill reward draws are tagged for the log")
         { kinds.push_back(c.event.kind); }));
 
     TestDecider decider;
-    deal_damage(g.ctx, decider, "a", "b", 1);  // 击杀 → 摸 3
+    CombatResolver(g.ctx, decider).deal_damage("b", DamageSpec{.source = "a", .damage_val = 1});  // 击杀 → 摸 3
 
     REQUIRE(kinds.size() == 3);
     for (auto k : kinds)
@@ -2415,7 +2415,7 @@ TEST_CASE("game: identity sourceless kill gives no reward")
     g.entities.find("b").unwrap()->take_damage("a", 3, false);  // b: 1
 
     TestDecider decider;
-    deal_damage(g.ctx, decider, "", "b", 1);  // 无来源（闪电类）
+    CombatResolver(g.ctx, decider).deal_damage("b", DamageSpec{.source = "", .damage_val = 1});  // 无来源（闪电类）
     CHECK(g.entities.find("b").is_none());
     CHECK(g.cards.hand_size("a") == 1);  // 来源为空：无奖励
 }
@@ -2434,7 +2434,7 @@ TEST_CASE("game: identity lord penalty keeps the judgement zone")
     g.entities.find("b").unwrap()->take_damage("a", 3, false);  // b: 1
 
     TestDecider decider;
-    deal_damage(g.ctx, decider, "a", "b", 1);
+    CombatResolver(g.ctx, decider).deal_damage("b", DamageSpec{.source = "a", .damage_val = 1});
     CHECK(g.cards.hand_size("a") == 0);
     CHECK(g.cards.equip_size("a") == 0);
     CHECK(g.cards.judge_size("a") == 1);  // 判定区不属于手牌与装备，保留
@@ -2734,7 +2734,7 @@ TEST_CASE("game: simple ai counters a delayed trick during judgement")
     g.cards.add_to_draw(Card{"d#2", "sha", Suit::Spade, 6});
 
     SimpleAI ai;
-    auto r = execute_turn(g.ctx, ai, "a");
+    auto r = TurnFlow(g.ctx, ai).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(g.cards.judge_size("a") == 0);  // 无懈抵消，乐不思蜀被弃置
     CHECK(b->get_hp() == 3);             // 出牌阶段未跳过，杀命中
@@ -2750,11 +2750,11 @@ TEST_CASE("game: next_player wraps and skips removed players")
     g.add_player("b", 1, 4);
     g.add_player("c", 2, 4);
     g.add_player("d", 3, 4);
-    CHECK(next_player(g.ctx, "a") == "b");
-    CHECK(next_player(g.ctx, "d") == "a");
+    CHECK(TurnQuery::next_player(g.ctx, "a") == "b");
+    CHECK(TurnQuery::next_player(g.ctx, "d") == "a");
     g.entities.remove("b");
-    CHECK(next_player(g.ctx, "a") == "c");  // b 已移除 → 跳过
-    CHECK(next_player(g.ctx, "d") == "a");
+    CHECK(TurnQuery::next_player(g.ctx, "a") == "c");  // b 已移除 → 跳过
+    CHECK(TurnQuery::next_player(g.ctx, "d") == "a");
 }
 
 TEST_CASE("game: prepare_game deals four initial cards to each")
@@ -2762,11 +2762,11 @@ TEST_CASE("game: prepare_game deals four initial cards to each")
     TestGame g("deck");
     g.add_player("a", 0, 4);
     g.add_player("b", 1, 4);
-    prepare_game(g.ctx, 4);
+    GameSetup(g.ctx).prepare_game(4);
     CHECK(g.cards.hand_size("a") == 4);
     CHECK(g.cards.hand_size("b") == 4);
     CHECK(g.cards.draw_size() == 108 - 8);
-    CHECK(alive_count(g.ctx) == 2);
+    CHECK(SessionQuery::alive_count(g.ctx) == 2);
 }
 
 TEST_CASE("game: same seed yields identical deal, different seed differs")
@@ -2775,7 +2775,7 @@ TEST_CASE("game: same seed yields identical deal, different seed differs")
     {
         for (int s = 0; s < 4; ++s)
             g.add_player("p" + std::to_string(s), s, 4);
-        prepare_game(g.ctx, 4);
+        GameSetup(g.ctx).prepare_game(4);
     };
 
     TestGame a("deck", 7);
@@ -2886,9 +2886,9 @@ TEST_CASE("game: effect traits are the single source of truth")
     auto sha = g.catalog.find("sha").unwrap();
     auto shan = g.catalog.find("shan").unwrap();
     auto juedou = g.catalog.find("juedou").unwrap();
-    CHECK(is_sha(*sha));
-    CHECK(!is_sha(*shan));
-    CHECK(!is_sha(*juedou));
+    CHECK(TurnQuery::is_sha(*sha));
+    CHECK(!TurnQuery::is_sha(*shan));
+    CHECK(!TurnQuery::is_sha(*juedou));
     CHECK(is_response_def(*sha, ResponseKind::Sha));
     CHECK(is_response_def(*shan, ResponseKind::Jink));
 }
@@ -2988,7 +2988,7 @@ TEST_CASE("game: turn emits draw then discard events in order")
         [&](tkw::HandlerContext<tkw::CardPlayedEvent> &) { log.push_back("play"); }));
 
     TestDecider decider;  // 不出牌
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(log == std::vector<std::string>{"draw", "draw", "discard", "discard"});
 }
@@ -3021,7 +3021,7 @@ TEST_CASE("game: play_game ends when one player kills the other")
 
     TestDecider decider;
     decider.plays = {PlayAction{"s#1", {"b"}}};
-    auto r = play_game(g.ctx, decider, "a");
+    auto r = GameLoop(g.ctx, decider).play_game("a");
     REQUIRE(r.is_ok());
     CHECK(r.unwrap().winner == "a");
     CHECK(r.unwrap().turns >= 1);
@@ -3065,7 +3065,7 @@ TEST_CASE("game: a killing blow on the turn past the cap still yields a winner")
     decider.script["a"] = {PlayAction{"s#1", {"b"}}, PlayAction{"s#2", {"b"}}};
     decider.script["b"] = {PlayAction{"s#3", {"a"}}};
 
-    auto r = play_game(g.ctx, decider, "a");
+    auto r = GameLoop(g.ctx, decider).play_game("a");
     REQUIRE(r.is_ok());
     CHECK(r.unwrap().winner == "a");
     CHECK(r.unwrap().turns == 3);
@@ -3079,7 +3079,7 @@ TEST_CASE("game: play_game still reports MaxRounds when no sole survivor at the 
     g.rules.max_turns = 1;  // 第 2 回合即超上限
 
     TestDecider decider;  // 无人出牌，多存活者到顶
-    auto r = play_game(g.ctx, decider, "a");
+    auto r = GameLoop(g.ctx, decider).play_game("a");
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == LoopError::MaxRounds);
     CHECK(g.ctx.entities->find("a").is_some());
@@ -3099,16 +3099,16 @@ TEST_CASE("game: brawl total wipe past the cap ends as a draw not MaxRounds")
     decider.ctx = &g.ctx;
 
     GameSession session;
-    REQUIRE(start_session(g.ctx, session, "a").is_ok());
-    auto r = step_session(g.ctx, decider, session);
+    REQUIRE(GameSetup(g.ctx).start_session(session, "a").is_ok());
+    auto r = GameLoop(g.ctx, decider).step_session(session);
 
     // 终局判定先于回合上限：已终局（0 存活）不再报 MaxRounds。
     CHECK(r.is_ok());
     CHECK(session.turns == 1);
     CHECK(g.ctx.entities->empty());
-    CHECK(session_over(g.ctx));
-    CHECK(session_winner(g.ctx).empty());
-    CHECK(session_camp(g.ctx) == WinCamp::None);
+    CHECK(SessionQuery::session_over(g.ctx));
+    CHECK(SessionQuery::session_winner(g.ctx).empty());
+    CHECK(SessionQuery::session_camp(g.ctx) == WinCamp::None);
 }
 
 TEST_CASE("game: brawl total wipe below the cap ends Ok")
@@ -3122,20 +3122,20 @@ TEST_CASE("game: brawl total wipe below the cap ends Ok")
     decider.ctx = &g.ctx;
 
     GameSession session;
-    REQUIRE(start_session(g.ctx, session, "a").is_ok());
-    auto r = step_session(g.ctx, decider, session);
+    REQUIRE(GameSetup(g.ctx).start_session(session, "a").is_ok());
+    auto r = GameLoop(g.ctx, decider).step_session(session);
 
     CHECK(r.is_ok());
     CHECK(session.turns == 1);
-    CHECK(session_over(g.ctx));
-    CHECK(session_winner(g.ctx).empty());
+    CHECK(SessionQuery::session_over(g.ctx));
+    CHECK(SessionQuery::session_winner(g.ctx).empty());
 }
 
 TEST_CASE("game: play_game with no players is an error")
 {
     TestGame g("deck");
     TestDecider decider;
-    auto r = play_game(g.ctx, decider, "a");
+    auto r = GameLoop(g.ctx, decider).play_game("a");
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == LoopError::NoPlayers);
 }
@@ -3151,18 +3151,18 @@ TEST_CASE("game: session starts, steps and reports over/winner")
     decider.plays = {PlayAction{"s#1", {"b"}}};
 
     GameSession session;
-    REQUIRE(start_session(g.ctx, session, "a").is_ok());
+    REQUIRE(GameSetup(g.ctx).start_session(session, "a").is_ok());
     CHECK(session.started);
     CHECK(session.current == "a");
     CHECK(session.turns == 0);
-    CHECK(!session_over(g.ctx));
-    CHECK(session_winner(g.ctx).empty());
+    CHECK(!SessionQuery::session_over(g.ctx));
+    CHECK(SessionQuery::session_winner(g.ctx).empty());
 
-    auto r = step_session(g.ctx, decider, session);
+    auto r = GameLoop(g.ctx, decider).step_session(session);
     REQUIRE(r.is_ok());
     CHECK(session.turns == 1);
-    CHECK(session_over(g.ctx));
-    CHECK(session_winner(g.ctx) == "a");
+    CHECK(SessionQuery::session_over(g.ctx));
+    CHECK(SessionQuery::session_winner(g.ctx) == "a");
 }
 
 TEST_CASE("game: identity lord death with survivors ends as rebel camp")
@@ -3180,9 +3180,9 @@ TEST_CASE("game: identity lord death with survivors ends as rebel camp")
     declare_death(g.ctx, "P0");
 
     CHECK(g.entities.size() == 3);
-    CHECK(session_over(g.ctx));
-    CHECK(session_camp(g.ctx) == WinCamp::RebelCamp);
-    CHECK(session_winner(g.ctx) == "P2");  // 首个反贼
+    CHECK(SessionQuery::session_over(g.ctx));
+    CHECK(SessionQuery::session_camp(g.ctx) == WinCamp::RebelCamp);
+    CHECK(SessionQuery::session_winner(g.ctx) == "P2");  // 首个反贼
 }
 
 TEST_CASE("game: identity lord camp wins when hostiles are dead")
@@ -3200,9 +3200,9 @@ TEST_CASE("game: identity lord camp wins when hostiles are dead")
     declare_death(g.ctx, "P2");
     declare_death(g.ctx, "P3");
 
-    CHECK(session_over(g.ctx));
-    CHECK(session_camp(g.ctx) == WinCamp::LordCamp);
-    CHECK(session_winner(g.ctx) == "P0");
+    CHECK(SessionQuery::session_over(g.ctx));
+    CHECK(SessionQuery::session_camp(g.ctx) == WinCamp::LordCamp);
+    CHECK(SessionQuery::session_winner(g.ctx) == "P0");
 }
 
 TEST_CASE("game: identity traitor wins only as sole survivor")
@@ -3216,12 +3216,12 @@ TEST_CASE("game: identity traitor wins only as sole survivor")
                       {"P2", Role::Traitor}});
 
     declare_death(g.ctx, "P0");  // 内奸非唯一存活 → 反贼胜
-    CHECK(session_camp(g.ctx) == WinCamp::RebelCamp);
-    CHECK(session_winner(g.ctx) == "P1");
+    CHECK(SessionQuery::session_camp(g.ctx) == WinCamp::RebelCamp);
+    CHECK(SessionQuery::session_winner(g.ctx) == "P1");
 
     declare_death(g.ctx, "P1");  // 内奸唯一存活 → 内奸胜
-    CHECK(session_camp(g.ctx) == WinCamp::TraitorCamp);
-    CHECK(session_winner(g.ctx) == "P2");
+    CHECK(SessionQuery::session_camp(g.ctx) == WinCamp::TraitorCamp);
+    CHECK(SessionQuery::session_winner(g.ctx) == "P2");
 }
 
 TEST_CASE("game: identity empty board is a draw")
@@ -3240,10 +3240,10 @@ TEST_CASE("game: identity empty board is a draw")
         declare_death(g.ctx, id);
 
     CHECK(g.entities.empty());
-    CHECK(session_over(g.ctx));
-    CHECK(session_camp(g.ctx) == WinCamp::Draw);
-    CHECK(session_camp(g.ctx) != WinCamp::RebelCamp);
-    CHECK(session_winner(g.ctx).empty());
+    CHECK(SessionQuery::session_over(g.ctx));
+    CHECK(SessionQuery::session_camp(g.ctx) == WinCamp::Draw);
+    CHECK(SessionQuery::session_camp(g.ctx) != WinCamp::RebelCamp);
+    CHECK(SessionQuery::session_winner(g.ctx).empty());
 }
 
 TEST_CASE("game: identity cap with hostiles alive is MaxRounds")
@@ -3256,15 +3256,15 @@ TEST_CASE("game: identity cap with hostiles alive is MaxRounds")
 
     TestDecider decider;  // 无人出牌，敌对存活到顶
     GameSession session;
-    REQUIRE(start_session(g.ctx, session, "P0").is_ok());
+    REQUIRE(GameSetup(g.ctx).start_session(session, "P0").is_ok());
 
-    CHECK(step_session(g.ctx, decider, session).is_ok());
+    CHECK(GameLoop(g.ctx, decider).step_session(session).is_ok());
     CHECK(session.turns == 1);
 
-    auto r = step_session(g.ctx, decider, session);
+    auto r = GameLoop(g.ctx, decider).step_session(session);
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == LoopError::MaxRounds);
-    CHECK(!session_over(g.ctx));
+    CHECK(!SessionQuery::session_over(g.ctx));
     CHECK(g.entities.find("P0").is_some());
     CHECK(g.entities.find("P1").is_some());
 }
@@ -3307,13 +3307,13 @@ TEST_CASE("game: identity lord killed on the cap turn ends Ok")
     decider.script["P1"] = {PlayAction{"s#1", {"P0"}}};
     decider.script["P3"] = {PlayAction{"s#3", {"P0"}}};
 
-    auto r = play_game(g.ctx, decider, "P1");
+    auto r = GameLoop(g.ctx, decider).play_game("P1");
     REQUIRE(r.is_ok());
     CHECK(r.unwrap().turns == 3);  // 致死击落在首个超上限回合
     CHECK(r.unwrap().camp == WinCamp::RebelCamp);
     CHECK(r.unwrap().winner == "P1");
     CHECK(g.entities.find("P0").is_none());
-    CHECK(session_over(g.ctx));
+    CHECK(SessionQuery::session_over(g.ctx));
 }
 
 TEST_CASE("game: brawl session_camp is None and over is size<=1")
@@ -3324,17 +3324,17 @@ TEST_CASE("game: brawl session_camp is None and over is size<=1")
 
     CHECK(mode_of(g.ctx) == GameMode::Brawl);
     CHECK(g.roles.empty());
-    CHECK(!session_over(g.ctx));
-    CHECK(session_camp(g.ctx) == WinCamp::None);
+    CHECK(!SessionQuery::session_over(g.ctx));
+    CHECK(SessionQuery::session_camp(g.ctx) == WinCamp::None);
 
     declare_death(g.ctx, "a");
-    CHECK(session_over(g.ctx));
-    CHECK(session_camp(g.ctx) == WinCamp::None);
-    CHECK(session_winner(g.ctx) == "b");
+    CHECK(SessionQuery::session_over(g.ctx));
+    CHECK(SessionQuery::session_camp(g.ctx) == WinCamp::None);
+    CHECK(SessionQuery::session_winner(g.ctx) == "b");
 
     declare_death(g.ctx, "b");
-    CHECK(session_winner(g.ctx).empty());
-    CHECK(session_camp(g.ctx) == WinCamp::None);
+    CHECK(SessionQuery::session_winner(g.ctx).empty());
+    CHECK(SessionQuery::session_camp(g.ctx) == WinCamp::None);
 }
 
 TEST_CASE("game: identity rebel representative stays stable after the rebel dies")
@@ -3352,10 +3352,10 @@ TEST_CASE("game: identity rebel representative stays stable after the rebel dies
     declare_death(g.ctx, "P2");  // 反贼先阵亡
     declare_death(g.ctx, "P0");  // 主公随后阵亡
 
-    CHECK(session_over(g.ctx));
-    CHECK(session_camp(g.ctx) == WinCamp::RebelCamp);
+    CHECK(SessionQuery::session_over(g.ctx));
+    CHECK(SessionQuery::session_camp(g.ctx) == WinCamp::RebelCamp);
     CHECK(g.entities.find("P2").is_none());
-    CHECK(session_winner(g.ctx) == "P2");  // 已阵亡仍作稳定代表
+    CHECK(SessionQuery::session_winner(g.ctx) == "P2");  // 已阵亡仍作稳定代表
 }
 
 TEST_CASE("game: identity camp is None until the session ends")
@@ -3370,9 +3370,9 @@ TEST_CASE("game: identity camp is None until the session ends")
                       {"P2", Role::Rebel},
                       {"P3", Role::Traitor}});
 
-    CHECK(!session_over(g.ctx));
-    CHECK(session_camp(g.ctx) == WinCamp::None);
-    CHECK(session_winner(g.ctx).empty());
+    CHECK(!SessionQuery::session_over(g.ctx));
+    CHECK(SessionQuery::session_camp(g.ctx) == WinCamp::None);
+    CHECK(SessionQuery::session_winner(g.ctx).empty());
 }
 
 TEST_CASE("game: player killed by lightning stops acting that turn")
@@ -3386,7 +3386,7 @@ TEST_CASE("game: player killed by lightning stops acting that turn")
 
     TestDecider decider;
     decider.plays = {PlayAction{"s#1", {"b"}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(g.entities.find("a").is_none());  // 雷伤 3 → 死亡
     CHECK(b->get_hp() == 4);                 // 未能继续出牌
@@ -3399,12 +3399,12 @@ TEST_CASE("game: next_after_seat wraps and skips removed seats")
     g.add_player("a", 0, 4);
     g.add_player("b", 1, 4);
     g.add_player("c", 2, 4);
-    CHECK(next_after_seat(g.ctx, 0) == "b");
-    CHECK(next_after_seat(g.ctx, 1) == "c");
-    CHECK(next_after_seat(g.ctx, 2) == "a");  // 环绕
+    CHECK(SessionQuery::next_after_seat(g.ctx, 0) == "b");
+    CHECK(SessionQuery::next_after_seat(g.ctx, 1) == "c");
+    CHECK(SessionQuery::next_after_seat(g.ctx, 2) == "a");  // 环绕
     g.entities.remove("b");
-    CHECK(next_after_seat(g.ctx, 0) == "c");  // 跳过已移除
-    CHECK(next_after_seat(g.ctx, 2) == "a");
+    CHECK(SessionQuery::next_after_seat(g.ctx, 0) == "c");  // 跳过已移除
+    CHECK(SessionQuery::next_after_seat(g.ctx, 2) == "a");
 }
 
 TEST_CASE("game: step_session advances past a player who died in their turn")
@@ -3421,7 +3421,7 @@ TEST_CASE("game: step_session advances past a player who died in their turn")
     GameSession session;
     session.current = "a";
     session.started = true;
-    auto r = step_session(g.ctx, decider, session);
+    auto r = GameLoop(g.ctx, decider).step_session(session);
     REQUIRE(r.is_ok());
     CHECK(g.entities.find("a").is_none());
     CHECK(session.current == "b");  // 下一位 = 座位 1
@@ -3441,7 +3441,7 @@ TEST_CASE("game: step_session writes the turn root cause to the optional out par
     session.current = "a";
     session.started = true;
     TurnError root = TurnError::PlayRejected;
-    auto r = step_session(g.ctx, decider, session, &root);
+    auto r = GameLoop(g.ctx, decider).step_session(session, &root);
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == LoopError::TurnFailed);
     CHECK(root == TurnError::CardNotInHand);
@@ -3465,14 +3465,14 @@ TEST_CASE("game: failed turn is consumed so re-entry does not re-draw")
     session.current = "a";
     session.started = true;
 
-    auto r1 = step_session(g.ctx, decider, session);
+    auto r1 = GameLoop(g.ctx, decider).step_session(session);
     REQUIRE(r1.is_err());
     CHECK(r1.unwrap_err() == LoopError::TurnFailed);
     CHECK(g.cards.hand_size("a") == 3);  // 摸牌阶段已部分结算（1 张原有 + 摸 2）
     CHECK(session.current == "b");       // 消费：轮到下一角色
     CHECK(session.turns == 1);
 
-    auto r2 = step_session(g.ctx, decider, session);
+    auto r2 = GameLoop(g.ctx, decider).step_session(session);
     REQUIRE(r2.is_ok());
     CHECK(g.cards.hand_size("a") == 3);  // 不再为 a 重复摸牌
     CHECK(session.current == "a");       // b 之后回到 a
@@ -3497,13 +3497,13 @@ TEST_CASE("game: failed turn is consumed so re-entry does not replay a play")
     session.current = "a";
     session.started = true;
 
-    auto r1 = step_session(g.ctx, decider, session);
+    auto r1 = GameLoop(g.ctx, decider).step_session(session);
     REQUIRE(r1.is_err());
     CHECK(b->get_hp() == 3);         // 出牌已生效（部分结算）
     CHECK(session.current == "b");   // 失败回合被消费
     CHECK(session.turns == 1);
 
-    auto r2 = step_session(g.ctx, decider, session);
+    auto r2 = GameLoop(g.ctx, decider).step_session(session);
     REQUIRE(r2.is_ok());
     CHECK(b->get_hp() == 3);             // 不再被 a 重放杀
     CHECK(g.cards.hand_size("a") == 2);  // 也不再为 a 重放摸牌
@@ -3522,7 +3522,7 @@ TEST_CASE("game: step_session leaves the root out param untouched on success")
     session.current = "a";
     session.started = true;
     TurnError root = TurnError::PlayRejected;
-    auto r = step_session(g.ctx, decider, session, &root);
+    auto r = GameLoop(g.ctx, decider).step_session(session, &root);
     REQUIRE(r.is_ok());
     CHECK(root == TurnError::PlayRejected);  // 成功路径零写入
 }
@@ -3558,7 +3558,7 @@ TEST_CASE("game: legal_actions are all accepted by the engine")
         build(fresh);
         TestDecider d;
         d.plays = {PlayAction{act.card.instance_id, act.targets}};
-        auto r = execute_turn(fresh.ctx, d, "a");
+        auto r = TurnFlow(fresh.ctx, d).execute_turn("a");
         INFO("card=" << act.card.def_id);
         CHECK(r.is_ok());
     }
@@ -3584,7 +3584,7 @@ TEST_CASE("game: legal_actions are all accepted by the engine")
         build_fangtian(fresh);
         TestDecider d;
         d.plays = {PlayAction{act.card.instance_id, act.targets}};
-        auto r = execute_turn(fresh.ctx, d, "a");
+        auto r = TurnFlow(fresh.ctx, d).execute_turn("a");
         INFO("card=" << act.card.def_id << " targets=" << act.targets.size());
         CHECK(r.is_ok());
         if (act.targets.size() > 1)
@@ -3615,7 +3615,7 @@ TEST_CASE("game: legal_actions are all accepted by the engine")
         TestDecider d;
         d.plays = {
             PlayAction{act.card.instance_id, act.targets, act.second_instance_id}};
-        auto r = execute_turn(fresh.ctx, d, "a");
+        auto r = TurnFlow(fresh.ctx, d).execute_turn("a");
         INFO("card=" << act.card.def_id << " targets=" << act.targets.size());
         CHECK(r.is_ok());
         if (!act.second_instance_id.empty())
@@ -4087,7 +4087,7 @@ TEST_CASE("game: jiu is limited to once per turn")
     // 回合流程内连出两张酒：第二次被闸门拒绝并映射为回合错误
     TestDecider decider;
     decider.plays = {PlayAction{"j#0", {"a"}}, PlayAction{"j#1", {"a"}}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == TurnError::AnalepticLimitExceeded);
 }
@@ -4128,14 +4128,14 @@ TEST_CASE("game: jiu state resets at turn boundaries")
     TestDecider decider;
     g.ctx.jiu_damage_owner = "a";
     g.ctx.jiu_used = true;
-    REQUIRE(execute_turn(g.ctx, decider, "a").is_ok());
+    REQUIRE(TurnFlow(g.ctx, decider).execute_turn("a").is_ok());
     CHECK(g.ctx.jiu_damage_owner.empty());
     CHECK_FALSE(g.ctx.jiu_used);
 
     // 跨玩家复用同一 GameContext：状态不泄漏到下一角色
     g.ctx.jiu_damage_owner = "a";
     g.ctx.jiu_used = true;
-    REQUIRE(execute_turn(g.ctx, decider, "b").is_ok());
+    REQUIRE(TurnFlow(g.ctx, decider).execute_turn("b").is_ok());
     CHECK(g.ctx.jiu_damage_owner.empty());
     CHECK_FALSE(g.ctx.jiu_used);
 }
@@ -4150,7 +4150,7 @@ TEST_CASE("game: jiu rescues its owner from dying")
 
     TestDecider decider;
     decider.save = true;
-    deal_damage(g.ctx, decider, "a", "b", 1);  // b 濒死 → 酒自救
+    CombatResolver(g.ctx, decider).deal_damage("b", DamageSpec{.source = "a", .damage_val = 1});  // b 濒死 → 酒自救
 
     CHECK(g.entities.find("b").is_some());
     CHECK(b->get_hp() == 1);
@@ -4170,7 +4170,7 @@ TEST_CASE("game: jiu cannot rescue another player")
 
     TestDecider decider;
     decider.save = true;
-    deal_damage(g.ctx, decider, "a", "b", 1);  // b 濒死，c 的酒不可用
+    CombatResolver(g.ctx, decider).deal_damage("b", DamageSpec{.source = "a", .damage_val = 1});  // b 濒死，c 的酒不可用
 
     CHECK(g.entities.find("b").is_none());     // 无人可救 → 阵亡
     CHECK(g.cards.hand_size("c") == 1);        // c 的酒未被消耗
@@ -4282,7 +4282,7 @@ TEST_CASE("game: silver lion caps damage to one")
     CHECK(b->get_hp() == 3);  // 普通杀 1 点
 
     // 非杀路径（闪电类）同样封顶：3 点 → 1 点
-    deal_damage(g.ctx, decider, "", "b", 3, tkw::card::DamageType::Thunder);
+    CombatResolver(g.ctx, decider).deal_damage("b", DamageSpec{.source = "", .damage_val = 3, .damage_type = tkw::card::DamageType::Thunder});
     CHECK(b->get_hp() == 2);
 }
 
@@ -4366,7 +4366,7 @@ TEST_CASE("game: silver lion heals on armor replacement")
     b->take_damage("", 1, false);  // 4 → 3
 
     const auto armor = g.cards.hand("b")[0];
-    REQUIRE(equip_card(g.ctx, "b", armor).is_ok());
+    REQUIRE(TurnFlow::equip_card(g.ctx, "b", armor).is_ok());
     CHECK(b->get_hp() == 4);              // 旧白银狮子离场 → 回复 1
     CHECK(g.cards.equip_size("b") == 1);  // 新防具已就位
 }
@@ -4718,7 +4718,7 @@ TEST_CASE("game: simple ai uses fangtian multi-target sha in its turn")
     g.give("d", "shan", "ds#1");  // 让过拆先打出，杀成为最后一张手牌
 
     SimpleAI ai;
-    auto r = execute_turn(g.ctx, ai, "a");
+    auto r = TurnFlow(g.ctx, ai).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 3);
     CHECK(c->get_hp() == 3);
@@ -4834,7 +4834,7 @@ TEST_CASE("game: zhangba fangtian rejects duplicated multi-target")
 
     TestDecider decider;
     decider.plays = {PlayAction{"x#1", {"b", "b"}, "x#2"}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == TurnError::InvalidTarget);
     CHECK(b->get_hp() == 4);
@@ -4982,7 +4982,7 @@ TEST_CASE("game: zhangba uses two hand cards as a sha")
 
     TestDecider decider;
     decider.plays = {PlayAction{"x#1", {"b"}, "x#2"}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 3);            // 虚拟杀命中
     CHECK(g.cards.hand_size("a") == 0); // 两张牌都消耗
@@ -5002,7 +5002,7 @@ TEST_CASE("game: zhangba virtual sha is not black")
 
     TestDecider decider;
     decider.plays = {PlayAction{"x#1", {"b"}, "x#2"}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 3);  // 虚拟杀无花色，仁王盾黑杀判定不适用
 }
@@ -5017,7 +5017,7 @@ TEST_CASE("game: zhangba virtual sha requires the equipped weapon")
 
     TestDecider decider;
     decider.plays = {PlayAction{"x#1", {"b"}, "x#2"}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == TurnError::PlayRejected);
     CHECK(b->get_hp() == 4);
@@ -5040,7 +5040,7 @@ TEST_CASE("game: zhangba virtual sha counts toward the sha limit")
         PlayAction{"x#1", {"b"}, "x#2"},
         PlayAction{"x#3", {"b"}, "x#4"},  // 本回合第二个「杀」：超限
     };
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == TurnError::ShaLimitExceeded);
     CHECK(b->get_hp() == 3);         // 第一个虚拟杀命中
@@ -5062,7 +5062,7 @@ TEST_CASE("game: zhangba plus fangtian allows multi-target when the pair is the 
 
     TestDecider decider;
     decider.plays = {PlayAction{"x#1", {"b", "c", "d"}, "x#2"}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 3);
     CHECK(c->get_hp() == 3);
@@ -5084,7 +5084,7 @@ TEST_CASE("game: zhangba plus fangtian does not add targets when the pair is not
 
     TestDecider decider;
     decider.plays = {PlayAction{"x#1", {"b", "c"}, "x#2"}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == TurnError::InvalidTarget);
     CHECK(b->get_hp() == 4);
@@ -5093,7 +5093,7 @@ TEST_CASE("game: zhangba plus fangtian does not add targets when the pair is not
     // 单目标仍合法
     TestDecider decider2;
     decider2.plays = {PlayAction{"x#1", {"b"}, "x#2"}};
-    auto r2 = execute_turn(g.ctx, decider2, "a");
+    auto r2 = TurnFlow(g.ctx, decider2).execute_turn("a");
     REQUIRE(r2.is_ok());
     CHECK(b->get_hp() == 3);
     CHECK(c->get_hp() == 4);
@@ -5138,7 +5138,7 @@ TEST_CASE("game: simple ai uses zhangba before other tricks when holding no sha"
     g.give("a", "tao", "x#2");
 
     SimpleAI ai;
-    auto r = execute_turn(g.ctx, ai, "a");
+    auto r = TurnFlow(g.ctx, ai).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 3);  // 两张牌当杀打出，而非先打无中生有
     CHECK(g.cards.hand_size("a") == 0);
@@ -5188,7 +5188,7 @@ TEST_CASE("game: wusheng plays a red card as sha")
 
     TestDecider decider;
     decider.plays = {PlayAction{"x#1", {"b"}, "", false, true}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 3);             // 转化杀命中
     CHECK(g.cards.hand_size("a") == 2);  // 1 + 摸2 - 打出1
@@ -5206,7 +5206,7 @@ TEST_CASE("game: wusheng rejects a black card conversion")
 
     TestDecider decider;
     decider.plays = {PlayAction{"x#1", {"b"}, "", false, true}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == TurnError::PlayRejected);
     CHECK(b->get_hp() == 4);
@@ -5223,7 +5223,7 @@ TEST_CASE("game: wusheng requires the hero skill")
 
     TestDecider decider;
     decider.plays = {PlayAction{"x#1", {"b"}, "", false, true}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == TurnError::PlayRejected);
     CHECK(b->get_hp() == 4);
@@ -5243,7 +5243,7 @@ TEST_CASE("game: wusheng converted sha counts toward the sha limit")
     TestDecider decider;
     decider.plays = {PlayAction{"x#1", {"b"}, "", false, true},
                      PlayAction{"x#2", {"b"}, "", false, true}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == TurnError::ShaLimitExceeded);
     CHECK(b->get_hp() == 3);         // 第一个转化杀命中
@@ -5262,7 +5262,7 @@ TEST_CASE("game: simple ai uses wusheng red card as sha when holding no sha")
     g.cards.add_to_hand("a", Card{"x#2", "shan", Suit::Spade, 4});  // 黑色不可转化
 
     SimpleAI ai;
-    auto r = execute_turn(g.ctx, ai, "a");
+    auto r = TurnFlow(g.ctx, ai).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 3);             // 手牌无真杀，红无中当作杀打出
     CHECK(g.cards.hand_size("a") == 1);  // 仅黑闪留下
@@ -5572,7 +5572,7 @@ TEST_CASE("game: longdan plays a jink as sha")
 
     TestDecider decider;
     decider.plays = {PlayAction{"x#1", {"b"}, "", false, true}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 3);             // 闪当杀命中
     CHECK(g.cards.hand_size("a") == 0);
@@ -5590,7 +5590,7 @@ TEST_CASE("game: longdan rejects a non-jink red card conversion")
 
     TestDecider decider;
     decider.plays = {PlayAction{"x#1", {"b"}, "", false, true}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == TurnError::PlayRejected);
     CHECK(b->get_hp() == 4);
@@ -5607,7 +5607,7 @@ TEST_CASE("game: longdan requires the hero skill")
 
     TestDecider decider;
     decider.plays = {PlayAction{"x#1", {"b"}, "", false, true}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == TurnError::PlayRejected);
     CHECK(b->get_hp() == 4);
@@ -5627,7 +5627,7 @@ TEST_CASE("game: longdan converted sha counts toward the sha limit")
     TestDecider decider;
     decider.plays = {PlayAction{"x#1", {"b"}, "", false, true},
                      PlayAction{"x#2", {"b"}, "", false, true}};
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == TurnError::ShaLimitExceeded);
     CHECK(b->get_hp() == 3);             // 第一个转化杀命中
@@ -5644,7 +5644,7 @@ TEST_CASE("game: simple ai uses longdan jink as sha when holding no sha")
     g.cards.add_to_hand("a", Card{"x#1", "shan", Suit::Heart, 3});
 
     SimpleAI ai;
-    auto r = execute_turn(g.ctx, ai, "a");
+    auto r = TurnFlow(g.ctx, ai).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(b->get_hp() == 3);             // 手牌无真杀，闪当作杀打出
     CHECK(g.cards.hand_size("a") == 0);
@@ -5979,7 +5979,7 @@ TEST_CASE("game: tiesuo recast discards and draws one")
     EventLog log(g.bus);
     TestDecider decider;
     decider.plays.push_back(PlayAction{"t#0", {}, "", true});
-    REQUIRE(run_play_phase(g.ctx, decider, "a").is_ok());
+    REQUIRE(TurnFlow(g.ctx, decider).run_play_phase("a").is_ok());
 
     // 弃铁索、摸一张杀：手牌只剩摸到的牌，弃牌堆含铁索，摸牌堆空
     REQUIRE(g.cards.hand("a").size() == 1);
@@ -6129,7 +6129,7 @@ TEST_CASE("game: chained lightning thunder damage transmits")
     g.cards.add_to_draw(Card{"j#0", "sha", Suit::Spade, 8});
 
     TestDecider decider;
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(a->get_hp() == 1);  // 闪电雷伤 3
     CHECK(b->get_hp() == 1);  // 雷伤命中横置者，经连环传导
@@ -6273,7 +6273,7 @@ TEST_CASE("game: chain respects silver lion cap at origin")
     g.equip("a", "silver_lion", "e#0");
 
     TestDecider decider;
-    deal_damage(g.ctx, decider, "p", "a", 3, tkw::card::DamageType::Fire);
+    CombatResolver(g.ctx, decider).deal_damage("a", DamageSpec{.source = "p", .damage_val = 3, .damage_type = tkw::card::DamageType::Fire});
     CHECK(a->get_hp() == 3);  // 白银狮子封顶：3 → 1
     CHECK(b->get_hp() == 3);  // 传导取封顶后的实际值 1
     CHECK_FALSE(a->get_chained());
@@ -6640,7 +6640,7 @@ TEST_CASE("game: yingzi draws one extra card in the draw phase")
     g.cards.build_deck(g.catalog);
 
     TestDecider decider;  // 无出牌脚本
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(g.cards.hand_size("a") == 3);  // 摸牌阶段 2 + 英姿 1；上限 4 不弃
 
@@ -6649,7 +6649,7 @@ TEST_CASE("game: yingzi draws one extra card in the draw phase")
     plain.add_player("a", 0, 4);
     plain.cards.build_deck(plain.catalog);
     TestDecider d2;
-    auto r2 = execute_turn(plain.ctx, d2, "a");
+    auto r2 = TurnFlow(plain.ctx, d2).execute_turn("a");
     REQUIRE(r2.is_ok());
     CHECK(plain.cards.hand_size("a") == 2);
 }
@@ -6668,7 +6668,7 @@ TEST_CASE("game: bingliang skip draw suppresses yingzi")
     g.cards.add_to_draw(Card{"j#0", "sha", Suit::Spade, 8});
 
     TestDecider decider;  // 无出牌脚本
-    auto r = execute_turn(g.ctx, decider, "a");
+    auto r = TurnFlow(g.ctx, decider).execute_turn("a");
     REQUIRE(r.is_ok());
     CHECK(g.cards.hand_size("a") == 1);  // 摸牌阶段整体跳过：英姿 +1 也不生效
     CHECK(g.cards.judge_size("a") == 0);
@@ -6689,7 +6689,7 @@ TEST_CASE("game: fankui steals a card from the damage source")
     TestDecider decider;
     decider.hero_triggers = {tkw::hero::HeroSkill::FanKui};
 
-    deal_damage(g.ctx, decider, "a", "b", 1);
+    CombatResolver(g.ctx, decider).deal_damage("b", DamageSpec{.source = "a", .damage_val = 1});
 
     CHECK(b->get_hp() == 2);
     CHECK(g.cards.hand_size("a") == 1);
@@ -6716,7 +6716,7 @@ TEST_CASE("game: fankui not offered without the hero")
     TestDecider decider;
     decider.hero_triggers = {tkw::hero::HeroSkill::FanKui};
 
-    deal_damage(g.ctx, decider, "a", "b", 1);
+    CombatResolver(g.ctx, decider).deal_damage("b", DamageSpec{.source = "a", .damage_val = 1});
 
     CHECK(b->get_hp() == 2);
     CHECK(decider.hero_trigger_calls.empty());
@@ -6737,7 +6737,7 @@ TEST_CASE("game: fankui declines leaves cards untouched")
     EventLog log(g.bus);
     TestDecider decider;  // hero_triggers 为空：询问后拒绝发动
 
-    deal_damage(g.ctx, decider, "a", "b", 1);
+    CombatResolver(g.ctx, decider).deal_damage("b", DamageSpec{.source = "a", .damage_val = 1});
 
     CHECK(b->get_hp() == 2);
     REQUIRE(decider.hero_trigger_calls.size() == 1);
@@ -6757,7 +6757,7 @@ TEST_CASE("game: fankui not offered when source has no cards")
     TestDecider decider;
     decider.hero_triggers = {tkw::hero::HeroSkill::FanKui};
 
-    deal_damage(g.ctx, decider, "a", "b", 1);
+    CombatResolver(g.ctx, decider).deal_damage("b", DamageSpec{.source = "a", .damage_val = 1});
 
     CHECK(b->get_hp() == 2);
     CHECK(decider.hero_trigger_calls.empty());
@@ -6773,7 +6773,7 @@ TEST_CASE("game: fankui not offered for sourceless damage")
     TestDecider decider;
     decider.hero_triggers = {tkw::hero::HeroSkill::FanKui};
 
-    deal_damage(g.ctx, decider, "", "b", 1);
+    CombatResolver(g.ctx, decider).deal_damage("b", DamageSpec{.source = "", .damage_val = 1});
 
     CHECK(b->get_hp() == 2);
     CHECK(decider.hero_trigger_calls.empty());
@@ -6791,7 +6791,7 @@ TEST_CASE("game: fankui triggers before dying resolution")
     TestDecider decider;  // 不救：b 随后死亡
     decider.hero_triggers = {tkw::hero::HeroSkill::FanKui};
 
-    deal_damage(g.ctx, decider, "a", "b", 1);
+    CombatResolver(g.ctx, decider).deal_damage("b", DamageSpec{.source = "a", .damage_val = 1});
 
     REQUIRE(decider.hero_trigger_calls.size() == 1);
     const auto &lines = log.lines();
@@ -6821,7 +6821,7 @@ TEST_CASE("game: fankui is deterministic across identical games")
         EventLog log(g.bus);
         TestDecider decider;
         decider.hero_triggers = {tkw::hero::HeroSkill::FanKui};
-        deal_damage(g.ctx, decider, "b", "a", 1);
+        CombatResolver(g.ctx, decider).deal_damage("a", DamageSpec{.source = "b", .damage_val = 1});
         return log.lines();
     };
     CHECK(run() == run());

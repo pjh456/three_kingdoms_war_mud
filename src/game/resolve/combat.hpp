@@ -464,30 +464,6 @@ namespace tkw
                            .build());
             }
         }
-
-        /**
-         * @brief 造成伤害（便捷转发）。
-         * @details 等价于 `CombatResolver(ctx, ai).deal_damage(target, spec)`；
-         *          保留以兼容既有调用点与测试。
-         * @param[in,out] ctx          对局上下文。
-         * @param[in,out] ai           决策源。
-         * @param[in]     source       伤害来源（空串 = 无来源）。
-         * @param[in]     target       受伤实体 id。
-         * @param[in]     amount       伤害量。
-         * @param[in]     type         伤害属性。
-         * @param[in]     ignore_armor 是否无视防具。
-         * @param[in]     indirect     是否间接伤害。
-         * @see CombatResolver::deal_damage
-         */
-        inline void deal_damage(
-            GameContext &ctx, DecisionSource &ai, const std::string &source,
-            const std::string &target, int amount,
-            card::DamageType type = card::DamageType::Normal,
-            bool ignore_armor = false, bool indirect = false)
-        {
-            CombatResolver(ctx, ai).deal_damage(
-                target, DamageSpec{source, amount, type, ignore_armor, indirect});
-        }
     }
 }
 
