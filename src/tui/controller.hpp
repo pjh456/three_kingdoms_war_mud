@@ -116,14 +116,7 @@ namespace tkw
              * @brief 建默认对局并绑定日志/统计，随后刷新模型。
              * @note  建局失败只写日志提示，不抛异常；初始摸牌事件先于开局发牌订阅。
              */
-            void bootstrap()
-            {
-                m_session.base = m_base;
-                start_game(m_base);
-                if (!m_session.active)
-                    append_line("输入命令：new / deal / step / run / status / "
-                                "save / load / quit（help 查看用法）");
-            }
+            void bootstrap();
 
             /**
              * @brief  解析并执行一行命令；反馈一律写入日志。
@@ -131,101 +124,14 @@ namespace tkw
              * @note   主线程调用；new/load/save 在 worker 运行中被拒绝，step/run
              *         在运行中同样拒绝（worker 内另有一道 running 门）。
              */
-            void execute_line(std::string_view line)
-            {
-                auto parsed = parse_command(line, m_base);
-                if (parsed.is_err())
-                {
-                    append_line(parsed.unwrap_err());
-                    return;
-                }
-                const auto &cmd = parsed.unwrap();
-                switch (cmd.kind)
-                {
-                case CommandKind::New:
-                    if (require_idle())
-                        start_game(cmd.options);
-                    break;
-                case CommandKind::Deal:
-                    if (!require_idle())
-                        break;
-                    start_game(cmd.options);
-                    if (m_session.active && m_session.game)
-                        start_job(cmd.run_to_end);
-                    break;
-                case CommandKind::Step:
-                    if (require_idle())
-                        do_step(false);
-                    break;
-                case CommandKind::Run:
-                    if (require_idle())
-                        do_step(true);
-                    break;
-                case CommandKind::Status:
-                    do_status();
-                    break;
-                case CommandKind::Save:
-                    if (require_idle())
-                        do_save(cmd.file);
-                    break;
-                case CommandKind::Load:
-                    if (require_idle())
-                        do_load(cmd.file);
-                    break;
-                case CommandKind::Quit:
-                    request_quit();
-                    break;
-                case CommandKind::Help:
-                    do_help(cmd);
-                    break;
-                case CommandKind::Cards:
-                    if (require_idle())
-                        do_cards(cmd);
-                    break;
-                case CommandKind::Rules:
-                    if (require_idle())
-                        do_rules(cmd);
-                    break;
-                case CommandKind::Audit:
-                    if (require_idle())
-                        do_audit(cmd);
-                    break;
-                case CommandKind::Decks:
-                    if (require_idle())
-                        do_decks(cmd);
-                    break;
-                case CommandKind::Heroes:
-                    if (require_idle())
-                        do_heroes(cmd);
-                    break;
-                case CommandKind::Simulate:
-                    if (require_idle())
-                        start_simulate_job(cmd);
-                    break;
-                }
-            }
+            void execute_line(std::string_view line);
 
             /**
              * @brief 取消 worker、自动存档、退订句柄，最后触发退出回调。
              * @note 关停顺序不可颠倒：join 后引擎静默，才能读会话写存档与退订；
              *       幂等，重复调用直接返回。
              */
-            void request_quit()
-            {
-                if (quit_requested_)
-                    return;
-                quit_requested_ = true;
-                // 先唤醒可能阻塞在真人待决的 worker，再置取消位并 join，避免互等。
-                if (m_decision)
-                    m_decision->cancel();
-                m_cancel = true;
-                join_worker();
-                autosave();
-                m_log.unbind();
-                stats_handles_.clear();
-                if (on_quit_)
-                    on_quit_();
-            }
+            void request_quit();
 
             /** @brief 阻塞等待当前 worker 结束（测试与关停用）。 */
             void wait_idle() { join_worker(); }
@@ -324,58 +230,23 @@ namespace tkw
              * @note   引擎运行中只写模型日志（`m_log` 归 worker）；Idle 时写 `m_log`
              *         并整体刷新模型（状态提示可能与状态变化同批出现）。
              */
-            void append_line(std::string line)
-            {
-                if (m_model->running.load())
-                {
-                    auto &lines = m_model->log_lines;
-                    lines.push_back(std::move(line));
-                    const std::size_t cap = m_log.capacity();
-                    if (lines.size() > cap)
-                        lines.erase(lines.begin(),
-                                    lines.begin() +
-                                        static_cast<std::ptrdiff_t>(lines.size() -
-                                                                    cap));
-                    return;
-                }
-                m_log.push(std::move(line));
-                refresh_model();
-            }
+            void append_line(std::string line);
 
             /** @brief Idle 门：运行中拒绝并提示；否则 join 已结束的 worker。
              * @return 可执行返回 true；运行中返回 false 并已写提示。 */
-            bool require_idle()
-            {
-                if (m_model->running.load())
-                {
-                    append_line("引擎运行中，请等待当前命令完成");
-                    return false;
-                }
-                join_worker();
-                return true;
-            }
+            bool require_idle();
 
             /** @brief 全 AI 决策源：按档取 Simple/Aggressive。
              * @param[in] ai AI 难度档。
              * @return 对应档位的决策源实例。 */
             static std::unique_ptr<tkw::game::DecisionSource> make_ai(
-                tkw::cli::AiLevel ai)
-            {
-                if (ai == tkw::cli::AiLevel::Aggressive)
-                    return std::make_unique<tkw::game::AggressiveAI>();
-                return std::make_unique<tkw::game::SimpleAI>();
-            }
+                tkw::cli::AiLevel ai);
 
             /** @brief 真人局非真人座位的回落决策器：按档取 Simple/Aggressive。
              * @param[in] ai AI 难度档。
              * @return 对应档位的回落决策器实例。 */
             static std::unique_ptr<tkw::game::ai::Decider> make_fallback_decider(
-                tkw::cli::AiLevel ai)
-            {
-                if (ai == tkw::cli::AiLevel::Aggressive)
-                    return std::make_unique<tkw::game::ai::AggressiveDecider>();
-                return std::make_unique<tkw::game::ai::SimpleDecider>();
-            }
+                tkw::cli::AiLevel ai);
 
             /**
              * @brief  按真人座位重建决策源与适配器（仅在 Idle 调用）。
@@ -385,20 +256,7 @@ namespace tkw
              *         阻塞回调在真人决策阻塞前回送最新快照，使刚摸的牌即时可见。
              */
             void rebuild_decision_source(const std::vector<std::string> &humans,
-                                         tkw::cli::AiLevel ai)
-            {
-                m_adapter.reset();
-                m_decision.reset();
-                if (humans.empty())
-                    return;
-                auto source = std::make_shared<TuiDecisionSource>(
-                    humans, make_fallback_decider(ai));
-                source->set_notify([this] { m_post([] {}); });
-                source->set_on_wait([this] { post_snapshot(); });
-                m_decision = std::move(source);
-                m_adapter = std::make_unique<tkw::game::ai::RequestDecisionSource>(
-                    *m_decision);
-            }
+                                         tkw::cli::AiLevel ai);
 
             /**
              * @brief  建局并开局：先退订旧句柄、再绑新局日志/统计、最后落会话。
@@ -406,181 +264,22 @@ namespace tkw
              * @note   失败路径不改动旧会话；新局建好后旧 game 才被替换，替换前已
              *         退订旧总线句柄。
              */
-            void start_game(const tkw::cli::Options &opt)
-            {
-                // --hero 解析失败（格式/座位/重复）先于任何会话改动返回，旧局不受影响。
-                auto bo =
-                    tkw::cli::detail::build_options_with_heroes(opt, opt.mode);
-                if (bo.is_err())
-                {
-                    append_line(bo.unwrap_err());
-                    return;
-                }
-                auto built = tkw::game::GameFactory::build(bo.unwrap());
-                if (built.is_err())
-                {
-                    append_line(
-                        tkw::cli::detail::format_build_error(built.unwrap_err()));
-                    return;
-                }
-                auto game = std::move(built).unwrap();
-
-                // 未实现卡/技能警告只提示不阻断，与 CLI new 同口径。
-                for (const auto &line :
-                     tkw::cli::detail::unsupported_cards_warning_lines(
-                         game->catalog))
-                    append_line(line);
-                for (const auto &line :
-                     tkw::cli::detail::unsupported_hero_skills_warning_lines(
-                         *game))
-                    append_line(line);
-
-                const std::string verr =
-                    tkw::cli::detail::validate_humans(*game, opt.humans);
-                if (!verr.empty())
-                {
-                    append_line(verr);
-                    return;
-                }
-
-                // 旧局仍在：先退订旧总线句柄，避免替换 Game 后向已释放总线退订。
-                m_log.unbind();
-                stats_handles_.clear();
-                m_session.stats = tkw::cli::BattleStats{};
-
-                // 日志订阅先于开局发牌，初始摸牌事件才会落入日志面板。
-                m_log.bind(*game, opt.humans);
-                stats_handles_ =
-                    tkw::cli::detail::subscribe_stats(*game, m_session.stats);
-
-                tkw::game::GameSession state;
-                auto ctx = game->context();
-                if (tkw::game::GameSetup(ctx)
-                        .start_session(state, "P0", opt.hand)
-                        .is_err())
-                {
-                    m_log.unbind();
-                    stats_handles_.clear();
-                    append_line("开局失败：场上没有玩家");
-                    return;
-                }
-
-                m_session.game = std::move(game);
-                m_session.state = std::move(state);
-                m_session.humans = opt.humans;
-                m_session.ai = opt.ai;
-                m_session.deck = opt.deck;
-                m_session.active = true;
-                m_viewer = opt.humans.empty() ? "P0" : opt.humans.front();
-                rebuild_decision_source(opt.humans, opt.ai);
-                refresh_model();
-                append_line("新对局已开始");
-            }
+            void start_game(const tkw::cli::Options &opt);
 
             /** @brief 满足前置则执行一个回合（to_end=false）或跑到底（true）。
              * @param[in] to_end 是否跑到底。 */
-            void do_step(bool to_end)
-            {
-                if (!m_session.active || !m_session.game)
-                {
-                    append_line("没有进行中的对局（先运行 new 开局；help 查看用法）");
-                    return;
-                }
-                auto ctx = m_session.game->context();
-                if (tkw::game::SessionQuery::session_over(ctx))
-                {
-                    append_line("对局已结束，胜者: " +
-                                m_model->snapshot.winner_label);
-                    return;
-                }
-                start_job(to_end);
-            }
+            void do_step(bool to_end);
 
             /** @brief 启动 worker 作业；运行中拒绝，运行前 join 上一个 worker。
              * @param[in] to_end 是否跑到底。 */
-            void start_job(bool to_end)
-            {
-                if (m_model->running.load())
-                {
-                    append_line("引擎运行中，请等待当前命令完成");
-                    return;
-                }
-                if (!m_session.active || !m_session.game)
-                {
-                    append_line("没有进行中的对局（先运行 new 开局；help 查看用法）");
-                    return;
-                }
-                join_worker();
-                m_cancel = false;
-                m_model->running = true;
-                m_worker = std::jthread([this, to_end] { run_job(to_end); });
-            }
+            void start_job(bool to_end);
 
             /**
              * @brief  worker 作业体：可选跑到底，每回合经 `Post` 回送一帧。
              * @param[in] to_end 是否跑到底。
              * @note   只在该线程读 `m_session`/`m_log`；结算错误与平局写入日志后退出。
              */
-            void run_job(bool to_end)
-            {
-                auto ctx = m_session.game->context();
-                // 真人局走适配后的接入源，全 AI 局走既有单一决策源；两者只取其一。
-                std::unique_ptr<tkw::game::DecisionSource> ai;
-                tkw::game::DecisionSource *source = nullptr;
-                if (m_adapter)
-                {
-                    source = m_adapter.get();
-                }
-                else
-                {
-                    ai = make_ai(m_session.ai);
-                    source = ai.get();
-                }
-
-                post_snapshot();
-                // MaxRounds 分支已自行输出平局与统计块；置位后不再落入下方正常终局块。
-                // 该分支只在未终局且越上限（仍有多名存活者）时到达，此局面 session_over
-                // 为假、正常终局块本不会执行，置位作为防御，避免终局判定变化时重复写统计。
-                bool drew = false;
-                while (!m_cancel.load() && !tkw::game::SessionQuery::session_over(ctx))
-                {
-                    m_log.push(tkw::cli::detail::turn_header_text(m_session.state));
-                    const std::string actor =
-                        m_session.state.current;  // 失败会推进，须先捕获
-                    tkw::game::TurnError root =
-                        tkw::game::TurnError::PlayRejected;
-                    auto r = tkw::game::GameLoop(ctx, *source).step_session(
-                        m_session.state, &root);
-                    if (r.is_err())
-                    {
-                        if (r.unwrap_err() == tkw::game::LoopError::MaxRounds)
-                        {
-                            m_log.push("平局（达到最大回合数）");
-                            append_battle_stats({});
-                            drew = true;
-                        }
-                        else
-                            m_log.push(tkw::cli::detail::format_turn_failure(
-                                r.unwrap_err(), root, actor));
-                        post_snapshot();
-                        break;
-                    }
-                    post_snapshot();
-                    if (!to_end)
-                        break;
-                }
-                // 正常终局补结束行与统计块（取消/失败/回合上限路径各自已有提示）。
-                if (!drew && !m_cancel.load() &&
-                    tkw::game::SessionQuery::session_over(ctx))
-                {
-                    m_log.push("对局结束，胜者: " +
-                              make_snapshot(m_session, m_viewer).winner_label);
-                    append_battle_stats(
-                        tkw::cli::detail::game_stats_label(ctx));
-                    post_snapshot();
-                }
-                post_done();
-            }
+            void run_job(bool to_end);
 
             /**
              * @brief  把 CLI 同口径统计块逐行写入日志（终局用）。
@@ -590,35 +289,13 @@ namespace tkw
              *         `cli::detail::battle_stats_lines`，与 CLI 统计块逐字一致。
              *         取消路径不调用。
              */
-            void append_battle_stats(const std::string &winner)
-            {
-                for (auto &line : tkw::cli::detail::battle_stats_lines(
-                         m_session.stats, *m_session.game, winner,
-                         m_session.state.turns))
-                    m_log.push(std::move(line));
-            }
+            void append_battle_stats(const std::string &winner);
 
             /** @brief worker 内构造值快照与日志拷贝，经 Post 交给主线程写模型。 */
-            void post_snapshot()
-            {
-                UiSnapshot snap = make_snapshot(m_session, m_viewer);
-                std::vector<std::string> lines(m_log.lines().begin(),
-                                               m_log.lines().end());
-                auto model = m_model;
-                m_post([model = std::move(model), snap = std::move(snap),
-                       lines = std::move(lines)]() mutable
-                      {
-                          model->snapshot = std::move(snap);
-                          model->log_lines = std::move(lines);
-                      });
-            }
+            void post_snapshot();
 
             /** @brief 经 Post 清除运行标志；闭包只捕获模型 shared_ptr。 */
-            void post_done()
-            {
-                auto model = m_model;
-                m_post([model = std::move(model)] { model->running = false; });
-            }
+            void post_done();
 
             /**
              * @brief  启动批量模拟 worker；不要求活动会话，运行中拒绝。
@@ -627,18 +304,7 @@ namespace tkw
              *         会话状态机零冲突；运行期间 q 可取消（`simulate_lines` 在局
              *         边界检查 `m_cancel`），最坏 join 延迟 = 单局时长。
              */
-            void start_simulate_job(const Command &cmd)
-            {
-                if (m_model->running.load())
-                {
-                    append_line("引擎运行中，请等待当前命令完成");
-                    return;
-                }
-                join_worker();
-                m_cancel = false;
-                m_model->running = true;
-                m_worker = std::jthread([this, cmd] { simulate_job(cmd); });
-            }
+            void start_simulate_job(const Command &cmd);
 
             /**
              * @brief  worker 作业体：批量模拟 N 局全 AI，聚合结果逐行写入日志。
@@ -648,61 +314,10 @@ namespace tkw
              *         `simulate_lines` 每局自建 `Game`/`SeededRng`，不读写
              *         `m_session`/活动会话 rng，亦不订阅事件。
              */
-            void simulate_job(const Command &cmd)
-            {
-                tkw::cli::Options opt = query_options(cmd);
-                opt.players = cmd.options.players;
-                opt.seed = cmd.options.seed;
-                opt.ai = cmd.options.ai;
-                opt.mode = cmd.options.mode;
-                opt.hand = cmd.options.hand;
-
-                m_log.push("开始模拟 " + std::to_string(cmd.games) + " 局（" +
-                          std::to_string(opt.players) + " 人，种子 " +
-                          std::to_string(opt.seed) + ".." +
-                          std::to_string(opt.seed +
-                                          static_cast<std::uint32_t>(
-                                              cmd.games) -
-                                          1) +
-                          "，ai=" + tkw::cli::detail::ai_level_name(opt.ai) +
-                          "），请稍候…（q 可取消）");
-                post_snapshot();
-
-                std::vector<std::string> warnings;
-                auto lines = tkw::cli::detail::simulate_lines(
-                    opt, cmd.games, &warnings,
-                    [this] { return m_cancel.load(); });
-                for (auto &line : warnings)
-                    m_log.push(std::move(line));
-                if (lines.is_err())
-                    m_log.push(lines.unwrap_err());
-                else
-                    for (auto &line : lines.unwrap())
-                        m_log.push(std::move(line));
-
-                post_snapshot();
-                post_done();
-            }
+            void simulate_job(const Command &cmd);
 
             /** @brief 追加会话状态摘要；只读模型，不触引擎，运行中亦可用。 */
-            void do_status()
-            {
-                const UiSnapshot &snap = m_model->snapshot;
-                std::string text;
-                if (!snap.active)
-                    text = "没有进行中的对局";
-                else if (snap.over)
-                    text = "会话: 已结束  胜者: " + snap.winner_label +
-                           "，存活: " + std::to_string(snap.alive);
-                else
-                    text = "第 " + std::to_string(snap.turns) +
-                           " 回合  下一回合: " + snap.current + "  存活: " +
-                           std::to_string(snap.alive) + "  AI: " +
-                           detail::ai_level_name(snap.ai) + "  摸牌堆 " +
-                           std::to_string(snap.draw_size) + "  弃牌堆 " +
-                           std::to_string(snap.discard_size);
-                append_line("状态: " + text);
-            }
+            void do_status();
 
             /**
              * @brief  只读牌表查询的选项合并：行内覆盖优先，否则活动会话优先。
@@ -714,93 +329,35 @@ namespace tkw
              *         CLI 只读命令的 `options_from_for_query` 逐条一致；查询不写回
              *         `m_session.deck`，不影响 load 的存档指纹匹配口径。
              */
-            tkw::cli::Options query_options(const Command &cmd) const
-            {
-                tkw::cli::Options opt = m_base;
-                opt.humans.clear();
-                if (m_session.active && m_session.game)
-                    opt.deck = m_session.deck;
-                if (cmd.deck_provided)
-                    opt.deck = cmd.options.deck;
-                return opt;
-            }
+            tkw::cli::Options query_options(const Command &cmd) const;
 
             /** @brief 把只读查询行结果写入日志；Err 作为单行错误提示。
              * @param[in] lines 查询结果或错误。 */
-            void append_query_lines(const tkw::cli::detail::QueryLines &lines)
-            {
-                if (lines.is_err())
-                {
-                    append_line(lines.unwrap_err());
-                    return;
-                }
-                for (const auto &line : lines.unwrap())
-                    append_line(line);
-            }
+            void append_query_lines(const tkw::cli::detail::QueryLines &lines);
 
             /** @brief cards 结果就地写日志（Idle 主线程，不触引擎）。
              * @param[in] cmd 解析后的 cards 命令。 */
-            void do_cards(const Command &cmd)
-            {
-                append_query_lines(tkw::cli::detail::cards_lines(
-                    query_options(cmd), cmd.with_text));
-            }
+            void do_cards(const Command &cmd);
 
             /** @brief rules 结果就地写日志（keyword 空 = 全部）。
              * @param[in] cmd 解析后的 rules 命令。 */
-            void do_rules(const Command &cmd)
-            {
-                append_query_lines(tkw::cli::detail::rules_lines(
-                    query_options(cmd), cmd.keyword));
-            }
+            void do_rules(const Command &cmd);
 
             /** @brief audit 结果就地写日志。
              * @param[in] cmd 解析后的 audit 命令。 */
-            void do_audit(const Command &cmd)
-            {
-                append_query_lines(
-                    tkw::cli::detail::audit_lines(query_options(cmd)));
-            }
+            void do_audit(const Command &cmd);
 
             /** @brief decks 结果就地写日志（扫描根取查询牌表目录）。
              * @param[in] cmd 解析后的 decks 命令。 */
-            void do_decks(const Command &cmd)
-            {
-                append_query_lines(
-                    tkw::cli::detail::decks_lines(query_options(cmd).deck));
-            }
+            void do_decks(const Command &cmd);
 
             /** @brief heroes 结果就地写日志（武将数据根取查询牌表目录）。
              * @param[in] cmd 解析后的 heroes 命令。 */
-            void do_heroes(const Command &cmd)
-            {
-                append_query_lines(
-                    tkw::cli::detail::heroes_lines(query_options(cmd).deck));
-            }
+            void do_heroes(const Command &cmd);
 
             /** @brief 显式存档：写 AI 档与统计元数据，失败给中文根因。
              * @param[in] file 目标存档路径。 */
-            void do_save(const std::string &file)
-            {
-                if (!m_session.active || !m_session.game)
-                {
-                    append_line("没有进行中的对局（先运行 new 开局；help 查看用法）");
-                    return;
-                }
-                tkw::save::SessionMeta meta;
-                meta.ai = detail::ai_level_name(m_session.ai);
-                meta.stats = m_session.stats;
-                const std::string text =
-                    tkw::save::write(*m_session.game, m_session.state, "deck", meta);
-                const auto write = tkw::io::write_text_atomic(file, text);
-                if (write.is_err())
-                {
-                    append_line(tkw::cli::render_write_error_zh(
-                        file, write.unwrap_err()));
-                    return;
-                }
-                append_line("已保存: " + file);
-            }
+            void do_save(const std::string &file);
 
             /**
              * @brief  读档并落会话：占位建局固定 Brawl，模式/角色由存档恢复；
@@ -808,104 +365,20 @@ namespace tkw
              * @param[in] file 源存档路径。
              * @note   全部前置校验通过后才替换会话，失败不污染当前对局。
              */
-            void do_load(const std::string &file)
-            {
-                auto text = tkw::io::read_text(file);
-                if (text.is_err())
-                {
-                    append_line(tkw::cli::render_read_error_zh(
-                        file, text.unwrap_err()));
-                    return;
-                }
-                auto built = tkw::game::GameFactory::build(tkw::game::BuildOptions{
-                    m_base.deck, m_base.players, m_base.seed,
-                    tkw::game::GameMode::Brawl});
-                if (built.is_err())
-                {
-                    append_line(
-                        tkw::cli::detail::format_build_error(built.unwrap_err()));
-                    return;
-                }
-                auto game = std::move(built).unwrap();
-
-                tkw::game::GameSession state;
-                tkw::save::SessionMeta meta;
-                auto r = tkw::save::read(text.unwrap(), *game, state, &meta);
-                if (r.is_err())
-                {
-                    append_line(tkw::cli::render_save_error_zh(
-                        r.unwrap_err()));
-                    return;
-                }
-
-                // 未实现卡警告只提示不阻断，与 CLI load 同口径。
-                for (const auto &line :
-                     tkw::cli::detail::unsupported_cards_warning_lines(
-                         game->catalog))
-                    append_line(line);
-
-                const std::string verr =
-                    tkw::cli::detail::validate_humans(*game, m_base.humans);
-                if (!verr.empty())
-                {
-                    append_line(verr);
-                    return;
-                }
-
-                tkw::cli::AiLevel ai = m_base.ai;
-                tkw::cli::AiLevel saved = tkw::cli::AiLevel::Simple;
-                if (!meta.ai.empty() && detail::ai_from(meta.ai, saved))
-                    ai = saved;
-
-                m_log.unbind();
-                stats_handles_.clear();
-                m_session.stats = std::move(meta.stats);
-                m_log.bind(*game, m_base.humans);
-                stats_handles_ =
-                    tkw::cli::detail::subscribe_stats(*game, m_session.stats);
-                m_session.game = std::move(game);
-                m_session.state = std::move(state);
-                m_session.humans = m_base.humans;
-                m_session.ai = ai;
-                m_session.deck = m_base.deck;
-                m_session.active = true;
-                m_viewer = m_base.humans.empty() ? "P0" : m_base.humans.front();
-                rebuild_decision_source(m_base.humans, ai);
-                refresh_model();
-                append_line("已加载: " + file);
-            }
+            void do_load(const std::string &file);
 
             /**
              * @brief  追加命令表（help/? [关键词]）；与启动 --help 同源。
              * @param[in] cmd 解析后的 Help 命令；keyword 空 = 全量表，非空 = 过滤。
              */
-            void do_help(const Command &cmd)
-            {
-                for (const auto &line : detail::query_help_lines(cmd.keyword))
-                    append_line(line);
-            }
+            void do_help(const Command &cmd);
 
             /**
              * @brief 退出自动存档：对齐 REPL 语义（有活动会话且路径非空）。
              * @note 结果写入 exit_message_，由入口在事件循环结束后写 stderr，
              *       避免退出后面板不可见导致失败静默。
              */
-            void autosave()
-            {
-                if (!m_session.active || !m_session.game || m_base.autosave.empty())
-                    return;
-                tkw::save::SessionMeta meta;
-                meta.ai = detail::ai_level_name(m_session.ai);
-                meta.stats = m_session.stats;
-                const std::string text =
-                    tkw::save::write(*m_session.game, m_session.state, "deck", meta);
-                const std::string path = m_base.autosave.string();
-                if (tkw::io::write_text_atomic(m_base.autosave, text).is_ok())
-                    exit_message_ = "已自动存档: " + path;
-                else
-                    exit_message_ = "自动存档失败: " + path;
-                append_line(exit_message_);
-            }
+            void autosave();
         };
     }  // namespace tui
 }  // namespace tkw

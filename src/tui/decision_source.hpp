@@ -91,63 +91,14 @@ namespace tkw
              * @param[in] zone 牌区。
              * @return 分区中文标签（`[手]`/`[装]`/`[判]`）；其它区返回空串。
              */
-            inline const char *zone_tag(tkw::card::Zone zone)
-            {
-                switch (zone)
-                {
-                case tkw::card::Zone::Hand:
-                    return "[手]";
-                case tkw::card::Zone::Equip:
-                    return "[装]";
-                case tkw::card::Zone::Judge:
-                    return "[判]";
-                default:
-                    return "";
-                }
-            }
+            const char *zone_tag(tkw::card::Zone zone);
 
             /**
              * @brief  装备能力一句话效果（只读展示，不打印卡牌 `text`）。
              * @param[in] ability 装备能力。
              * @return 中文效果描述。
              */
-            inline const char *ability_hint(tkw::card::Ability ability)
-            {
-                switch (ability)
-                {
-                case tkw::card::Ability::NoShaLimit:
-                    return "出杀不受次数限制";
-                case tkw::card::Ability::IgnoreArmor:
-                    return "无视目标的防具";
-                case tkw::card::Ability::Cixiong:
-                    return "杀唯一异性目标时可令其弃一张手牌或令你摸一张";
-                case tkw::card::Ability::ExtraShaAfterJink:
-                    return "杀被闪后可再出一张杀";
-                case tkw::card::Ability::TwoCardsAsSha:
-                    return "两张手牌可当一张杀";
-                case tkw::card::Ability::DiscardTwoForceDamage:
-                    return "弃两张牌令此杀依然造成伤害";
-                case tkw::card::Ability::MultiTargetSha:
-                    return "杀为最后一张手牌时可额外指定目标";
-                case tkw::card::Ability::DiscardHorseOnDamage:
-                    return "造成伤害后可弃置目标一匹坐骑";
-                case tkw::card::Ability::DamageAsDiscard:
-                    return "可弃置目标两张牌以防止此伤害";
-                case tkw::card::Ability::JudgementJink:
-                    return "需出闪时可判定，红色结果视为闪";
-                case tkw::card::Ability::BlackShaImmune:
-                    return "黑色杀对你无效";
-                case tkw::card::Ability::VineArmor:
-                    return "普通杀与南蛮/万箭对你无效，火焰伤害 +1";
-                case tkw::card::Ability::GudingBlade:
-                    return "杀的目标没有手牌时此伤害 +1";
-                case tkw::card::Ability::SilverLion:
-                    return "单次受到的伤害至多 1 点；失去此装备回复 1 点体力";
-                case tkw::card::Ability::FireShaConvert:
-                    return "普通杀可当具火焰伤害的杀使用（可放弃）";
-                }
-                return "装备能力";
-            }
+            const char *ability_hint(tkw::card::Ability ability);
 
             /**
              * @brief  从装备区反查携带该能力的装备名；查不到回落「装备能力」。
@@ -155,22 +106,8 @@ namespace tkw
              * @return 装备展示名；目录缺失或无匹配时返回「装备能力」。
              * @note   构造面板时调用一次。
              */
-            inline std::string ability_name(const tkw::game::ai::DecisionRequest &req)
-            {
-                if (req.catalog)
-                {
-                    for (const auto &c : req.view.equip)
-                    {
-                        const auto def = req.catalog->find(c.def_id);
-                        if (def.is_none())
-                            continue;
-                        for (const auto ability : def.unwrap()->abilities)
-                            if (ability == req.ability)
-                                return tkw::card::display_name(*def.unwrap());
-                    }
-                }
-                return "装备能力";
-            }
+            std::string ability_name(
+                const tkw::game::ai::DecisionRequest &req);
 
             /**
              * @brief  武将触发技标题：技能中文名 + 一句话效果；反馈携带伤害来源。
@@ -178,32 +115,8 @@ namespace tkw
              * @return 中文标题（yes/no 面板）。
              * @note   与装备能力标题同构，只在 `hero_trigger` 时使用。
              */
-            inline std::string hero_trigger_title(
-                const tkw::game::ai::DecisionRequest &req)
-            {
-                std::string body = "武将技能";
-                switch (req.hero_skill)
-                {
-                case tkw::hero::HeroSkill::FanKui:
-                    if (!req.trigger_cause.empty())
-                        body = "受到 " + req.trigger_cause +
-                               " 的伤害后，可获得其一张牌";
-                    else
-                        body = "受到伤害后，可获得伤害来源一张牌";
-                    break;
-                case tkw::hero::HeroSkill::PaoXiao:
-                case tkw::hero::HeroSkill::WuSheng:
-                case tkw::hero::HeroSkill::YingZi:
-                case tkw::hero::HeroSkill::MaShu:
-                case tkw::hero::HeroSkill::QiCai:
-                case tkw::hero::HeroSkill::LongDan:
-                case tkw::hero::HeroSkill::QingGuo:
-                    break;
-                }
-                return "发动 " +
-                       std::string(tkw::hero::display_skill_name(req.hero_skill)) +
-                       "（" + body + "）？";
-            }
+            std::string hero_trigger_title(
+                const tkw::game::ai::DecisionRequest &req);
 
             /**
              * @brief  响应窗口标题：有来源牌时给来源与伤害后果，否则回落「需打出」
@@ -212,105 +125,31 @@ namespace tkw
              * @param[in] pair 是否两张手牌当杀窗口。
              * @return 中文标题。
              */
-            inline std::string response_title(
-                const tkw::game::ai::DecisionRequest &req, bool pair)
-            {
-                const bool jink =
-                    req.response_kind == tkw::card::ResponseKind::Jink;
-                const std::string need =
-                    pair ? "需打出两张手牌当杀"
-                         : (jink ? "需打出闪" : "需打出杀");
-                if (req.response_source.empty())
-                    return pair ? "响应（杀）：打出两张手牌当杀"
-                                : "响应（" + need + "）";
-
-                std::string title =
-                    "响应（来源: " + req.response_user + " 的 " +
-                    tkw::card::display_name(req.catalog, req.response_source) +
-                    "，" + need;
-                if (req.response_damage > 0)
-                    title += "；不出将受到 " +
-                             std::to_string(req.response_damage) + " 点伤害";
-                title += "）";
-                return title;
-            }
+            std::string response_title(
+                const tkw::game::ai::DecisionRequest &req, bool pair);
 
             /**
              * @brief  亮牌窗口标题：按来源结算分别渲染五谷丰登/麒麟弓/火攻。
              * @param[in] req 决策请求；只读 `reveal_source`。
              * @return 中文标题。
              */
-            inline std::string reveal_title(
-                const tkw::game::ai::DecisionRequest &req)
-            {
-                switch (req.reveal_source)
-                {
-                case tkw::game::RevealSource::Qilin:
-                    return "麒麟弓：选择目标坐骑";
-                case tkw::game::RevealSource::FireAttackReveal:
-                    return "火攻：展示一张手牌";
-                case tkw::game::RevealSource::FireAttackDiscard:
-                    return "火攻：弃一张同花色手牌（可放弃）";
-                case tkw::game::RevealSource::Wugu:
-                    break;
-                }
-                return "五谷丰登亮牌（每名角色依次选一张）";
-            }
+            std::string reveal_title(
+                const tkw::game::ai::DecisionRequest &req);
 
             /**
              * @brief  无懈窗口提示标题：使用者/目标集合/锦囊名；判定窗口无使用者。
              * @param[in] req 决策请求；只读使用者、目标集合与锦囊名。
              * @return 中文标题。
              */
-            inline std::string counter_title(
-                const tkw::game::ai::DecisionRequest &req)
-            {
-                std::string title = "无懈可击窗口";
-                if (req.counter_user.empty())
-                {
-                    title += "（延时锦囊判定";
-                    if (!req.counter_trick.empty())
-                        title += "：" + tkw::card::display_name(
-                                             req.catalog, req.counter_trick);
-                    title += "）";
-                }
-                else
-                {
-                    title += "（使用者: " + req.counter_user;
-                    if (!req.counter_trick.empty())
-                        title += " 的 " + tkw::card::display_name(
-                                             req.catalog, req.counter_trick);
-                    title += "）";
-                }
-                for (std::size_t i = 0; i < req.counter_targets.size(); ++i)
-                {
-                    if (i > 0)
-                        title += ",";
-                    else
-                        title += "目标: ";
-                    title += req.counter_targets[i];
-                }
-                return title;
-            }
+            std::string counter_title(
+                const tkw::game::ai::DecisionRequest &req);
 
             /**
              * @brief  弃牌原因 → 中文文案（与真人窗口同口径）。
              * @param[in] reason 弃牌原因。
              * @return 中文文案。
              */
-            inline const char *reason_text(tkw::game::DiscardReason reason)
-            {
-                switch (reason)
-                {
-                case tkw::game::DiscardReason::TurnLimit:
-                    return "手牌超上限";
-                case tkw::game::DiscardReason::AbilityCost:
-                    return "装备能力代价";
-                case tkw::game::DiscardReason::CixiongChoice:
-                    return "雌雄双股剑（可放弃）";
-                }
-                return "弃牌";
-            }
+            const char *reason_text(tkw::game::DiscardReason reason);
 
             /**
              * @brief  借刀杀人候选的受害者是否为决策者本人。
@@ -319,72 +158,31 @@ namespace tkw
              * @param[out] holder 命中时写入持武器者 id（`targets[0]`）。
              * @return 是则 true；非借刀/非双目标/受害者非本人则 false。
              */
-            inline bool is_self_target_borrowed_sword(
+            bool is_self_target_borrowed_sword(
                 const tkw::game::ai::DecisionRequest &req,
-                const tkw::game::LegalAction &act, std::string &holder)
-            {
-                if (!req.catalog || act.targets.size() != 2 ||
-                    act.targets[1] != req.actor)
-                    return false;
-
-                const auto def = req.catalog->find(act.card.def_id);
-                if (def.is_none() || def.unwrap()->effect.is_none())
-                    return false;
-                if (def.unwrap()->effect.unwrap().kind !=
-                    tkw::card::CardEffectKind::BorrowedSword)
-                    return false;
-
-                holder = act.targets[0];
-                return true;
-            }
+                const tkw::game::LegalAction &act, std::string &holder);
 
             /**
              * @brief  目标列表 → 逗号分隔串。
              * @param[in] targets 目标 id 列表。
              * @return 逗号分隔串；空列表返回空串。
              */
-            inline std::string join_targets(const std::vector<std::string> &targets)
-            {
-                std::string out;
-                for (std::size_t i = 0; i < targets.size(); ++i)
-                {
-                    if (i > 0)
-                        out += ",";
-                    out += targets[i];
-                }
-                return out;
-            }
+            std::string join_targets(
+                const std::vector<std::string> &targets);
 
             /**
              * @brief  花色 → UTF-8 符号。
              * @param[in] suit 花色。
              * @return 花色符号；未知值兜底问号（只读展示）。
              */
-            inline const char *suit_glyph(tkw::card::Suit suit)
-            {
-                switch (suit)
-                {
-                case tkw::card::Suit::Spade:
-                    return "♠";
-                case tkw::card::Suit::Club:
-                    return "♣";
-                case tkw::card::Suit::Heart:
-                    return "♥";
-                case tkw::card::Suit::Diamond:
-                    return "♦";
-                }
-                return "?";
-            }
+            const char *suit_glyph(tkw::card::Suit suit);
 
             /**
              * @brief  实体牌花色点数 → 展示串（如 ♠7）。
              * @param[in] c 实体牌。
              * @return 花色 + 点数字符串；供面板查看牌面。
              */
-            inline std::string card_meta(const tkw::card::Card &c)
-            {
-                return std::string(suit_glyph(c.suit)) + std::to_string(c.number);
-            }
+            std::string card_meta(const tkw::card::Card &c);
 
             /**
              * @brief  候选是否属于对手手牌、需向决策者遮挡内容。
@@ -395,15 +193,8 @@ namespace tkw
              * @note   装备区/判定区为明置信息，其余决策类别的候选均为决策者自己
              *         可见的牌，一律返回 false。此谓词是候选遮挡的唯一判据。
              */
-            inline bool is_hidden_pick_option(
-                const tkw::game::ai::DecisionRequest &req, std::size_t index)
-            {
-                if (req.kind != tkw::game::ai::DecisionKind::PickCard)
-                    return false;
-                if (index >= req.zone_labels.size())
-                    return true;
-                return req.zone_labels[index] == tkw::card::Zone::Hand;
-            }
+            bool is_hidden_pick_option(
+                const tkw::game::ai::DecisionRequest &req, std::size_t index);
 
             /**
              * @brief  把实体牌折成三串展示纯值：牌名、花色点数与效果文案。
@@ -415,23 +206,10 @@ namespace tkw
              * @note   产物为字符串，不持目录指针；效果文案缺失留空，由渲染侧回落
              *         「（无说明）」。
              */
-            inline void fill_card_strings(
-                std::string &name, std::string &meta, std::string &text,
-                const tkw::game::ai::DecisionRequest &req,
-                const tkw::card::Card &c)
-            {
-                if (c.def_id.empty())
-                    return;
-
-                name = tkw::card::display_name(req.catalog, c.def_id);
-                if (req.catalog)
-                {
-                    const auto def = req.catalog->find(c.def_id);
-                    if (def.is_some())
-                        text = def.unwrap()->text;
-                }
-                meta = card_meta(c);
-            }
+            void fill_card_strings(std::string &name, std::string &meta,
+                                   std::string &text,
+                                   const tkw::game::ai::DecisionRequest &req,
+                                   const tkw::card::Card &c);
 
             /**
              * @brief  把实体牌折成候选的展示纯值：牌名、花色点数与效果文案。
@@ -442,13 +220,9 @@ namespace tkw
              * @note   只在 `make_panel` 内调用，产物为字符串，不持目录指针；效果
              *         文案缺失留空，由渲染侧回落「（无说明）」。
              */
-            inline void fill_card_fields(
-                PanelOption &opt, const tkw::game::ai::DecisionRequest &req,
-                const tkw::card::Card &c)
-            {
-                fill_card_strings(opt.card_name, opt.card_meta, opt.card_text, req,
-                                  c);
-            }
+            void fill_card_fields(PanelOption &opt,
+                                  const tkw::game::ai::DecisionRequest &req,
+                                  const tkw::card::Card &c);
 
             /**
              * @brief  折 pair 第二张牌的展示纯值：在本手牌内按 `instance_id` 查。
@@ -459,19 +233,9 @@ namespace tkw
              *         主牌，不因平行数组缺口折出假牌面。pair 恒来自决策者本手牌，
              *         不泄漏对手信息。
              */
-            inline void fill_second_card_fields(
+            void fill_second_card_fields(
                 PanelOption &opt, const tkw::game::ai::DecisionRequest &req,
-                const std::string &instance_id)
-            {
-                for (const auto &c : req.view.hand)
-                    if (c.instance_id == instance_id)
-                    {
-                        fill_card_strings(opt.second_card_name,
-                                          opt.second_card_meta,
-                                          opt.second_card_text, req, c);
-                        return;
-                    }
-            }
+                const std::string &instance_id);
 
             /**
              * @brief  Play 候选的一行文本：牌名 + 实例 + 可选转化/第二张 + 可选
@@ -480,27 +244,9 @@ namespace tkw
              * @param[in] act 候选合法动作。
              * @return 中文展示文本。
              */
-            inline std::string play_option_text(
+            std::string play_option_text(
                 const tkw::game::ai::DecisionRequest &req,
-                const tkw::game::LegalAction &act)
-            {
-                std::string text =
-                    tkw::card::display_name(req.catalog, act.card.def_id) + " " +
-                    act.card.instance_id;
-                if (act.converted_sha)
-                    text += "（当杀）";
-                if (!act.second_instance_id.empty())
-                    text += " + " + act.second_instance_id;
-                if (!act.targets.empty())
-                    text += " -> " + join_targets(act.targets);
-                if (act.recast)
-                    text += "（重铸：弃置并摸一张）";
-                std::string holder;
-                if (is_self_target_borrowed_sword(req, act, holder))
-                    text += "（警告：" + holder +
-                            " 将对你出杀，可能致你受伤或阵亡）";
-                return text;
-            }
+                const tkw::game::LegalAction &act);
 
             /**
              * @brief  PickCard 候选文本：手牌遮挡、装备/判定明置并带分区标签。
@@ -508,24 +254,8 @@ namespace tkw
              * @param[in] index 候选的 0 基下标。
              * @return 中文展示文本。
              */
-            inline std::string pick_option_text(
-                const tkw::game::ai::DecisionRequest &req, std::size_t index)
-            {
-                const tkw::card::Zone zone =
-                    index < req.zone_labels.size() ? req.zone_labels[index]
-                                                   : tkw::card::Zone::Hand;
-                std::string text = zone_tag(zone);
-                if (!text.empty())
-                    text += " ";
-                if (is_hidden_pick_option(req, index))
-                {
-                    text += kHiddenHandPlaceholder;
-                    return text;
-                }
-                text += tkw::card::display_name(req.catalog, req.options[index].def_id) +
-                        " " + req.options[index].instance_id;
-                return text;
-            }
+            std::string pick_option_text(
+                const tkw::game::ai::DecisionRequest &req, std::size_t index);
         }  // namespace detail
 
         /**
@@ -534,185 +264,8 @@ namespace tkw
          * @return 面板值视图；kind/标题/候选/多选与 pass 语义均由 req 字段驱动。
          * @note   本函数是唯一触点目录的时机，产物不持任何指针。
          */
-        inline DecisionPanelView make_panel(
-            const tkw::game::ai::DecisionRequest &req)
-        {
-            using tkw::game::ai::DecisionKind;
-
-            DecisionPanelView panel;
-            panel.kind = req.kind;
-            panel.actor = req.actor;
-
-            switch (req.kind)
-            {
-            case DecisionKind::Play:
-            {
-                panel.title = "出牌阶段";
-                panel.allow_pass = true;
-                for (const auto &act : req.legal)
-                {
-                    PanelOption opt;
-                    opt.text = detail::play_option_text(req, act);
-                    opt.instance_id = act.card.instance_id;
-                    opt.second_instance_id = act.second_instance_id;
-                    opt.targets = act.targets;
-                    opt.recast = act.recast;
-                    opt.converted_sha = act.converted_sha;
-                    detail::fill_card_fields(opt, req, act.card);
-                    if (!act.second_instance_id.empty())
-                        detail::fill_second_card_fields(opt, req,
-                                                        act.second_instance_id);
-                    panel.options.push_back(std::move(opt));
-                }
-                break;
-            }
-            case DecisionKind::Response:
-            {
-                const bool pair = !req.legal.empty();
-                panel.title = detail::response_title(req, pair);
-                panel.allow_pass = true;
-                if (pair)
-                {
-                    for (const auto &act : req.legal)
-                    {
-                        PanelOption opt;
-                        opt.text =
-                            tkw::card::display_name(req.catalog, act.card.def_id) +
-                            " " + act.card.instance_id + " + " +
-                            act.second_instance_id;
-                        opt.instance_id = act.card.instance_id;
-                        opt.second_instance_id = act.second_instance_id;
-                        detail::fill_card_fields(opt, req, act.card);
-                        detail::fill_second_card_fields(opt, req,
-                                                        act.second_instance_id);
-                        panel.options.push_back(std::move(opt));
-                    }
-                }
-                else
-                {
-                    for (const auto &c : req.options)
-                    {
-                        PanelOption opt;
-                        opt.text =
-                            tkw::card::display_name(req.catalog, c.def_id) + " " +
-                            c.instance_id;
-                        opt.instance_id = c.instance_id;
-                        detail::fill_card_fields(opt, req, c);
-                        panel.options.push_back(std::move(opt));
-                    }
-                }
-                break;
-            }
-            case DecisionKind::Peach:
-            {
-                panel.title = "濒死救场（濒死者: " + req.dying + "）";
-                panel.allow_pass = true;
-                for (const auto &c : req.options)
-                {
-                    PanelOption opt;
-                    opt.text = tkw::card::display_name(req.catalog, c.def_id) +
-                               " " + c.instance_id;
-                    opt.instance_id = c.instance_id;
-                    detail::fill_card_fields(opt, req, c);
-                    panel.options.push_back(std::move(opt));
-                }
-                break;
-            }
-            case DecisionKind::Counter:
-            {
-                panel.title = detail::counter_title(req);
-                panel.allow_pass = true;
-                for (const auto &c : req.options)
-                {
-                    PanelOption opt;
-                    opt.text = tkw::card::display_name(req.catalog, c.def_id) +
-                               " " + c.instance_id;
-                    opt.instance_id = c.instance_id;
-                    detail::fill_card_fields(opt, req, c);
-                    panel.options.push_back(std::move(opt));
-                }
-                break;
-            }
-            case DecisionKind::Trigger:
-            {
-                if (req.hero_trigger)
-                    panel.title = detail::hero_trigger_title(req);
-                else
-                    panel.title = "发动 " + detail::ability_name(req) + "（" +
-                                  detail::ability_hint(req.ability) + "）？";
-                panel.allow_pass = true;
-                panel.yes_no = true;
-                PanelOption yes;
-                yes.text = "发动";
-                yes.accepted = true;
-                panel.options.push_back(std::move(yes));
-                PanelOption no;
-                no.text = "不发动";
-                no.accepted = false;
-                panel.options.push_back(std::move(no));
-                break;
-            }
-            case DecisionKind::PickCard:
-            {
-                panel.title = "选择目标区域的牌（目标: " + req.target + "）";
-                panel.allow_pass = true;
-                for (std::size_t i = 0; i < req.options.size(); ++i)
-                {
-                    PanelOption opt;
-                    opt.text = detail::pick_option_text(req, i);
-                    opt.instance_id = req.options[i].instance_id;
-                    opt.option_index = i;
-                    if (detail::is_hidden_pick_option(req, i))
-                        opt.hidden = true;
-                    else
-                        detail::fill_card_fields(opt, req, req.options[i]);
-                    panel.options.push_back(std::move(opt));
-                }
-                break;
-            }
-            case DecisionKind::PickRevealed:
-            {
-                panel.title = detail::reveal_title(req);
-                panel.allow_pass =
-                    req.reveal_source ==
-                    tkw::game::RevealSource::FireAttackDiscard;
-                for (std::size_t i = 0; i < req.options.size(); ++i)
-                {
-                    PanelOption opt;
-                    opt.text =
-                        tkw::card::display_name(req.catalog, req.options[i].def_id) +
-                        " " + req.options[i].instance_id;
-                    opt.instance_id = req.options[i].instance_id;
-                    opt.option_index = i;
-                    detail::fill_card_fields(opt, req, req.options[i]);
-                    panel.options.push_back(std::move(opt));
-                }
-                break;
-            }
-            case DecisionKind::Discard:
-            {
-                panel.title = "弃牌（" +
-                              std::string(detail::reason_text(req.discard_reason)) +
-                              "，需弃 " + std::to_string(req.count) + " 张）";
-                panel.multi = true;
-                panel.toggle = true;
-                panel.need_count = req.count;
-                panel.allow_pass =
-                    req.discard_reason == tkw::game::DiscardReason::CixiongChoice;
-                for (const auto &c : req.options)
-                {
-                    PanelOption opt;
-                    opt.text = tkw::card::display_name(req.catalog, c.def_id) +
-                               " " + c.instance_id;
-                    opt.instance_id = c.instance_id;
-                    detail::fill_card_fields(opt, req, c);
-                    panel.options.push_back(std::move(opt));
-                }
-                break;
-            }
-            }
-            return panel;
-        }
+        DecisionPanelView make_panel(
+            const tkw::game::ai::DecisionRequest &req);
 
         /**
          * @brief  面板选中项 → 引擎决策结果（纯映射 + 防御性校验）。
@@ -723,85 +276,9 @@ namespace tkw
          * @return 合法返回 true 并写 `out`；越界/重复/数量不符/非法 pass 返回 false。
          * @note   非法只返回 false，不修改 `out` 以外的状态，由调用方保持待决。
          */
-        inline bool make_choice(const DecisionPanelView &panel,
-                                 const std::vector<std::size_t> &selected,
-                                 bool pass, tkw::game::ai::DecisionChoice &out)
-        {
-            using tkw::game::ai::DecisionKind;
-
-            out = tkw::game::ai::DecisionChoice{};
-
-            if (panel.kind == DecisionKind::Trigger)
-            {
-                if (pass)
-                {
-                    out.accepted = false;
-                    return true;
-                }
-                if (selected.size() != 1 || selected[0] >= 2)
-                    return false;
-                out.accepted = selected[0] == 0;
-                return true;
-            }
-
-            if (pass)
-            {
-                if (!panel.allow_pass)
-                    return false;
-                return true;  // 空选择：结束出牌/不响应/不救/不出无懈/放弃选牌
-            }
-
-            if (panel.kind == DecisionKind::Discard)
-            {
-                if (selected.size() !=
-                    static_cast<std::size_t>(panel.need_count))
-                    return false;
-                std::vector<std::size_t> seen;
-                for (const std::size_t i : selected)
-                {
-                    if (i >= panel.options.size())
-                        return false;
-                    if (std::find(seen.begin(), seen.end(), i) != seen.end())
-                        return false;
-                    seen.push_back(i);
-                }
-                for (const std::size_t i : selected)
-                    out.discards.push_back(panel.options[i].instance_id);
-                return true;
-            }
-
-            if (selected.size() != 1)
-                return false;
-            const std::size_t index = selected[0];
-            if (index >= panel.options.size())
-                return false;
-            const PanelOption &opt = panel.options[index];
-
-            switch (panel.kind)
-            {
-            case DecisionKind::Play:
-                out.instance_id = tkw::Option<std::string>::Some(opt.instance_id);
-                out.second_instance_id = opt.second_instance_id;
-                out.targets = opt.targets;
-                out.recast = opt.recast;
-                out.converted_sha = opt.converted_sha;
-                return true;
-            case DecisionKind::Response:
-                out.instance_id = tkw::Option<std::string>::Some(opt.instance_id);
-                out.second_instance_id = opt.second_instance_id;
-                return true;
-            case DecisionKind::Peach:
-            case DecisionKind::Counter:
-                out.instance_id = tkw::Option<std::string>::Some(opt.instance_id);
-                return true;
-            case DecisionKind::PickCard:
-            case DecisionKind::PickRevealed:
-                out.option_index = tkw::Option<std::size_t>::Some(index);
-                return true;
-            default:
-                return false;
-            }
-        }
+        bool make_choice(const DecisionPanelView &panel,
+                         const std::vector<std::size_t> &selected, bool pass,
+                         tkw::game::ai::DecisionChoice &out);
 
         /**
          * @class TuiDecisionSource
@@ -837,67 +314,18 @@ namespace tkw
              *         后写入的运行中拒绝提示不会被回调快照整段覆盖。
              */
             tkw::game::ai::DecisionChoice decide(
-                const tkw::game::ai::DecisionRequest &req) override
-            {
-                if (m_humans.count(req.actor) == 0)
-                    return m_fallback->decide(req);
-
-                std::unique_lock<std::mutex> lock(m_mutex);
-                if (m_cancelled.load())
-                    return {};
-                m_panel = make_panel(req);
-                m_taken = false;
-                m_submitted = false;
-                std::function<void()> notify = m_notify;
-                std::function<void()> on_wait = on_wait_;
-                lock.unlock();
-                // 先投递快照再发布待决：主线程只能在 pending 可见后写运行中
-                // 提示，故该提示不会先于快照写入而被后续整段覆盖丢行。
-                if (on_wait)
-                    on_wait();
-                lock.lock();
-                if (m_cancelled.load())
-                    return {};
-                has_pending_ = true;
-                lock.unlock();
-                // notify 必须在 pending 可见之后，UI 唤醒后 fetch_new 才能取到面板。
-                if (notify)
-                    notify();
-                lock.lock();
-                m_cv.wait(lock, [this]
-                         { return m_submitted || m_cancelled.load(); });
-                if (m_cancelled.load())
-                {
-                    has_pending_ = false;
-                    return {};
-                }
-                has_pending_ = false;
-                m_taken = false;
-                return m_choice;
-            }
+                const tkw::game::ai::DecisionRequest &req);
 
             /**
              * @brief  取走当前待决面板（每个待决仅返回真一次）。
              * @param[out] out 有待决且未被取走时写入面板值视图。
              * @return 取到返回 true；无待决/已取走/已取消返回 false。
              */
-            bool fetch_new(DecisionPanelView &out)
-            {
-                std::lock_guard<std::mutex> lock(m_mutex);
-                if (!has_pending_ || m_taken || m_cancelled.load())
-                    return false;
-                out = *m_panel;
-                m_taken = true;
-                return true;
-            }
+            bool fetch_new(DecisionPanelView &out);
 
             /** @brief 是否有未被取走的待决。
              * @return 存在待决且未被取走、未取消时为 true。 */
-            bool has_pending() const
-            {
-                std::lock_guard<std::mutex> lock(m_mutex);
-                return has_pending_ && !m_taken && !m_cancelled.load();
-            }
+            bool has_pending() const;
 
             /**
              * @brief  提交当前待决的选择并唤醒 worker。
@@ -906,58 +334,27 @@ namespace tkw
              * @return 提交被接受返回 true；无待决/已提交尚未唤醒/已取消/选择非法
              *         返回 false，且不改变待决状态（面板保持可继续提交）。
              */
-            bool submit(std::vector<std::size_t> selected, bool pass)
-            {
-                std::lock_guard<std::mutex> lock(m_mutex);
-                // m_submitted 关掉「首次提交到 worker 唤醒之间」的连击覆盖窗口；
-                // worker 每次 decide 起始会重置它。
-                if (!has_pending_ || m_submitted || m_cancelled.load())
-                    return false;
-                tkw::game::ai::DecisionChoice choice;
-                if (!m_panel || !make_choice(*m_panel, selected, pass, choice))
-                    return false;
-                m_choice = std::move(choice);
-                m_submitted = true;
-                m_cv.notify_all();
-                return true;
-            }
+            bool submit(std::vector<std::size_t> selected, bool pass);
 
             /**
              * @brief 取消待决并唤醒阻塞的 decide。
              * @note 置位与清 pending 同在锁内，避免丢唤醒；此后 fetch_new 恒假。
              */
-            void cancel()
-            {
-                {
-                    std::lock_guard<std::mutex> lock(m_mutex);
-                    m_cancelled.store(true);
-                    has_pending_ = false;
-                    m_panel.reset();
-                }
-                m_cv.notify_all();
-            }
+            void cancel();
 
             /**
              * @brief  设置待决/唤醒回调；由控制器接 UI 主循环投递。
              * @param[in] notify 回调；在 decide 释放锁后调用。
              * @note   不得在其中回调本对象的阻塞 API。
              */
-            void set_notify(std::function<void()> notify)
-            {
-                std::lock_guard<std::mutex> lock(m_mutex);
-                m_notify = std::move(notify);
-            }
+            void set_notify(std::function<void()> notify);
 
             /**
              * @brief  设置「即将阻塞」回调；真人决策释放锁后、阻塞等待前调用一次。
              * @param[in] on_wait 回调；在 `m_mutex` 释放后调用。
              * @note   可安全回送最新快照；不得在其中回调本对象的阻塞 API。
              */
-            void set_on_wait(std::function<void()> on_wait)
-            {
-                std::lock_guard<std::mutex> lock(m_mutex);
-                on_wait_ = std::move(on_wait);
-            }
+            void set_on_wait(std::function<void()> on_wait);
 
         private:
             mutable std::mutex m_mutex;

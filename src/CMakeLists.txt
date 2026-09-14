@@ -184,6 +184,8 @@ target_link_libraries(tkw_cli PUBLIC tkw_core pjh_cli)
 # 控制器起后台引擎线程，故向消费目标传递 Threads::Threads。
 add_library(tkw_tui STATIC
     tui/command.cpp
+    tui/controller.cpp
+    tui/decision_source.cpp
     tui/log_lines.cpp
     tui/log_scroll.cpp
     tui/snapshot.cpp
