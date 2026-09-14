@@ -799,13 +799,13 @@ namespace tkw
                 bool show_turn_headers = false,
                 std::string *failed_actor = nullptr)
             {
-                while (!tkw::game::session_over(ctx))
+                while (!tkw::game::SessionQuery::session_over(ctx))
                 {
                     if (show_turn_headers)
                         print_turn_header(session);
                     if (failed_actor)
                         *failed_actor = session.current;
-                    auto r = tkw::game::step_session(ctx, ai, session, root);
+                    auto r = tkw::game::GameLoop(ctx, ai).step_session(session, root);
                     if (r.is_ok())
                         continue;
                     if (r.unwrap_err() == tkw::game::LoopError::MaxRounds)
@@ -827,9 +827,10 @@ namespace tkw
             inline std::string game_end_label(const tkw::game::GameContext &ctx)
             {
                 if (tkw::game::mode_of(ctx) == tkw::game::GameMode::Brawl)
-                    return winner_label(tkw::game::session_winner(ctx));
+                    return winner_label(tkw::game::SessionQuery::session_winner(ctx));
                 return identity_result_label(
-                    tkw::game::session_camp(ctx), tkw::game::session_winner(ctx));
+                    tkw::game::SessionQuery::session_camp(ctx),
+                    tkw::game::SessionQuery::session_winner(ctx));
             }
 
             /**
@@ -843,9 +844,10 @@ namespace tkw
             inline std::string game_stats_label(const tkw::game::GameContext &ctx)
             {
                 if (tkw::game::mode_of(ctx) == tkw::game::GameMode::Brawl)
-                    return tkw::game::session_winner(ctx);
+                    return tkw::game::SessionQuery::session_winner(ctx);
                 return identity_result_label(
-                    tkw::game::session_camp(ctx), tkw::game::session_winner(ctx));
+                    tkw::game::SessionQuery::session_camp(ctx),
+                    tkw::game::SessionQuery::session_winner(ctx));
             }
 
             /**
@@ -897,7 +899,7 @@ namespace tkw
                 }
 
                 auto ctx = s.game->context();
-                const bool over = tkw::game::session_over(ctx);
+                const bool over = tkw::game::SessionQuery::session_over(ctx);
                 // 达上限仅供展示提示：session_over 仍是唯一结束口径，会话未终结、
                 // step 的致死击落仍可能产出唯一胜者，不能据此标为已结束。
                 const bool at_cap =
@@ -1004,7 +1006,7 @@ namespace tkw
                 auto options = build_options_with_heroes(opt);
                 if (options.is_err())
                     return CliFailure{CliError(options.unwrap_err())};
-                auto built = tkw::game::build_game(options.unwrap());
+                auto built = tkw::game::GameFactory::build(options.unwrap());
                 if (built.is_err())
                     return CliFailure{CliError(format_build_error(built.unwrap_err()))};
                 auto game = std::move(built).unwrap();
@@ -1020,7 +1022,9 @@ namespace tkw
                 auto log = subscribe_event_log(*game, verbose, opt.humans);
                 auto ctx = game->context();
                 tkw::game::GameSession state;
-                if (tkw::game::start_session(ctx, state, "P0", opt.hand).is_err())
+                if (tkw::game::GameSetup(ctx)
+                        .start_session(state, "P0", opt.hand)
+                        .is_err())
                     return CliFailure{CliError("开局失败")};
                 s.game = std::move(game);
                 s.state = std::move(state);
@@ -1043,7 +1047,7 @@ namespace tkw
                 auto stats_handles = subscribe_stats(*s.game, s.stats);
                 auto ai = make_decision_source(s.humans, s.ai);
                 auto ctx = s.game->context();
-                if (tkw::game::session_over(ctx))
+                if (tkw::game::SessionQuery::session_over(ctx))
                 {
                     std::cout << "对局已结束，胜者: " << game_end_label(ctx) << "\n";
                     return CliResult<void>::Ok();
@@ -1052,7 +1056,7 @@ namespace tkw
                     print_turn_header(s.state);
                 tkw::game::TurnError root = tkw::game::TurnError::PlayRejected;
                 const std::string actor = s.state.current;  // 失败会推进，须先捕获
-                auto r = tkw::game::step_session(ctx, *ai, s.state, &root);
+                auto r = tkw::game::GameLoop(ctx, *ai).step_session(s.state, &root);
                 if (r.is_err())
                 {
                     if (r.unwrap_err() == tkw::game::LoopError::MaxRounds)
@@ -1063,7 +1067,7 @@ namespace tkw
                     return CliFailure{CliError(
                         format_turn_failure(r.unwrap_err(), root, actor))};
                 }
-                if (tkw::game::session_over(ctx))
+                if (tkw::game::SessionQuery::session_over(ctx))
                 {
                     std::cout << "对局结束，胜者: " << game_end_label(ctx) << "\n";
                     print_battle_stats(
@@ -1083,7 +1087,7 @@ namespace tkw
                 auto ai = make_decision_source(s.humans, s.ai);
                 auto ctx = s.game->context();
                 // 进入循环前判定：true 表示本次命令至少会推进（用于末尾统计门控）。
-                const bool advanced = !tkw::game::session_over(ctx);
+                const bool advanced = !tkw::game::SessionQuery::session_over(ctx);
                 tkw::game::TurnError root = tkw::game::TurnError::PlayRejected;
                 std::string actor = s.state.current;  // 出参每轮更新为失败角色
                 auto rr =
@@ -1161,7 +1165,7 @@ namespace tkw
                 // 占位建局固定 Brawl：模式与角色由存档恢复，避免以 identity 占位
                 // 时因 --players 与存档不符误报 IdentityPlayerCount，或占位洗牌
                 // 消耗随机流（随后被 reader 覆盖）。
-                auto built = tkw::game::build_game(
+                auto built = tkw::game::GameFactory::build(
                     build_options_from(opt, tkw::game::GameMode::Brawl));
                 if (built.is_err())
                     return CliFailure{CliError(format_build_error(built.unwrap_err()))};
@@ -1202,7 +1206,7 @@ namespace tkw
                 auto options = build_options_with_heroes(opt);
                 if (options.is_err())
                     return CliFailure{CliError(options.unwrap_err())};
-                auto built = tkw::game::build_game(options.unwrap());
+                auto built = tkw::game::GameFactory::build(options.unwrap());
                 if (built.is_err())
                     return CliFailure{CliError(format_build_error(built.unwrap_err()))};
                 auto game = std::move(built).unwrap();
@@ -1223,7 +1227,9 @@ namespace tkw
 
                 auto ai = make_decision_source(opt.humans, opt.ai);
                 tkw::game::GameSession session;
-                if (tkw::game::start_session(ctx, session, "P0", opt.hand).is_err())
+                if (tkw::game::GameSetup(ctx)
+                        .start_session(session, "P0", opt.hand)
+                        .is_err())
                     return CliFailure{CliError("开局失败")};
                 auto rr = run_to_completion(ctx, *ai, session, nullptr, verbose);
                 if (rr.is_err())
@@ -1422,7 +1428,7 @@ namespace tkw
                     // 每局独立随机源：种子 = 基种子 + 局序号；武将选择逐局沿用。
                     tkw::game::BuildOptions per = base_bo;
                     per.seed = opt.seed + static_cast<std::uint32_t>(i);
-                    auto built = tkw::game::build_game(per);
+                    auto built = tkw::game::GameFactory::build(per);
                     if (built.is_err())
                         return SimulateLines::Err(
                             format_build_error(built.unwrap_err()));
@@ -1432,7 +1438,8 @@ namespace tkw
                     auto ctx = game->context();
                     auto ai = make_decision_source({}, opt.ai);
                     tkw::game::GameSession session;
-                    if (tkw::game::start_session(ctx, session, "P0", opt.hand)
+                    if (tkw::game::GameSetup(ctx)
+                            .start_session(session, "P0", opt.hand)
                             .is_err())
                         return SimulateLines::Err("开局失败");
                     auto rr = run_to_completion(ctx, *ai, session);
@@ -1442,13 +1449,14 @@ namespace tkw
 
                     // 胜者空串 = 平局（达回合上限或同归于尽）；身份局按阵营聚合，
                     // 传空代表 id 得通用阵营标签，避免「内奸胜（P2）」拆成多键。
-                    const std::string winner = tkw::game::session_winner(ctx);
+                    const std::string winner =
+                        tkw::game::SessionQuery::session_winner(ctx);
                     if (winner.empty())
                         ++agg.draws;
                     else if (tkw::game::mode_of(ctx) ==
                              tkw::game::GameMode::Identity)
                         ++agg.wins[identity_result_label(
-                            tkw::game::session_camp(ctx), {})];
+                            tkw::game::SessionQuery::session_camp(ctx), {})];
                     else
                         ++agg.wins[winner];
                     agg.turns_sum += session.turns;

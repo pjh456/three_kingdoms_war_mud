@@ -99,19 +99,19 @@ namespace tkw
             const tkw::game::ReadOnlyContext ro = ctx;
 
             snap.active = true;
-            snap.over = tkw::game::session_over(ctx);
+            snap.over = tkw::game::SessionQuery::session_over(ctx);
             snap.at_cap =
                 !snap.over && s.state.turns > tkw::game::rules_of(ctx).max_turns;
             snap.mode = tkw::game::mode_of(ctx);
             snap.current = s.state.current;
             snap.turns = s.state.turns;
             snap.alive = ctx.entities->size();
-            snap.winner = tkw::game::session_winner(ctx);
+            snap.winner = tkw::game::SessionQuery::session_winner(ctx);
             snap.winner_label =
                 snap.mode == tkw::game::GameMode::Brawl
                     ? tkw::cli::detail::winner_label(snap.winner)
                     : tkw::cli::detail::identity_result_label(
-                          tkw::game::session_camp(ctx), snap.winner);
+                          tkw::game::SessionQuery::session_camp(ctx), snap.winner);
             snap.ai = s.ai;
             snap.deck = s.deck;
             snap.humans = s.humans;

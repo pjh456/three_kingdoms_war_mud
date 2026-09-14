@@ -117,37 +117,55 @@ namespace tkw
         using BuildResult = Result<T, BuildError>;
 
         /**
-         * @brief  性别占位：按座位奇偶交替（`P0` 男 / `P1` 女 / …）。
-         * @param[in] seat 座位下标。
-         * @return 偶数座位 `Male`，奇数座位 `Female`。
-         * @note  当前无玩家数据源；武将自带性别时以武将值为准。
+         * @brief 建局装配（静态工具类）。
+         * @details 纯装配过程：身份局人数校验、加载牌堆与武将目录、构造 `Game`、
+         *          逐座创建玩家（身份局再洗牌分配角色）。不持有状态，入参由调用方
+         *          传入。
          */
-        inline entity::Gender gender_for_seat(int seat)
+        class GameFactory
+        {
+        public:
+            /** @brief 静态工具类，不可实例化。 */
+            GameFactory() = delete;
+
+            /**
+             * @brief  性别占位：按座位奇偶交替（`P0` 男 / `P1` 女 / …）。
+             * @param[in] seat 座位下标。
+             * @return 偶数座位 `Male`，奇数座位 `Female`。
+             * @note  当前无玩家数据源；武将自带性别时以武将值为准。
+             */
+            static entity::Gender gender_for_seat(int seat);
+
+            /**
+             * @brief  装配一局：加载牌堆与武将目录 → 建 `Game`（注入 `SeededRng`）→
+             *         逐座创建玩家（身份局再分配角色）。
+             * @details 装配顺序：身份局人数校验 → 加载牌堆目录 → 加载武将目录（可选）
+             *          → 构造 `Game` → 逐座创建玩家 → 身份局洗牌分配角色。
+             * @param[in] opt 建局入参；仅 `deck`/`players`/`seed`/`mode`/`heroes` 参与装配。
+             * @return 建局结果。
+             * @retval Ok  新一局已完整装配（玩家、目录、随机源就绪）。
+             * @retval Err 建局失败，`BuildError::kind` 指出阶段：
+             *             `LoadDeck` = 牌堆或武将目录加载失败（`config.kind/detail`）；
+             *             `CreatePlayer` = `player_index` 座位实体创建失败；
+             *             `IdentityPlayerCount` = 身份局人数无配比（`player_index` = 人数）；
+             *             `UnknownHero` = `player_index` + `hero` 指定武将不在目录中。
+             * @note  只构造 `SeededRng` 不消费随机流；武将赋值不消费随机流。仅
+             *         `Identity` 模式用该随机源洗牌分配角色，`Brawl` 分支不消费随机流
+             *         也不写角色。
+             * @note  无 `heroes` 指定时逐座 hero 为空、性别与体力走现状；武将自带的
+             *         性别与体力（`hp > 0`）覆盖座位占位，不影响其他玩家。
+             * @see   BuildOptions, BuildError, start_session
+             */
+            static BuildResult<std::unique_ptr<Game>> build(const BuildOptions &opt);
+        };
+
+        inline entity::Gender GameFactory::gender_for_seat(int seat)
         {
             return seat % 2 == 0 ? entity::Gender::Male : entity::Gender::Female;
         }
 
-        /**
-         * @brief  装配一局：加载牌堆与武将目录 → 建 `Game`（注入 `SeededRng`）→
-         *         逐座创建玩家（身份局再分配角色）。
-         * @details 装配顺序：身份局人数校验 → 加载牌堆目录 → 加载武将目录（可选）
-         *          → 构造 `Game` → 逐座创建玩家 → 身份局洗牌分配角色。
-         * @param[in] opt 建局入参；仅 `deck`/`players`/`seed`/`mode`/`heroes` 参与装配。
-         * @return 建局结果。
-         * @retval Ok  新一局已完整装配（玩家、目录、随机源就绪）。
-         * @retval Err 建局失败，`BuildError::kind` 指出阶段：
-         *             `LoadDeck` = 牌堆或武将目录加载失败（`config.kind/detail`）；
-         *             `CreatePlayer` = `player_index` 座位实体创建失败；
-         *             `IdentityPlayerCount` = 身份局人数无配比（`player_index` = 人数）；
-         *             `UnknownHero` = `player_index` + `hero` 指定武将不在目录中。
-         * @note  只构造 `SeededRng` 不消费随机流；武将赋值不消费随机流。仅
-         *         `Identity` 模式用该随机源洗牌分配角色，`Brawl` 分支不消费随机流
-         *         也不写角色。
-         * @note  无 `heroes` 指定时逐座 hero 为空、性别与体力走现状；武将自带的
-         *         性别与体力（`hp > 0`）覆盖座位占位，不影响其他玩家。
-         * @see   BuildOptions, BuildError, start_session
-         */
-        inline BuildResult<std::unique_ptr<Game>> build_game(const BuildOptions &opt)
+        inline BuildResult<std::unique_ptr<Game>> GameFactory::build(
+            const BuildOptions &opt)
         {
             if (opt.mode == GameMode::Identity && roles_for_count(opt.players).is_none())
                 return BuildResult<std::unique_ptr<Game>>::Err(
@@ -173,7 +191,7 @@ namespace tkw
             for (int i = 0; i < opt.players; ++i)
             {
                 const std::string seat = "P" + std::to_string(i);
-                entity::Gender gender = gender_for_seat(i);
+                entity::Gender gender = GameFactory::gender_for_seat(i);
                 int max_hp = game->rules.base_hp;
                 std::string hero_id;
 
@@ -230,6 +248,28 @@ namespace tkw
             }
 
             return BuildResult<std::unique_ptr<Game>>::Ok(std::move(game));
+        }
+
+        /**
+         * @brief  性别占位（兼容转发）。
+         * @details 等价于 `GameFactory::gender_for_seat(seat)`。
+         * @param[in] seat 座位下标。
+         * @return 偶数座位 `Male`，奇数座位 `Female`。
+         */
+        inline entity::Gender gender_for_seat(int seat)
+        {
+            return GameFactory::gender_for_seat(seat);
+        }
+
+        /**
+         * @brief  装配一局（兼容转发）。
+         * @details 等价于 `GameFactory::build(opt)`；语义与返回码见该类方法。
+         * @param[in] opt 建局入参。
+         * @return 建局结果。
+         */
+        inline BuildResult<std::unique_ptr<Game>> build_game(const BuildOptions &opt)
+        {
+            return GameFactory::build(opt);
         }
     }
 }

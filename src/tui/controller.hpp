@@ -416,7 +416,7 @@ namespace tkw
                     append_line(bo.unwrap_err());
                     return;
                 }
-                auto built = tkw::game::build_game(bo.unwrap());
+                auto built = tkw::game::GameFactory::build(bo.unwrap());
                 if (built.is_err())
                 {
                     append_line(
@@ -455,7 +455,9 @@ namespace tkw
 
                 tkw::game::GameSession state;
                 auto ctx = game->context();
-                if (tkw::game::start_session(ctx, state, "P0", opt.hand).is_err())
+                if (tkw::game::GameSetup(ctx)
+                        .start_session(state, "P0", opt.hand)
+                        .is_err())
                 {
                     m_log.unbind();
                     stats_handles_.clear();
@@ -485,7 +487,7 @@ namespace tkw
                     return;
                 }
                 auto ctx = m_session.game->context();
-                if (tkw::game::session_over(ctx))
+                if (tkw::game::SessionQuery::session_over(ctx))
                 {
                     append_line("对局已结束，胜者: " +
                                 m_model->snapshot.winner_label);
@@ -540,15 +542,15 @@ namespace tkw
                 // 该分支只在未终局且越上限（仍有多名存活者）时到达，此局面 session_over
                 // 为假、正常终局块本不会执行，置位作为防御，避免终局判定变化时重复写统计。
                 bool drew = false;
-                while (!m_cancel.load() && !tkw::game::session_over(ctx))
+                while (!m_cancel.load() && !tkw::game::SessionQuery::session_over(ctx))
                 {
                     m_log.push(tkw::cli::detail::turn_header_text(m_session.state));
                     const std::string actor =
                         m_session.state.current;  // 失败会推进，须先捕获
                     tkw::game::TurnError root =
                         tkw::game::TurnError::PlayRejected;
-                    auto r = tkw::game::step_session(ctx, *source, m_session.state,
-                                                     &root);
+                    auto r = tkw::game::GameLoop(ctx, *source).step_session(
+                        m_session.state, &root);
                     if (r.is_err())
                     {
                         if (r.unwrap_err() == tkw::game::LoopError::MaxRounds)
@@ -568,7 +570,8 @@ namespace tkw
                         break;
                 }
                 // 正常终局补结束行与统计块（取消/失败/回合上限路径各自已有提示）。
-                if (!drew && !m_cancel.load() && tkw::game::session_over(ctx))
+                if (!drew && !m_cancel.load() &&
+                    tkw::game::SessionQuery::session_over(ctx))
                 {
                     m_log.push("对局结束，胜者: " +
                               make_snapshot(m_session, m_viewer).winner_label);
@@ -814,7 +817,7 @@ namespace tkw
                         file, text.unwrap_err()));
                     return;
                 }
-                auto built = tkw::game::build_game(tkw::game::BuildOptions{
+                auto built = tkw::game::GameFactory::build(tkw::game::BuildOptions{
                     m_base.deck, m_base.players, m_base.seed,
                     tkw::game::GameMode::Brawl});
                 if (built.is_err())

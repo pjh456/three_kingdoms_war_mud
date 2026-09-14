@@ -72,85 +72,299 @@ namespace tkw
             PassedToNext,    /**< 闪电未劈中，移至下家判定区。 */
         };
 
-        // ── 判定 ────────────────────────────────────────────────────────
+        /**
+         * @brief 回合只读查询（静态工具类）。
+         * @details 纯函数集合：不持有上下文，`ctx`/入参由调用方传入；本类不改变任何状态。
+         */
+        class TurnQuery
+        {
+        public:
+            /** @brief 静态工具类，不可实例化。 */
+            TurnQuery() = delete;
+
+            /**
+             * @brief  下家：按座位序环绕的存活玩家。
+             * @param[in] ctx    只读上下文。
+             * @param[in] player 参照玩家 id。
+             * @return `player` 之后的第一个存活玩家 id；死亡者已被移除，天然跳过。
+             */
+            static std::string next_player(
+                const GameContext &ctx, const std::string &player);
+
+            /**
+             * @brief  该定义是否为「杀」（效果类别 = `Damage`，单一事实源）。
+             * @param[in] def 卡定义。
+             * @return 效果类别为 `Damage` 时为 true。
+             */
+            static bool is_sha(const card::CardDef &def);
+
+            /**
+             * @brief  从手牌找一张牌。
+             * @param[in] ctx         只读上下文。
+             * @param[in] player      手牌所有者 id。
+             * @param[in] instance_id 目标牌实例 id。
+             * @return 查询结果。
+             * @retval Some 命中牌副本，便于随后按 `instance_id` 消费。
+             * @retval None 手牌中不存在该实例。
+             */
+            static Option<card::Card> find_in_hand(
+                const GameContext &ctx, const std::string &player,
+                const std::string &instance_id);
+
+            /**
+             * @brief  结算错误 → 回合错误（单一映射点）。
+             * @param[in] e 结算错误。
+             * @return 对应回合错误；未列明的值一律落 `TurnError::PlayRejected`。
+             */
+            static TurnError to_turn_error(EffectError e);
+
+            /**
+             * @brief  角色是否仍在场。
+             * @param[in] ctx    只读上下文。
+             * @param[in] player 角色 id。
+             * @return 实体仍在容器中时为 true；回合中可能因闪电/决斗等死亡被移除。
+             */
+            static bool is_alive(const GameContext &ctx, const std::string &player);
+        };
+
+        /** @brief 判定阶段汇总的「跳过阶段」集合：乐不思蜀跳 play、兵粮寸断跳 draw。 */
+        struct TurnSkips
+        {
+            bool skip_play = false; /**< 跳过出牌阶段（乐不思蜀非红桃）。 */
+            bool skip_draw = false; /**< 跳过摸牌阶段（兵粮寸断非梅花）。 */
+        };
 
         /**
-         * @brief  下家：按座位序环绕的存活玩家。
-         * @param[in] ctx    只读上下文。
-         * @param[in] player 参照玩家 id。
-         * @return `player` 之后的第一个存活玩家 id；死亡者已被移除，天然跳过。
+         * @brief 回合流程（操作类）。
+         * @details 持对局上下文与决策源（引用、非拥有），方法不再逐个传
+         *          `ctx`/`ai`；覆盖判定、摸牌、出牌、弃牌四阶段与回合入口。
+         * @warning 不拥有 `m_ctx`/`m_ai`：二者须比本对象存活更久；不得跨局复用。
          */
-        inline std::string next_player(const GameContext &ctx, const std::string &player)
+        class TurnFlow
+        {
+        public:
+            /**
+             * @brief  绑定对局上下文与决策源。
+             * @param[in,out] ctx 对局上下文；本对象只持引用。
+             * @param[in,out] ai  决策源；出牌/弃牌/无懈窗口经它询问。
+             */
+            TurnFlow(GameContext &ctx, DecisionSource &ai) : m_ctx(ctx), m_ai(ai) {}
+
+            /**
+             * @brief  执行 `player` 的一个完整回合：判定 → 摸牌 → 出牌 → 弃牌。
+             * @details 四阶段依次为 `run_judgement_phase`、`run_draw_phase`（受
+             *          `skip_draw` 抑制）、`run_play_phase`（受 `skip_play` 抑制）、
+             *          `run_discard_phase`。
+             * @param[in] player 当前回合角色 id。
+             * @return 结算结果。
+             * @retval Ok  回合正常结束，或角色在阶段中途死亡而终止。
+             * @retval Err(TurnError) 某阶段失败，原样上抛。
+             * @note  入口把 `player` 置入 `m_ctx.turn_player` 并在返回时还原（覆盖
+             *         全部早退），供濒死询问等结算读取当前回合角色；离开本函数即回到
+             *         「无回合上下文」。
+             * @note  酒的伤害加成与「本回合已用酒」标记在入口清空、出口清空：二者是
+             *         回合内运行时状态，不持久化，也不跨回合/跨玩家泄漏。
+             * @note  角色在任意阶段死亡即终止本回合（死亡实体已被移除，阶段函数内均
+             *         重新 `find` 以免悬垂指针）。
+             * @warning 失败时不会回滚已落子的部分（判定/摸牌/出牌可能已结算），调用方
+             *          须消费该回合（推进行程），不得以同一角色重入。
+             * @see   run_judgement_phase, run_draw_phase, run_play_phase, run_discard_phase
+             */
+            TurnResult<void> execute_turn(const std::string &player);
+
+            /**
+             * @brief  结算玩家判定区的一张延时锦囊。
+             * @details 判定牌进弃牌堆；延时牌按结果弃置或移入下家判定区，并从原判定
+             *          区移除。判定结算前先开无懈窗口，被抵消则直接弃置。
+             * @param[in] player  被判定玩家 id。
+             * @param[in] delayed 待结算的延时锦囊牌。
+             * @return 结算结果。
+             * @retval Ok(DelayedOutcome) 已按判定行动结算。
+             * @retval Err(TurnError::UnknownCard)    目录中找不到该卡定义。
+             * @retval Err(TurnError::JudgeEmptyDeck) 判定时摸牌堆与弃牌堆皆空。
+             */
+            TurnResult<DelayedOutcome> resolve_delayed(
+                const std::string &player, const card::Card &delayed);
+
+            /**
+             * @brief  装备动作：手牌装备到装备区；同槽位已有装备则先弃置旧装备。
+             * @param[in,out] ctx    对局上下文。
+             * @param[in]     player 装备者 id。
+             * @param[in]     card   要装备的手牌。
+             * @return 结算结果。
+             * @retval Ok  装备成功，旧同槽位装备已弃置。
+             * @retval Err(TurnError::NotEquipment)  该卡不是装备牌。
+             * @retval Err(TurnError::CardNotInHand) 该牌不在手牌中。
+             * @note  同槽位旧装备在取牌前先弃置；`CardNotInHand` 早退发生在旧装备
+             *         已弃置之后。
+             * @note  本动作不询问决策源，故为静态方法，只收 `ctx`。
+             */
+            static TurnResult<void> equip_card(
+                GameContext &ctx, const std::string &player, const card::Card &card);
+
+            /**
+             * @brief  出牌阶段：循环向 `DecisionSource` 要动作直到结束。
+             * @param[in] player 当前回合角色 id。
+             * @return 结算结果。
+             * @retval Ok  决策源不再出牌，或角色中途死亡（决斗自伤等）。
+             * @retval Err(TurnError) 非法动作（手牌不存在/目标非法/超杀次数等）立即
+             *         中止本回合。
+             * @note  每轮重采样杀上限，回合中途装连弩当轮生效；重铸不计杀次数。
+             */
+            TurnResult<void> run_play_phase(const std::string &player);
+
+        private:
+            /**
+             * @brief  打出延时锦囊：按 `judge.scope` 校验目标，置入其判定区。
+             * @param[in] player  使用者 id。
+             * @param[in] card    打出的延时锦囊手牌。
+             * @param[in] targets 目标列表；数量必须恰为 1。
+             * @return 结算结果。
+             * @retval Ok  已置入目标判定区；被无懈抵消时该牌直接弃置。
+             * @retval Err(TurnError::PlayRejected)     该牌不是延时锦囊。
+             * @retval Err(TurnError::InvalidTarget)    目标数量不为 1 或目标不在合法范围。
+             * @retval Err(TurnError::DelayedDuplicate) 目标判定区已有同名延时锦囊。
+             * @retval Err(TurnError::CardNotInHand)    该牌不在手牌中。
+             * @note  同名延时锦囊不可叠加；打出时开无懈窗口，被抵消则直接弃置。
+             */
+            TurnResult<void> place_delayed(
+                const std::string &player, const card::Card &card,
+                const std::vector<std::string> &targets);
+
+            /**
+             * @brief  判定阶段：按判定区顺序结算延时锦囊。
+             * @param[in] player 当前回合角色 id。
+             * @return 本回合需跳过的阶段集合（乐不思蜀非红桃 → `skip_play`，
+             *         兵粮寸断非梅花 → `skip_draw`）。
+             * @retval Ok(TurnSkips) 已完成判定区结算。
+             * @retval Err(TurnError) 某张延时锦囊结算失败，原样上抛。
+             * @note  角色中途死亡（如闪电劈死）时停止后续结算，调用方经 `is_alive`
+             *         判断回合是否终止。
+             */
+            TurnResult<TurnSkips> run_judgement_phase(const std::string &player);
+
+            /**
+             * @brief  摸牌阶段：摸 `draw_phase_count` 张（基础 `rules.draw_per_turn`，
+             *         英姿 +1）。
+             * @param[in] player 当前回合角色 id。
+             * @post  该角色手牌增加相应张数，并发布摸牌事件。
+             */
+            void run_draw_phase(const std::string &player);
+
+            /**
+             * @brief  弃牌阶段：手牌上限 = 当前体力值。
+             * @param[in] player 当前回合角色 id。
+             * @return 结算结果。
+             * @retval Ok  手牌未超上限或已弃足。
+             * @retval Err(TurnError::DiscardInsufficient) 弃牌数量不足或引用了不存在的牌。
+             */
+            TurnResult<void> run_discard_phase(const std::string &player);
+
+            GameContext &m_ctx;   /**< 对局上下文（引用，非拥有）。 */
+            DecisionSource &m_ai; /**< 决策源（引用，非拥有）。 */
+        };
+
+        inline std::string TurnQuery::next_player(
+            const GameContext &ctx, const std::string &player)
         {
             return ctx.entities->next(player);
         }
 
-        /**
-         * @brief  结算玩家判定区的一张延时锦囊。
-         * @details 判定牌进弃牌堆；延时牌按结果弃置或移入下家判定区，并从原判定
-         *          区移除。判定结算前先开无懈窗口，被抵消则直接弃置。
-         * @param[in,out] ctx     对局上下文。
-         * @param[in,out] ai      决策源（无懈窗口询问）。
-         * @param[in]     player  被判定玩家 id。
-         * @param[in]     delayed 待结算的延时锦囊牌。
-         * @return 结算结果。
-         * @retval Ok(DelayedOutcome) 已按判定行动结算。
-         * @retval Err(TurnError::UnknownCard)    目录中找不到该卡定义。
-         * @retval Err(TurnError::JudgeEmptyDeck) 判定时摸牌堆与弃牌堆皆空。
-         */
-        inline TurnResult<DelayedOutcome> resolve_delayed(
-            GameContext &ctx, DecisionSource &ai,
+        inline bool TurnQuery::is_sha(const card::CardDef &def)
+        {
+            return def.effect.is_some() && is_sha_kind(def.effect.unwrap().kind);
+        }
+
+        inline Option<card::Card> TurnQuery::find_in_hand(
+            const GameContext &ctx,
+            const std::string &player,
+            const std::string &instance_id)
+        {
+            for (const auto &c : ctx.cards->hand(player))
+                if (c.instance_id == instance_id)
+                    return Option<card::Card>::Some(c);
+            return Option<card::Card>::None();
+        }
+
+        inline TurnError TurnQuery::to_turn_error(EffectError e)
+        {
+            switch (e)
+            {
+            case EffectError::OutOfRange:
+            case EffectError::InvalidTarget:
+                return TurnError::InvalidTarget;
+            case EffectError::CardNotOwned:
+                return TurnError::CardNotInHand;
+            case EffectError::ShaLimitExceeded:
+                return TurnError::ShaLimitExceeded;
+            case EffectError::AnalepticLimitExceeded:
+                return TurnError::AnalepticLimitExceeded;
+            case EffectError::DelayedDuplicate:
+                return TurnError::DelayedDuplicate;
+            default:
+                return TurnError::PlayRejected;
+            }
+        }
+
+        inline bool TurnQuery::is_alive(
+            const GameContext &ctx, const std::string &player)
+        {
+            return ctx.entities->find(player).is_some();
+        }
+
+        inline TurnResult<DelayedOutcome> TurnFlow::resolve_delayed(
             const std::string &player,
             const card::Card &delayed)
         {
-            const auto def_opt = ctx.catalog->find(delayed.def_id);
+            const auto def_opt = m_ctx.catalog->find(delayed.def_id);
             if (def_opt.is_none())
                 return TurnResult<DelayedOutcome>::Err(TurnError::UnknownCard);
             const card::CardDef &def = *def_opt.unwrap();
 
             // 先从判定区移除延时牌（各分支决定弃置或移送下家）
-            auto removed = ctx.cards->remove_from_judge(player, delayed.instance_id);
+            auto removed = m_ctx.cards->remove_from_judge(player, delayed.instance_id);
             const card::Card delayed_card =
                 removed.is_some() ? std::move(removed).unwrap() : delayed;
 
             // 无懈窗口：判定结算前可被抵消，抵消则直接弃置
             // （判定窗口使用者不可考 → 空串哨兵，目标 = 被判定玩家）
-            if (CounterResolver(ctx, ai).resolve_nullification(
+            if (CounterResolver(m_ctx, m_ai).resolve_nullification(
                     CounterWindow::Builder{}.trick(&def).targets({player}).build()))
             {
-                StateOps(ctx).discard_and_emit(player, delayed_card);
+                StateOps(m_ctx).discard_and_emit(player, delayed_card);
                 return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::Normal);
             }
 
-            auto judge = StateOps(ctx).perform_judgement();
+            auto judge = StateOps(m_ctx).perform_judgement();
             if (judge.is_none())
             {
                 // 判定牌不可得：延时牌已移出判定区，弃置以免凭空消失
-                StateOps(ctx).discard_and_emit(player, delayed_card);
+                StateOps(m_ctx).discard_and_emit(player, delayed_card);
                 return TurnResult<DelayedOutcome>::Err(TurnError::JudgeEmptyDeck);
             }
             const card::Card judge_card = std::move(judge).unwrap();
-            StateOps(ctx).discard_and_emit(player, judge_card, DiscardKind::Judgement);  // 判定牌进弃牌堆
+            StateOps(m_ctx).discard_and_emit(
+                player, judge_card, DiscardKind::Judgement);  // 判定牌进弃牌堆
 
             if (def.judge.is_none())
             {
-                StateOps(ctx).discard_and_emit(player, delayed_card);
+                StateOps(m_ctx).discard_and_emit(player, delayed_card);
                 return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::Normal);
             }
 
             switch (StateQuery::judge_result(def.judge.unwrap(), judge_card))
             {
             case card::JudgeAction::SkipPlay:
-                StateOps(ctx).discard_and_emit(player, delayed_card);
+                StateOps(m_ctx).discard_and_emit(player, delayed_card);
                 return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::SkipPlay);
 
             case card::JudgeAction::SkipDraw:
-                StateOps(ctx).discard_and_emit(player, delayed_card);
+                StateOps(m_ctx).discard_and_emit(player, delayed_card);
                 return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::SkipDraw);
 
             case card::JudgeAction::Damage:
-                StateOps(ctx).discard_and_emit(player, delayed_card);
-                CombatResolver(ctx, ai)
+                StateOps(m_ctx).discard_and_emit(player, delayed_card);
+                CombatResolver(m_ctx, m_ai)
                     .deal_damage(
                         player, DamageSpec::Builder{}
                                     .damage_val(def.judge.unwrap().amount)
@@ -162,72 +376,28 @@ namespace tkw
             case card::JudgeAction::PassToNext:
             {
                 const std::string next =
-                    JudgeQuery::next_delayed_target(ctx, player, delayed_card.def_id);
+                    JudgeQuery::next_delayed_target(m_ctx, player, delayed_card.def_id);
                 if (next.empty())
                 {
                     // 异常残留态下无空位：弃置而非丢牌
-                    StateOps(ctx).discard_and_emit(player, delayed_card);
+                    StateOps(m_ctx).discard_and_emit(player, delayed_card);
                     return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::Normal);
                 }
-                ctx.cards->add_to_judge(next, delayed_card);
+                m_ctx.cards->add_to_judge(next, delayed_card);
                 emit_card_moved(
-                    ctx, player, next, delayed_card, Zone::Judge, Zone::Judge);
+                    m_ctx, player, next, delayed_card, Zone::Judge, Zone::Judge);
                 return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::PassedToNext);
             }
 
             case card::JudgeAction::Nothing:
             case card::JudgeAction::Jink:
             default:
-                StateOps(ctx).discard_and_emit(player, delayed_card);
+                StateOps(m_ctx).discard_and_emit(player, delayed_card);
                 return TurnResult<DelayedOutcome>::Ok(DelayedOutcome::Normal);
             }
         }
 
-        // ── 出牌阶段辅助 ────────────────────────────────────────────────
-
-        /**
-         * @brief  该定义是否为「杀」（效果类别 = `Damage`，单一事实源）。
-         * @param[in] def 卡定义。
-         * @return 效果类别为 `Damage` 时为 true。
-         */
-        inline bool is_sha(const card::CardDef &def)
-        {
-            return def.effect.is_some() && is_sha_kind(def.effect.unwrap().kind);
-        }
-
-        /**
-         * @brief  从手牌找一张牌。
-         * @param[in] ctx         只读上下文。
-         * @param[in] player      手牌所有者 id。
-         * @param[in] instance_id 目标牌实例 id。
-         * @return 查询结果。
-         * @retval Some 命中牌副本，便于随后按 `instance_id` 消费。
-         * @retval None 手牌中不存在该实例。
-         */
-        inline Option<card::Card> find_in_hand(
-            const GameContext &ctx,
-            const std::string &player,
-            const std::string &instance_id)
-        {
-            for (const auto &c : ctx.cards->hand(player))
-                if (c.instance_id == instance_id)
-                    return Option<card::Card>::Some(c);
-            return Option<card::Card>::None();
-        }
-
-        /**
-         * @brief  装备动作：手牌装备到装备区；同槽位已有装备则先弃置旧装备。
-         * @param[in,out] ctx    对局上下文。
-         * @param[in]     player 装备者 id。
-         * @param[in]     card   要装备的手牌。
-         * @return 结算结果。
-         * @retval Ok  装备成功，旧同槽位装备已弃置。
-         * @retval Err(TurnError::NotEquipment)  该卡不是装备牌。
-         * @retval Err(TurnError::CardNotInHand) 该牌不在手牌中。
-         * @note  同槽位旧装备在取牌前先弃置；`CardNotInHand` 早退发生在旧装备
-         *         已弃置之后。
-         */
-        inline TurnResult<void> equip_card(
+        inline TurnResult<void> TurnFlow::equip_card(
             GameContext &ctx, const std::string &player, const card::Card &card)
         {
             const auto def = ctx.catalog->find(card.def_id);
@@ -262,26 +432,11 @@ namespace tkw
             return TurnResult<void>::Ok();
         }
 
-        /**
-         * @brief  打出延时锦囊：按 `judge.scope` 校验目标，置入其判定区。
-         * @param[in,out] ctx     对局上下文。
-         * @param[in,out] ai      决策源（无懈窗口询问）。
-         * @param[in]     player  使用者 id。
-         * @param[in]     card    打出的延时锦囊手牌。
-         * @param[in]     targets 目标列表；数量必须恰为 1。
-         * @return 结算结果。
-         * @retval Ok  已置入目标判定区；被无懈抵消时该牌直接弃置。
-         * @retval Err(TurnError::PlayRejected)     该牌不是延时锦囊。
-         * @retval Err(TurnError::InvalidTarget)    目标数量不为 1 或目标不在合法范围。
-         * @retval Err(TurnError::DelayedDuplicate) 目标判定区已有同名延时锦囊。
-         * @retval Err(TurnError::CardNotInHand)    该牌不在手牌中。
-         * @note  同名延时锦囊不可叠加；打出时开无懈窗口，被抵消则直接弃置。
-         */
-        inline TurnResult<void> place_delayed(
-            GameContext &ctx, DecisionSource &ai, const std::string &player,
+        inline TurnResult<void> TurnFlow::place_delayed(
+            const std::string &player,
             const card::Card &card, const std::vector<std::string> &targets)
         {
-            const auto def_opt = ctx.catalog->find(card.def_id);
+            const auto def_opt = m_ctx.catalog->find(card.def_id);
             if (def_opt.is_none() || !is_delayed_trick(*def_opt.unwrap()))
                 return TurnResult<void>::Err(TurnError::PlayRejected);
             const card::CardDef &def = *def_opt.unwrap();
@@ -290,97 +445,40 @@ namespace tkw
             if (targets.size() != 1)
                 return TurnResult<void>::Err(TurnError::InvalidTarget);
             const std::string &target = targets.front();
-            if (!JudgeQuery::is_delayed_scope_target(ctx, player, def, target))
+            if (!JudgeQuery::is_delayed_scope_target(m_ctx, player, def, target))
                 return TurnResult<void>::Err(TurnError::InvalidTarget);
-            if (JudgeQuery::has_same_delayed(ctx, target, def.id))
+            if (JudgeQuery::has_same_delayed(m_ctx, target, def.id))
                 return TurnResult<void>::Err(TurnError::DelayedDuplicate);
 
-            auto removed = ctx.cards->remove_from_hand(player, card.instance_id);
+            auto removed = m_ctx.cards->remove_from_hand(player, card.instance_id);
             if (removed.is_none())
                 return TurnResult<void>::Err(TurnError::CardNotInHand);
-            emit_card_played(ctx, player, card);
+            emit_card_played(m_ctx, player, card);
 
-            if (CounterResolver(ctx, ai).resolve_nullification(
+            if (CounterResolver(m_ctx, m_ai).resolve_nullification(
                     CounterWindow::Builder{}
                         .trick(&def)
                         .trick_user(player)
                         .targets({target})
                         .build()))
             {
-                StateOps(ctx).discard_and_emit(player, card);
+                StateOps(m_ctx).discard_and_emit(player, card);
                 return TurnResult<void>::Ok();
             }
 
-            ctx.cards->add_to_judge(target, std::move(removed).unwrap());
-            emit_card_moved(ctx, player, target, card, Zone::Hand, Zone::Judge);
+            m_ctx.cards->add_to_judge(target, std::move(removed).unwrap());
+            emit_card_moved(m_ctx, player, target, card, Zone::Hand, Zone::Judge);
             return TurnResult<void>::Ok();
         }
 
-        // ── 回合入口 ────────────────────────────────────────────────────
-
-        /**
-         * @brief  结算错误 → 回合错误（单一映射点）。
-         * @param[in] e 结算错误。
-         * @return 对应回合错误；未列明的值一律落 `TurnError::PlayRejected`。
-         */
-        inline TurnError to_turn_error(EffectError e)
-        {
-            switch (e)
-            {
-            case EffectError::OutOfRange:
-            case EffectError::InvalidTarget:
-                return TurnError::InvalidTarget;
-            case EffectError::CardNotOwned:
-                return TurnError::CardNotInHand;
-            case EffectError::ShaLimitExceeded:
-                return TurnError::ShaLimitExceeded;
-            case EffectError::AnalepticLimitExceeded:
-                return TurnError::AnalepticLimitExceeded;
-            case EffectError::DelayedDuplicate:
-                return TurnError::DelayedDuplicate;
-            default:
-                return TurnError::PlayRejected;
-            }
-        }
-
-        /**
-         * @brief  角色是否仍在场。
-         * @param[in] ctx    只读上下文。
-         * @param[in] player 角色 id。
-         * @return 实体仍在容器中时为 true；回合中可能因闪电/决斗等死亡被移除。
-         */
-        inline bool is_alive(const GameContext &ctx, const std::string &player)
-        {
-            return ctx.entities->find(player).is_some();
-        }
-
-        /** @brief 判定阶段汇总的「跳过阶段」集合：乐不思蜀跳 play、兵粮寸断跳 draw。 */
-        struct TurnSkips
-        {
-            bool skip_play = false; /**< 跳过出牌阶段（乐不思蜀非红桃）。 */
-            bool skip_draw = false; /**< 跳过摸牌阶段（兵粮寸断非梅花）。 */
-        };
-
-        /**
-         * @brief  判定阶段：按判定区顺序结算延时锦囊。
-         * @param[in,out] ctx    对局上下文。
-         * @param[in,out] ai     决策源。
-         * @param[in]     player 当前回合角色 id。
-         * @return 本回合需跳过的阶段集合（乐不思蜀非红桃 → `skip_play`，
-         *         兵粮寸断非梅花 → `skip_draw`）。
-         * @retval Ok(TurnSkips) 已完成判定区结算。
-         * @retval Err(TurnError) 某张延时锦囊结算失败，原样上抛。
-         * @note  角色中途死亡（如闪电劈死）时停止后续结算，调用方经 `is_alive`
-         *         判断回合是否终止。
-         */
-        inline TurnResult<TurnSkips> run_judgement_phase(
-            GameContext &ctx, DecisionSource &ai, const std::string &player)
+        inline TurnResult<TurnSkips> TurnFlow::run_judgement_phase(
+            const std::string &player)
         {
             TurnSkips skips;
-            const auto judge_zone = ctx.cards->judge(player);  // 拷贝
+            const auto judge_zone = m_ctx.cards->judge(player);  // 拷贝
             for (const auto &delayed : judge_zone)
             {
-                auto r = resolve_delayed(ctx, ai, player, delayed);
+                auto r = resolve_delayed(player, delayed);
                 if (r.is_err())
                     return TurnResult<TurnSkips>::Err(r.unwrap_err());
                 const DelayedOutcome outcome = r.unwrap();
@@ -388,47 +486,30 @@ namespace tkw
                     skips.skip_play = true;
                 else if (outcome == DelayedOutcome::SkipDraw)
                     skips.skip_draw = true;
-                if (!is_alive(ctx, player))
+                if (!TurnQuery::is_alive(m_ctx, player))
                     break;  // 闪电劈死 → 回合终止
             }
             return TurnResult<TurnSkips>::Ok(skips);
         }
 
-        /**
-         * @brief  摸牌阶段：摸 `draw_phase_count` 张（基础 `rules.draw_per_turn`，
-         *         英姿 +1）。
-         * @param[in,out] ctx    对局上下文。
-         * @param[in]     player 当前回合角色 id。
-         * @post  该角色手牌增加相应张数，并发布摸牌事件。
-         */
-        inline void run_draw_phase(GameContext &ctx, const std::string &player)
+        inline void TurnFlow::run_draw_phase(const std::string &player)
         {
-            StateOps(ctx).apply_draw(player, HeroQuery::draw_phase_count(ctx, player));
+            StateOps(m_ctx).apply_draw(
+                player, HeroQuery::draw_phase_count(m_ctx, player));
         }
 
-        /**
-         * @brief  出牌阶段：循环向 `DecisionSource` 要动作直到结束。
-         * @param[in,out] ctx    对局上下文。
-         * @param[in,out] ai     决策源。
-         * @param[in]     player 当前回合角色 id。
-         * @return 结算结果。
-         * @retval Ok  决策源不再出牌，或角色中途死亡（决斗自伤等）。
-         * @retval Err(TurnError) 非法动作（手牌不存在/目标非法/超杀次数等）立即
-         *         中止本回合。
-         * @note  每轮重采样杀上限，回合中途装连弩当轮生效；重铸不计杀次数。
-         */
-        inline TurnResult<void> run_play_phase(
-            GameContext &ctx, DecisionSource &ai, const std::string &player)
+        inline TurnResult<void> TurnFlow::run_play_phase(const std::string &player)
         {
             int sha_played = 0;
             while (true)
             {
-                if (!is_alive(ctx, player))
+                if (!TurnQuery::is_alive(m_ctx, player))
                     return TurnResult<void>::Ok();
                 // 每轮重采样杀上限：回合中途装连弩要当轮生效，与引擎侧强制检查一致
                 const TurnContext turn{
-                    player, sha_played, EquipQuery::sha_limit(ctx, player), ctx.jiu_used};
-                auto action = ai.choose_play(ctx, turn);
+                    player, sha_played, EquipQuery::sha_limit(m_ctx, player),
+                    m_ctx.jiu_used};
+                auto action = m_ai.choose_play(m_ctx, turn);
                 if (action.is_none())
                     break;
 
@@ -437,38 +518,41 @@ namespace tkw
                 {
                     // 虚拟杀（丈八蛇矛两张 / 武圣红牌单张）：按一张杀计次数
                     auto vr = validate_virtual_sha(
-                        ctx, player, action.unwrap().instance_id,
+                        m_ctx, player, action.unwrap().instance_id,
                         action.unwrap().second_instance_id,
                         action.unwrap().targets, turn);
                     if (vr.is_err())
-                        return TurnResult<void>::Err(to_turn_error(vr.unwrap_err()));
+                        return TurnResult<void>::Err(
+                            TurnQuery::to_turn_error(vr.unwrap_err()));
                     // 主动使用虚拟杀：消费本回合的酒加成（响应/打出路径不消费）
-                    const int jiu = StateOps(ctx).consume_jiu_sha_bonus(player);
+                    const int jiu = StateOps(m_ctx).consume_jiu_sha_bonus(player);
                     auto rr = resolve_virtual_sha(
-                        ctx, ai, player, action.unwrap().instance_id,
+                        m_ctx, m_ai, player, action.unwrap().instance_id,
                         action.unwrap().second_instance_id, action.unwrap().targets,
                         true, jiu);
                     if (rr.is_err())
-                        return TurnResult<void>::Err(to_turn_error(rr.unwrap_err()));
+                        return TurnResult<void>::Err(
+                            TurnQuery::to_turn_error(rr.unwrap_err()));
                     ++sha_played;
                     continue;
                 }
 
                 const auto card =
-                    find_in_hand(ctx, player, action.unwrap().instance_id);
+                    TurnQuery::find_in_hand(m_ctx, player, action.unwrap().instance_id);
                 if (card.is_none())
                     return TurnResult<void>::Err(TurnError::CardNotInHand);
 
-                const auto def_opt = ctx.catalog->find(card.unwrap().def_id);
+                const auto def_opt = m_ctx.catalog->find(card.unwrap().def_id);
                 if (def_opt.is_none())
                     return TurnResult<void>::Err(TurnError::UnknownCard);
                 const card::CardDef &def = *def_opt.unwrap();
 
                 // 统一预检（手牌/分派/杀次数/目标/可实现性），失败即回合错误
                 auto vr = validate_play_action(
-                    ctx, player, def, card.unwrap(), action.unwrap().targets, turn);
+                    m_ctx, player, def, card.unwrap(), action.unwrap().targets, turn);
                 if (vr.is_err())
-                    return TurnResult<void>::Err(to_turn_error(vr.unwrap_err()));
+                    return TurnResult<void>::Err(
+                        TurnQuery::to_turn_error(vr.unwrap_err()));
 
                 // 重铸：弃置此牌并摸一张，不使用牌面效果、不发打出事件、不计杀次数；
                 // 空目标动作也可能是决策侧未透传标记的重铸选择，故按定义补认
@@ -477,10 +561,11 @@ namespace tkw
                 {
                     if (!def.recast || !action.unwrap().targets.empty())
                         return TurnResult<void>::Err(TurnError::PlayRejected);
-                    if (StateOps(ctx).remove_and_discard(player, card.unwrap().instance_id)
+                    if (StateOps(m_ctx)
+                            .remove_and_discard(player, card.unwrap().instance_id)
                             .is_none())
                         return TurnResult<void>::Err(TurnError::CardNotInHand);
-                    StateOps(ctx).apply_draw(player, 1);
+                    StateOps(m_ctx).apply_draw(player, 1);
                     continue;
                 }
 
@@ -488,7 +573,7 @@ namespace tkw
                 {
                 case PlayClass::Equipment:
                 {
-                    auto er = equip_card(ctx, player, card.unwrap());
+                    auto er = TurnFlow::equip_card(m_ctx, player, card.unwrap());
                     if (er.is_err())
                         return TurnResult<void>::Err(er.unwrap_err());
                     continue;
@@ -497,7 +582,7 @@ namespace tkw
                 case PlayClass::DelayedTrick:
                 {
                     auto dr = place_delayed(
-                        ctx, ai, player, card.unwrap(), action.unwrap().targets);
+                        player, card.unwrap(), action.unwrap().targets);
                     if (dr.is_err())
                         return TurnResult<void>::Err(dr.unwrap_err());
                     continue;
@@ -509,76 +594,43 @@ namespace tkw
                 }
 
                 auto rr = resolve_play(
-                    ctx, ai, player, card.unwrap(), action.unwrap().targets);
+                    m_ctx, m_ai, player, card.unwrap(), action.unwrap().targets);
                 if (rr.is_err())
-                    return TurnResult<void>::Err(to_turn_error(rr.unwrap_err()));
-                if (is_sha(def))
+                    return TurnResult<void>::Err(
+                        TurnQuery::to_turn_error(rr.unwrap_err()));
+                if (TurnQuery::is_sha(def))
                     ++sha_played;
-                if (!is_alive(ctx, player))
+                if (!TurnQuery::is_alive(m_ctx, player))
                     return TurnResult<void>::Ok();  // 决斗等自伤致死
             }
             return TurnResult<void>::Ok();
         }
 
-        /**
-         * @brief  弃牌阶段：手牌上限 = 当前体力值。
-         * @param[in,out] ctx    对局上下文。
-         * @param[in,out] ai     决策源（询问弃牌）。
-         * @param[in]     player 当前回合角色 id。
-         * @return 结算结果。
-         * @retval Ok  手牌未超上限或已弃足。
-         * @retval Err(TurnError::DiscardInsufficient) 弃牌数量不足或引用了不存在的牌。
-         */
-        inline TurnResult<void> run_discard_phase(
-            GameContext &ctx, DecisionSource &ai, const std::string &player)
+        inline TurnResult<void> TurnFlow::run_discard_phase(
+            const std::string &player)
         {
             const int hand_limit =
-                ctx.entities->find(player).unwrap()->get_hp_bar().get_cur();
+                m_ctx.entities->find(player).unwrap()->get_hp_bar().get_cur();
             const int over =
-                static_cast<int>(ctx.cards->hand_size(player)) - hand_limit;
+                static_cast<int>(m_ctx.cards->hand_size(player)) - hand_limit;
             if (over > 0)
             {
                 const auto discards =
-                    ai.choose_discards(ctx, player, over, DiscardReason::TurnLimit);
+                    m_ai.choose_discards(m_ctx, player, over, DiscardReason::TurnLimit);
                 if (static_cast<int>(discards.size()) != over)
                     return TurnResult<void>::Err(TurnError::DiscardInsufficient);
                 for (const auto &id : discards)
                 {
-                    if (StateOps(ctx).remove_and_discard(player, id).is_none())
+                    if (StateOps(m_ctx).remove_and_discard(player, id).is_none())
                         return TurnResult<void>::Err(TurnError::DiscardInsufficient);
                 }
             }
             return TurnResult<void>::Ok();
         }
 
-        /**
-         * @brief  执行 `player` 的一个完整回合：判定 → 摸牌 → 出牌 → 弃牌。
-         * @details 四阶段依次为 `run_judgement_phase`、`run_draw_phase`（受
-         *          `skip_draw` 抑制）、`run_play_phase`（受 `skip_play` 抑制）、
-         *          `run_discard_phase`。
-         * @param[in,out] ctx    对局上下文。
-         * @param[in,out] ai     决策源。
-         * @param[in]     player 当前回合角色 id。
-         * @return 结算结果。
-         * @retval Ok  回合正常结束，或角色在阶段中途死亡而终止。
-         * @retval Err(TurnError) 某阶段失败，原样上抛。
-         * @note  入口把 `player` 置入 `ctx.turn_player` 并在返回时还原（覆盖全部
-         *         早退），供濒死询问等结算读取当前回合角色；离开本函数即回到
-         *         「无回合上下文」。
-         * @note  酒的伤害加成与「本回合已用酒」标记在入口清空、出口清空：二者是
-         *         回合内运行时状态，不持久化，也不跨回合/跨玩家泄漏。
-         * @note  角色在任意阶段死亡即终止本回合（死亡实体已被移除，阶段函数内均
-         *         重新 `find` 以免悬垂指针）。
-         * @warning 失败时不会回滚已落子的部分（判定/摸牌/出牌可能已结算），调用方
-         *          须消费该回合（推进行程），不得以同一角色重入。
-         * @see   run_judgement_phase, run_draw_phase, run_play_phase, run_discard_phase
-         */
-        inline TurnResult<void> execute_turn(
-            GameContext &ctx,
-            DecisionSource &ai,
-            const std::string &player)
+        inline TurnResult<void> TurnFlow::execute_turn(const std::string &player)
         {
-            if (ctx.entities->find(player).is_none())
+            if (m_ctx.entities->find(player).is_none())
                 return TurnResult<void>::Err(TurnError::UnknownPlayer);
 
             // 回合上下文：置位当前回合角色；酒加成与限一次标记随回合清空/清出，
@@ -594,35 +646,158 @@ namespace tkw
                     context.jiu_damage_owner.clear();
                     context.jiu_used = false;
                 }
-            } turn_scope{ctx, std::move(ctx.turn_player)};
-            ctx.turn_player = player;
-            ctx.jiu_damage_owner.clear();
-            ctx.jiu_used = false;
+            } turn_scope{m_ctx, std::move(m_ctx.turn_player)};
+            m_ctx.turn_player = player;
+            m_ctx.jiu_damage_owner.clear();
+            m_ctx.jiu_used = false;
 
             // 1. 判定阶段
-            auto jr = run_judgement_phase(ctx, ai, player);
+            auto jr = run_judgement_phase(player);
             if (jr.is_err())
                 return TurnResult<void>::Err(jr.unwrap_err());
             const TurnSkips skips = jr.unwrap();
-            if (!is_alive(ctx, player))
+            if (!TurnQuery::is_alive(m_ctx, player))
                 return TurnResult<void>::Ok();
 
             // 2. 摸牌阶段
             if (!skips.skip_draw)
-                run_draw_phase(ctx, player);
+                run_draw_phase(player);
 
             // 3. 出牌阶段
             if (!skips.skip_play)
             {
-                auto pr = run_play_phase(ctx, ai, player);
+                auto pr = run_play_phase(player);
                 if (pr.is_err())
                     return TurnResult<void>::Err(pr.unwrap_err());
             }
 
             // 4. 弃牌阶段
-            if (!is_alive(ctx, player))
+            if (!TurnQuery::is_alive(m_ctx, player))
                 return TurnResult<void>::Ok();
-            return run_discard_phase(ctx, ai, player);
+            return run_discard_phase(player);
+        }
+
+        /**
+         * @brief  下家：按座位序环绕的存活玩家（兼容转发）。
+         * @details 等价于 `TurnQuery::next_player(ctx, player)`。
+         * @param[in] ctx    只读上下文。
+         * @param[in] player 参照玩家 id。
+         * @return `player` 之后的第一个存活玩家 id。
+         */
+        inline std::string next_player(const GameContext &ctx, const std::string &player)
+        {
+            return TurnQuery::next_player(ctx, player);
+        }
+
+        /**
+         * @brief  该定义是否为「杀」（兼容转发）。
+         * @details 等价于 `TurnQuery::is_sha(def)`。
+         * @param[in] def 卡定义。
+         * @return 效果类别为 `Damage` 时为 true。
+         */
+        inline bool is_sha(const card::CardDef &def)
+        {
+            return TurnQuery::is_sha(def);
+        }
+
+        /**
+         * @brief  从手牌找一张牌（兼容转发）。
+         * @details 等价于 `TurnQuery::find_in_hand(ctx, player, instance_id)`。
+         * @param[in] ctx         只读上下文。
+         * @param[in] player      手牌所有者 id。
+         * @param[in] instance_id 目标牌实例 id。
+         * @return 命中牌副本；不存在时为 `None`。
+         */
+        inline Option<card::Card> find_in_hand(
+            const GameContext &ctx,
+            const std::string &player,
+            const std::string &instance_id)
+        {
+            return TurnQuery::find_in_hand(ctx, player, instance_id);
+        }
+
+        /**
+         * @brief  结算错误 → 回合错误（兼容转发）。
+         * @details 等价于 `TurnQuery::to_turn_error(e)`。
+         * @param[in] e 结算错误。
+         * @return 对应回合错误。
+         */
+        inline TurnError to_turn_error(EffectError e)
+        {
+            return TurnQuery::to_turn_error(e);
+        }
+
+        /**
+         * @brief  角色是否仍在场（兼容转发）。
+         * @details 等价于 `TurnQuery::is_alive(ctx, player)`。
+         * @param[in] ctx    只读上下文。
+         * @param[in] player 角色 id。
+         * @return 实体仍在容器中时为 true。
+         */
+        inline bool is_alive(const GameContext &ctx, const std::string &player)
+        {
+            return TurnQuery::is_alive(ctx, player);
+        }
+
+        /**
+         * @brief  结算一张延时锦囊（兼容转发）。
+         * @details 等价于 `TurnFlow(ctx, ai).resolve_delayed(player, delayed)`。
+         * @param[in,out] ctx     对局上下文。
+         * @param[in,out] ai      决策源。
+         * @param[in]     player  被判定玩家 id。
+         * @param[in]     delayed 待结算的延时锦囊牌。
+         * @return 结算结果。
+         */
+        inline TurnResult<DelayedOutcome> resolve_delayed(
+            GameContext &ctx, DecisionSource &ai,
+            const std::string &player,
+            const card::Card &delayed)
+        {
+            return TurnFlow(ctx, ai).resolve_delayed(player, delayed);
+        }
+
+        /**
+         * @brief  装备动作（兼容转发）。
+         * @details 等价于 `TurnFlow::equip_card(ctx, player, card)`。
+         * @param[in,out] ctx    对局上下文。
+         * @param[in]     player 装备者 id。
+         * @param[in]     card   要装备的手牌。
+         * @return 结算结果。
+         */
+        inline TurnResult<void> equip_card(
+            GameContext &ctx, const std::string &player, const card::Card &card)
+        {
+            return TurnFlow::equip_card(ctx, player, card);
+        }
+
+        /**
+         * @brief  出牌阶段（兼容转发）。
+         * @details 等价于 `TurnFlow(ctx, ai).run_play_phase(player)`。
+         * @param[in,out] ctx    对局上下文。
+         * @param[in,out] ai     决策源。
+         * @param[in]     player 当前回合角色 id。
+         * @return 结算结果。
+         */
+        inline TurnResult<void> run_play_phase(
+            GameContext &ctx, DecisionSource &ai, const std::string &player)
+        {
+            return TurnFlow(ctx, ai).run_play_phase(player);
+        }
+
+        /**
+         * @brief  执行一个完整回合（兼容转发）。
+         * @details 等价于 `TurnFlow(ctx, ai).execute_turn(player)`。
+         * @param[in,out] ctx    对局上下文。
+         * @param[in,out] ai     决策源。
+         * @param[in]     player 当前回合角色 id。
+         * @return 结算结果。
+         */
+        inline TurnResult<void> execute_turn(
+            GameContext &ctx,
+            DecisionSource &ai,
+            const std::string &player)
+        {
+            return TurnFlow(ctx, ai).execute_turn(player);
         }
     }
 }
