@@ -12,7 +12,6 @@
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -621,11 +620,11 @@ namespace tkw
             std::unique_lock<std::mutex> lock(m_mutex);
             if (m_cancelled.load())
                 return {};
-            m_panel = make_panel(req);
+            m_panel = tkw::Option<DecisionPanelView>::Some(make_panel(req));
             m_taken = false;
             m_submitted = false;
             std::function<void()> notify = m_notify;
-            std::function<void()> on_wait = on_wait_;
+            std::function<void()> on_wait = m_on_wait;
             lock.unlock();
             // 先投递快照再发布待决：主线程只能在 pending 可见后写运行中
             // 提示，故该提示不会先于快照写入而被后续整段覆盖丢行。
@@ -634,7 +633,7 @@ namespace tkw
             lock.lock();
             if (m_cancelled.load())
                 return {};
-            has_pending_ = true;
+            m_has_pending = true;
             lock.unlock();
             // notify 必须在 pending 可见之后，UI 唤醒后 fetch_new 才能取到面板。
             if (notify)
@@ -644,10 +643,10 @@ namespace tkw
                      { return m_submitted || m_cancelled.load(); });
             if (m_cancelled.load())
             {
-                has_pending_ = false;
+                m_has_pending = false;
                 return {};
             }
-            has_pending_ = false;
+            m_has_pending = false;
             m_taken = false;
             return m_choice;
         }
@@ -655,9 +654,9 @@ namespace tkw
         bool TuiDecisionSource::fetch_new(DecisionPanelView &out)
         {
             std::lock_guard<std::mutex> lock(m_mutex);
-            if (!has_pending_ || m_taken || m_cancelled.load())
+            if (!m_has_pending || m_taken || m_cancelled.load())
                 return false;
-            out = *m_panel;
+            out = m_panel.unwrap();
             m_taken = true;
             return true;
         }
@@ -665,7 +664,7 @@ namespace tkw
         bool TuiDecisionSource::has_pending() const
         {
             std::lock_guard<std::mutex> lock(m_mutex);
-            return has_pending_ && !m_taken && !m_cancelled.load();
+            return m_has_pending && !m_taken && !m_cancelled.load();
         }
 
         bool TuiDecisionSource::submit(std::vector<std::size_t> selected,
@@ -674,10 +673,11 @@ namespace tkw
             std::lock_guard<std::mutex> lock(m_mutex);
             // m_submitted 关掉「首次提交到 worker 唤醒之间」的连击覆盖窗口；
             // worker 每次 decide 起始会重置它。
-            if (!has_pending_ || m_submitted || m_cancelled.load())
+            if (!m_has_pending || m_submitted || m_cancelled.load())
                 return false;
             tkw::game::ai::DecisionChoice choice;
-            if (!m_panel || !make_choice(*m_panel, selected, pass, choice))
+            if (m_panel.is_none() ||
+                !make_choice(m_panel.unwrap(), selected, pass, choice))
                 return false;
             m_choice = std::move(choice);
             m_submitted = true;
@@ -690,8 +690,8 @@ namespace tkw
             {
                 std::lock_guard<std::mutex> lock(m_mutex);
                 m_cancelled.store(true);
-                has_pending_ = false;
-                m_panel.reset();
+                m_has_pending = false;
+                m_panel = tkw::Option<DecisionPanelView>::None();
             }
             m_cv.notify_all();
         }
@@ -705,7 +705,7 @@ namespace tkw
         void TuiDecisionSource::set_on_wait(std::function<void()> on_wait)
         {
             std::lock_guard<std::mutex> lock(m_mutex);
-            on_wait_ = std::move(on_wait);
+            m_on_wait = std::move(on_wait);
         }
     }  // namespace tui
 }  // namespace tkw

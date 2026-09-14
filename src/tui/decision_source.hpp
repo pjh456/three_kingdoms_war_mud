@@ -18,7 +18,6 @@
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -362,9 +361,10 @@ namespace tkw
             std::set<std::string> m_humans;
             std::unique_ptr<tkw::game::ai::Decider> m_fallback;
             std::function<void()> m_notify;
-            std::function<void()> on_wait_;
-            std::optional<DecisionPanelView> m_panel;
-            bool has_pending_ = false;
+            std::function<void()> m_on_wait;
+            tkw::Option<DecisionPanelView> m_panel =
+                tkw::Option<DecisionPanelView>::None();
+            bool m_has_pending = false;
             bool m_taken = false;
             bool m_submitted = false;
             tkw::game::ai::DecisionChoice m_choice;
