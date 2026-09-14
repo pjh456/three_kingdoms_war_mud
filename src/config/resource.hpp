@@ -45,7 +45,9 @@ namespace tkw
              */
             ConfigResult<json::Document> load(std::string_view name) const
             {
-                const auto file = m_root / (std::string(name) + ".json");
+                auto file = m_root / (std::string(name) + ".json");
+                // name 可含 '/' 作为逻辑段分隔，统一成原生分隔符，避免混用。
+                file.make_preferred();
 
                 auto text = io::read_text(file);
                 if (text.is_err())
