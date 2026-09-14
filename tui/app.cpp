@@ -28,28 +28,28 @@ namespace tkw
     {
         void App::bootstrap()
         {
-            notice_ = "new / deal / step / run(r) / status(st) / save(w) / "
+            m_notice = "new / deal / step / run(r) / status(st) / save(w) / "
                       "load(l) / cards / rules / audit / quit(q)；"
                       "help 或 ? 查看用法，Esc / Ctrl-C 退出";
-            controller_.bootstrap();
+            m_controller.bootstrap();
         }
 
         void App::sync_decision()
         {
-            if (decision_panel_.visible())
+            if (m_decision_panel.visible())
                 return;
             DecisionPanelView view;
-            if (controller_.fetch_new_decision(view))
-                decision_panel_.show(std::move(view));
+            if (m_controller.fetch_new_decision(view))
+                m_decision_panel.show(std::move(view));
         }
 
         ftxui::Element App::render() const
         {
             ftxui::Element bottom;
-            if (decision_panel_.visible())
-                bottom = decision_panel_.render();
-            else if (input_)
-                bottom = ftxui::hbox({ftxui::text("> "), input_->Render()});
+            if (m_decision_panel.visible())
+                bottom = m_decision_panel.render();
+            else if (m_input)
+                bottom = ftxui::hbox({ftxui::text("> "), m_input->Render()});
             else
                 bottom = ftxui::text("");
 
@@ -57,26 +57,26 @@ namespace tkw
             if (size.dimx <= 0 || size.dimy <= 0)
                 size = ftxui::Dimensions{kFallbackCols, kFallbackRows};
 
-            const detail::ShellSpec spec{controller_.snapshot(),
-                                         controller_.log_lines(),
-                                         notice_,
+            const detail::ShellSpec spec{m_controller.snapshot(),
+                                         m_controller.log_lines(),
+                                         m_notice,
                                          std::move(bottom),
                                          size,
                                          log_ratio(),
-                                         decision_panel_.visible()};
+                                         m_decision_panel.visible()};
             return detail::render_shell(spec);
         }
 
         float App::log_ratio() const
         {
-            return log_scroll_.ratio(controller_.log_lines().size());
+            return m_log_scroll.ratio(m_controller.log_lines().size());
         }
 
         ftxui::Component App::component(ftxui::ScreenInteractive &screen)
         {
             // 回送经 screen.Post；TaskQueue 自带锁，worker 可安全入队。
             // PostEvent(Custom) 触发重绘，闭包只改控制器模型值。
-            controller_.set_post(
+            m_controller.set_post(
                 [&screen](std::function<void()> task)
                 {
                     screen.Post(
@@ -86,28 +86,28 @@ namespace tkw
                             screen.PostEvent(ftxui::Event::Custom);
                         });
                 });
-            controller_.set_on_quit([&screen] { screen.Exit(); });
-            decision_panel_.set_on_submit(
+            m_controller.set_on_quit([&screen] { screen.Exit(); });
+            m_decision_panel.set_on_submit(
                 [this](std::vector<std::size_t> selected, bool pass)
                 {
-                    return controller_.submit_decision(std::move(selected),
+                    return m_controller.submit_decision(std::move(selected),
                                                        pass);
                 });
 
             ftxui::InputOption input_option;
-            input_option.content = &command_input_;
+            input_option.content = &m_command_input;
             input_option.placeholder = "输入命令（help 或 ? 查看用法）";
             input_option.multiline = false;
             input_option.on_enter =
                 [this]
                 {
-                    std::string line = command_input_;
-                    command_input_.clear();
-                    controller_.execute_line(line);
+                    std::string line = m_command_input;
+                    m_command_input.clear();
+                    m_controller.execute_line(line);
                 };
-            input_ = ftxui::Input(input_option);
+            m_input = ftxui::Input(input_option);
 
-            auto container = ftxui::Container::Vertical({input_});
+            auto container = ftxui::Container::Vertical({m_input});
             return ftxui::Renderer(container, [this] { return render(); }) |
                    ftxui::CatchEvent(
                        [this](ftxui::Event event)
@@ -115,22 +115,22 @@ namespace tkw
                            if (event == ftxui::Event::Escape ||
                                event == ftxui::Event::CtrlC)
                            {
-                               controller_.request_quit();
+                               m_controller.request_quit();
                                return true;
                            }
 
                            // 面板唤醒与渲染同帧：先取待决，再按键；
                            // 面板可见期间吞掉其余按键，避免落入隐藏的命令输入。
                            sync_decision();
-                           if (decision_panel_.visible())
+                           if (m_decision_panel.visible())
                            {
                                // 命令输入已隐藏，q 无输入冲突：待决中仍可退出。
                                if (event == ftxui::Event::q)
                                {
-                                   controller_.request_quit();
+                                   m_controller.request_quit();
                                    return true;
                                }
-                               decision_panel_.on_event(event);
+                               m_decision_panel.on_event(event);
                                return true;
                            }
 
@@ -147,8 +147,8 @@ namespace tkw
                             else if (event == ftxui::Event::End)
                                 key = LogKey::End;
                             return handle_log_key(
-                                key, command_input_.empty(), log_scroll_,
-                                controller_.log_lines().size());
+                                key, m_command_input.empty(), m_log_scroll,
+                                m_controller.log_lines().size());
                         });
         }
     }  // namespace tui

@@ -83,114 +83,114 @@ namespace tkw
 
         void DecisionPanel::show(DecisionPanelView view)
         {
-            cursor_ = 0;
-            checked_.assign(view.options.size(), false);
-            notice_.clear();
-            compose_.clear();
-            detail_index_ = -1;
-            show_help_ = false;
-            view_ = std::move(view);
+            m_cursor = 0;
+            m_checked.assign(view.options.size(), false);
+            m_notice.clear();
+            m_compose.clear();
+            m_detail_index = -1;
+            m_show_help = false;
+            m_view = std::move(view);
         }
 
         void DecisionPanel::hide()
         {
-            view_.reset();
-            checked_.clear();
-            cursor_ = 0;
-            notice_.clear();
-            compose_.clear();
-            detail_index_ = -1;
-            show_help_ = false;
+            m_view.reset();
+            m_checked.clear();
+            m_cursor = 0;
+            m_notice.clear();
+            m_compose.clear();
+            m_detail_index = -1;
+            m_show_help = false;
         }
 
         void DecisionPanel::move_cursor(int delta)
         {
-            if (!view_ || view_->options.empty())
+            if (!m_view || m_view->options.empty())
                 return;
-            const int count = static_cast<int>(view_->options.size());
-            int next = static_cast<int>(cursor_) + delta;
+            const int count = static_cast<int>(m_view->options.size());
+            int next = static_cast<int>(m_cursor) + delta;
             if (next < 0)
                 next = 0;
             if (next >= count)
                 next = count - 1;
-            cursor_ = static_cast<std::size_t>(next);
-            detail_index_ = -1;
+            m_cursor = static_cast<std::size_t>(next);
+            m_detail_index = -1;
         }
 
         void DecisionPanel::toggle_cursor()
         {
-            if (!view_ || !view_->multi || cursor_ >= checked_.size())
+            if (!m_view || !m_view->multi || m_cursor >= m_checked.size())
                 return;
-            checked_[cursor_] = !checked_[cursor_];
-            notice_.clear();
+            m_checked[m_cursor] = !m_checked[m_cursor];
+            m_notice.clear();
         }
 
         std::vector<std::size_t> DecisionPanel::selected() const
         {
             std::vector<std::size_t> out;
-            if (!view_)
+            if (!m_view)
                 return out;
-            if (view_->multi)
+            if (m_view->multi)
             {
-                for (std::size_t i = 0; i < checked_.size(); ++i)
-                    if (checked_[i])
+                for (std::size_t i = 0; i < m_checked.size(); ++i)
+                    if (m_checked[i])
                         out.push_back(i);
                 return out;
             }
-            if (!view_->options.empty())
-                out.push_back(cursor_);
+            if (!m_view->options.empty())
+                out.push_back(m_cursor);
             return out;
         }
 
         void DecisionPanel::confirm()
         {
-            if (!view_)
+            if (!m_view)
                 return;
 
-            if (view_->options.empty())
+            if (m_view->options.empty())
             {
-                if (!view_->allow_pass)
+                if (!m_view->allow_pass)
                 {
-                    notice_ = "没有可选项，无法继续";
+                    m_notice = "没有可选项，无法继续";
                     return;
                 }
-                if (on_submit_ && on_submit_({}, true))
+                if (m_on_submit && m_on_submit({}, true))
                     hide();
                 else
-                    notice_ = "放弃被拒绝，请重试";
+                    m_notice = "放弃被拒绝，请重试";
                 return;
             }
 
             std::vector<std::size_t> selection = selected();
-            if (view_->multi &&
-                static_cast<int>(selection.size()) != view_->need_count)
+            if (m_view->multi &&
+                static_cast<int>(selection.size()) != m_view->need_count)
             {
                 const int missing =
-                    view_->need_count - static_cast<int>(selection.size());
-                notice_ = "还需选择 " + std::to_string(missing) + " 张（当前 " +
+                    m_view->need_count - static_cast<int>(selection.size());
+                m_notice = "还需选择 " + std::to_string(missing) + " 张（当前 " +
                           std::to_string(selection.size()) + "/" +
-                          std::to_string(view_->need_count) + "）";
+                          std::to_string(m_view->need_count) + "）";
                 return;
             }
-            if (on_submit_ && on_submit_(std::move(selection), false))
+            if (m_on_submit && m_on_submit(std::move(selection), false))
                 hide();
             else
-                notice_ = "提交被拒绝，请重试";
+                m_notice = "提交被拒绝，请重试";
         }
 
         void DecisionPanel::discard()
         {
-            if (!view_)
+            if (!m_view)
                 return;
-            if (!view_->allow_pass)
+            if (!m_view->allow_pass)
             {
-                notice_ = "本决策不能放弃";
+                m_notice = "本决策不能放弃";
                 return;
             }
-            if (on_submit_ && on_submit_({}, true))
+            if (m_on_submit && m_on_submit({}, true))
                 hide();
             else
-                notice_ = "放弃被拒绝，请重试";
+                m_notice = "放弃被拒绝，请重试";
         }
 
         bool DecisionPanel::handle_compose(const ftxui::Event &event)
@@ -198,46 +198,46 @@ namespace tkw
             if (event == ftxui::Event::Return)
             {
                 int index = -1;
-                if (parse_detail_index(compose_, view_->options.size(), index))
+                if (parse_detail_index(m_compose, m_view->options.size(), index))
                 {
                     const PanelOption &opt =
-                        view_->options[static_cast<std::size_t>(index)];
+                        m_view->options[static_cast<std::size_t>(index)];
                     if (!opt.hidden && opt.card_name.empty() &&
                         opt.card_meta.empty() && opt.card_text.empty())
                     {
-                        detail_index_ = -1;
-                        notice_ = "该候选项没有牌面";
+                        m_detail_index = -1;
+                        m_notice = "该候选项没有牌面";
                     }
                     else
                     {
-                        detail_index_ = index;
-                        show_help_ = false;
-                        notice_.clear();
+                        m_detail_index = index;
+                        m_show_help = false;
+                        m_notice.clear();
                     }
                 }
                 else
                 {
-                    detail_index_ = -1;
-                    notice_ = "用法：card <序号>（或 c <序号>）";
+                    m_detail_index = -1;
+                    m_notice = "用法：card <序号>（或 c <序号>）";
                 }
-                compose_.clear();
+                m_compose.clear();
                 return true;
             }
 
             if (event == ftxui::Event::Backspace)
             {
-                if (!compose_.empty())
-                    compose_.pop_back();
-                if (compose_.empty())
-                    notice_.clear();  // 退出 card 输入态：不留「输入序号…」提示
+                if (!m_compose.empty())
+                    m_compose.pop_back();
+                if (m_compose.empty())
+                    m_notice.clear();  // 退出 card 输入态：不留「输入序号…」提示
                 return true;
             }
 
             if (event.is_character())
             {
                 const std::string ch = event.character();
-                if (compose_.size() + ch.size() <= kComposeMax)
-                    compose_ += ch;
+                if (m_compose.size() + ch.size() <= kComposeMax)
+                    m_compose += ch;
                 return true;
             }
 
@@ -247,25 +247,25 @@ namespace tkw
 
         bool DecisionPanel::on_event(const ftxui::Event &event)
         {
-            if (!view_)
+            if (!m_view)
                 return false;
 
             // 命令缓冲优先：card 输入期间数字只入缓冲，不落入直选/提交。
-            if (!compose_.empty())
+            if (!m_compose.empty())
                 return handle_compose(event);
 
             if (event == ftxui::Event::Character('?'))
             {
-                show_help_ = !show_help_;
-                detail_index_ = -1;
-                notice_.clear();
+                m_show_help = !m_show_help;
+                m_detail_index = -1;
+                m_notice.clear();
                 return true;
             }
             if (event == ftxui::Event::c || event == ftxui::Event::C)
             {
-                compose_ = "c";
-                detail_index_ = -1;
-                notice_ = "输入序号后回车看牌面（card <序号>）";
+                m_compose = "c";
+                m_detail_index = -1;
+                m_notice = "输入序号后回车看牌面（card <序号>）";
                 return true;
             }
 
@@ -284,7 +284,7 @@ namespace tkw
                 confirm();
                 return true;
             }
-            if (view_->multi && event == ftxui::Event::Character(' '))
+            if (m_view->multi && event == ftxui::Event::Character(' '))
             {
                 toggle_cursor();
                 return true;
@@ -298,10 +298,10 @@ namespace tkw
             std::size_t index = 0;
             if (digit_index(event, index))
             {
-                if (index >= view_->options.size())
+                if (index >= m_view->options.size())
                     return true;  // 越界数字吞掉，避免落入隐藏的命令输入
-                cursor_ = index;
-                if (view_->multi)
+                m_cursor = index;
+                if (m_view->multi)
                     toggle_cursor();
                 else
                     confirm();
@@ -312,42 +312,42 @@ namespace tkw
 
         ftxui::Element DecisionPanel::render() const
         {
-            if (!view_)
+            if (!m_view)
                 return ftxui::text("");
 
             std::vector<ftxui::Element> rows;
 
-            if (view_->multi)
+            if (m_view->multi)
             {
                 std::size_t count = 0;
-                for (const bool picked : checked_)
+                for (const bool picked : m_checked)
                     count += picked ? 1 : 0;
                 rows.push_back(ftxui::text("已选 " + std::to_string(count) + "/" +
-                                           std::to_string(view_->need_count)) |
+                                           std::to_string(m_view->need_count)) |
                                ftxui::dim);
             }
 
-            if (view_->options.empty())
+            if (m_view->options.empty())
                 rows.push_back(ftxui::text("（无候选）"));
 
-            for (std::size_t i = 0; i < view_->options.size(); ++i)
+            for (std::size_t i = 0; i < m_view->options.size(); ++i)
             {
                 std::string line;
-                if (view_->multi)
-                    line = (i < checked_.size() && checked_[i]) ? "[x] " : "[ ] ";
+                if (m_view->multi)
+                    line = (i < m_checked.size() && m_checked[i]) ? "[x] " : "[ ] ";
                 else
-                    line = (i == cursor_) ? "> " : "  ";
-                line += std::to_string(i + 1) + ". " + view_->options[i].text;
+                    line = (i == m_cursor) ? "> " : "  ";
+                line += std::to_string(i + 1) + ". " + m_view->options[i].text;
 
                 ftxui::Element row = ftxui::text(line);
-                if (!view_->multi && i == cursor_)
+                if (!m_view->multi && i == m_cursor)
                     row = ftxui::inverted(std::move(row));
                 rows.push_back(std::move(row));
             }
 
             rows.push_back(ftxui::separatorLight());
 
-            if (show_help_)
+            if (m_show_help)
             {
                 rows.push_back(
                     ftxui::text(
@@ -359,12 +359,12 @@ namespace tkw
                 rows.push_back(ftxui::text("? 显示/隐藏本说明  q/Esc 退出") |
                                ftxui::dim);
             }
-            else if (detail_index_ >= 0 &&
-                     static_cast<std::size_t>(detail_index_) <
-                         view_->options.size())
+            else if (m_detail_index >= 0 &&
+                     static_cast<std::size_t>(m_detail_index) <
+                         m_view->options.size())
             {
                 const PanelOption &opt =
-                    view_->options[static_cast<std::size_t>(detail_index_)];
+                    m_view->options[static_cast<std::size_t>(m_detail_index)];
                 std::string face =
                     "牌面：" + (opt.card_name.empty() ? opt.text : opt.card_name);
                 if (!opt.card_meta.empty())
@@ -396,20 +396,20 @@ namespace tkw
             }
 
             std::string hint = "↑/↓ 选择  Enter 确认";
-            if (view_->allow_pass)
+            if (m_view->allow_pass)
                 hint += "  p 放弃";
-            if (view_->multi)
+            if (m_view->multi)
                 hint += "  空格多选";
             hint += "  数字直选  c 看牌面  ? 帮助  q/Esc 退出";
             rows.push_back(ftxui::text(hint) | ftxui::dim);
 
-            if (!notice_.empty())
-                rows.push_back(ftxui::text(notice_) |
+            if (!m_notice.empty())
+                rows.push_back(ftxui::text(m_notice) |
                                ftxui::color(ftxui::Color::Red));
 
-            const std::string title = view_->actor.empty()
-                                          ? view_->title
-                                          : view_->actor + "：" + view_->title;
+            const std::string title = m_view->actor.empty()
+                                          ? m_view->title
+                                          : m_view->actor + "：" + m_view->title;
             return ftxui::window(ftxui::text(title) | ftxui::bold,
                                  ftxui::vbox(std::move(rows)));
         }

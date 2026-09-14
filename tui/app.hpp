@@ -43,7 +43,7 @@ namespace tkw
              */
             void set_base_options(tkw::cli::Options options)
             {
-                controller_.set_base_options(std::move(options));
+                m_controller.set_base_options(std::move(options));
             }
 
             /**
@@ -57,7 +57,7 @@ namespace tkw
             ftxui::Component component(ftxui::ScreenInteractive &screen);
 
             /** @brief 退出自动存档信息；入口在事件循环结束后写 stderr。 */
-            const std::string &exit_message() const { return controller_.exit_message(); }
+            const std::string &exit_message() const { return m_controller.exit_message(); }
 
         private:
             /** @brief 组装整屏 DOM：四面板 + 命令输入行或决策面板。 */
@@ -72,12 +72,12 @@ namespace tkw
              */
             float log_ratio() const;
 
-            Controller controller_;      /**< 会话驱动、worker、日志与存档 */
-            std::string command_input_;  /**< 命令输入缓冲（先声明，后于输入组件析构） */
-            ftxui::Component input_;     /**< 命令输入框 */
-            DecisionPanel decision_panel_; /**< 真人待决面板（覆盖输入行） */
-            std::string notice_;         /**< 底部提示行文案 */
-            LogScroll log_scroll_;       /**< 日志滚动状态（纯状态机） */
+            Controller m_controller;      /**< 会话驱动、worker、日志与存档 */
+            std::string m_command_input;  /**< 命令输入缓冲（先声明，后于输入组件析构） */
+            ftxui::Component m_input;     /**< 命令输入框 */
+            DecisionPanel m_decision_panel; /**< 真人待决面板（覆盖输入行） */
+            std::string m_notice;         /**< 底部提示行文案 */
+            LogScroll m_log_scroll;       /**< 日志滚动状态（纯状态机） */
         };
     }  // namespace tui
 }  // namespace tkw

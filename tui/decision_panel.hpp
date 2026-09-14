@@ -36,7 +36,7 @@ namespace tkw
             using Submit = std::function<bool(std::vector<std::size_t>, bool)>;
 
             /** @brief 设置提交回调；未设置时确认操作只提示失败。 */
-            void set_on_submit(Submit submit) { on_submit_ = std::move(submit); }
+            void set_on_submit(Submit submit) { m_on_submit = std::move(submit); }
 
             /**
              * @brief 接收新的待决面板并重置选择状态。
@@ -48,7 +48,7 @@ namespace tkw
             void hide();
 
             /** @brief 面板是否可见。 */
-            bool visible() const noexcept { return view_.has_value(); }
+            bool visible() const noexcept { return m_view.has_value(); }
 
             /**
              * @brief 处理一个按键。
@@ -86,14 +86,14 @@ namespace tkw
              */
             std::vector<std::size_t> selected() const;
 
-            std::optional<DecisionPanelView> view_; /**< 当前待决；空 = 不可见 */
-            std::size_t cursor_ = 0;                /**< 单/多选共有光标 */
-            std::vector<bool> checked_;             /**< 多选勾选态 */
-            std::string notice_;                    /**< 非法操作提示 */
-            std::string compose_;   /**< 非空 = 正在输入 card 命令 */
-            int detail_index_ = -1; /**< >=0 = 显示该 0 基候选的牌面 */
-            bool show_help_ = false; /**< ? 帮助开关 */
-            Submit on_submit_;                      /**< 提交接缝 */
+            std::optional<DecisionPanelView> m_view; /**< 当前待决；空 = 不可见 */
+            std::size_t m_cursor = 0;                /**< 单/多选共有光标 */
+            std::vector<bool> m_checked;             /**< 多选勾选态 */
+            std::string m_notice;                    /**< 非法操作提示 */
+            std::string m_compose;   /**< 非空 = 正在输入 card 命令 */
+            int m_detail_index = -1; /**< >=0 = 显示该 0 基候选的牌面 */
+            bool m_show_help = false; /**< ? 帮助开关 */
+            Submit m_on_submit;                      /**< 提交接缝 */
         };
     }  // namespace tui
 }  // namespace tkw
