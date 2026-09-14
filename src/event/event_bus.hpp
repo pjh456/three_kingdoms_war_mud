@@ -124,14 +124,14 @@ namespace tkw
 
         using ListenerTable = std::unordered_map<Key, std::vector<Slot>>;
 
-        ListenerTable listeners;
+        ListenerTable m_listeners;
         std::uint64_t m_sequence = 0;  /**< 已分配的最大事件序号 */
         std::uint64_t m_next_slot = 0; /**< 注册序号（同优先级的稳定次序） */
 
         void drop(Key key, std::uint64_t seq)
         {
-            auto it = listeners.find(key);
-            if (it == listeners.end())
+            auto it = m_listeners.find(key);
+            if (it == m_listeners.end())
                 return;
             auto &slots = it->second;
             slots.erase(
@@ -139,7 +139,7 @@ namespace tkw
                                 [seq](const Slot &slot) { return slot.seq == seq; }),
                 slots.end());
             if (slots.empty())
-                listeners.erase(it);
+                m_listeners.erase(it);
         }
 
     public:
@@ -174,7 +174,7 @@ namespace tkw
                 h.invoke(ctx);
                 return !ctx.stop;
             };
-            listeners[key].push_back(std::move(slot));
+            m_listeners[key].push_back(std::move(slot));
             return Handle(this, key, seq);
         }
 
@@ -194,8 +194,8 @@ namespace tkw
         void publish(const std::shared_ptr<U> &event)
         {
             event->set_sequence(++m_sequence);
-            auto it = listeners.find(typeid(U));
-            if (it == listeners.end())
+            auto it = m_listeners.find(typeid(U));
+            if (it == m_listeners.end())
                 return;
             auto slots = it->second;
             std::stable_sort(slots.begin(), slots.end(),
