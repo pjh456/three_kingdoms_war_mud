@@ -81,11 +81,16 @@ target_include_directories(tkw_game_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(tkw_game_core PUBLIC tkw_entity tkw_card tkw_hero
                                             tkw_event pjh_result tkw_util)
 
-add_library(tkw_game_query INTERFACE)
+add_library(tkw_game_query STATIC
+    game/query/distance.cpp
+    game/query/equip.cpp
+    game/query/hero.cpp
+    game/query/judge.cpp
+)
 
-target_include_directories(tkw_game_query INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(tkw_game_query PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(tkw_game_query INTERFACE tkw_game_core tkw_card pjh_result)
+target_link_libraries(tkw_game_query PUBLIC tkw_game_core tkw_card pjh_result)
 
 add_library(tkw_game_resolve INTERFACE)
 

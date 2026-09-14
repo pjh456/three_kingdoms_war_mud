@@ -94,37 +94,11 @@ namespace tkw
                 card::EquipSlot slot);
         };
 
-        inline const card::CardDef *EquipQuery::find_equipment(
-            const ReadOnlyContext &ctx, const std::string &entity_id,
-            card::Ability ability)
-        {
-            for (const auto &c : ctx.cards->equip(entity_id))
-            {
-                const auto def = ctx.catalog->find(c.def_id);
-                if (def.is_none())
-                    continue;
-                const card::CardDef &d = *def.unwrap();
-                if (std::find(d.abilities.begin(), d.abilities.end(), ability) !=
-                    d.abilities.end())
-                    return &d;
-            }
-            return nullptr;
-        }
-
         inline bool EquipQuery::has_ability(
             const ReadOnlyContext &ctx, const std::string &entity_id,
             card::Ability ability)
         {
             return find_equipment(ctx, entity_id, ability) != nullptr;
-        }
-
-        inline int EquipQuery::sha_limit(
-            const ReadOnlyContext &ctx, const std::string &player)
-        {
-            if (has_ability(ctx, player, card::Ability::NoShaLimit) ||
-                HeroQuery::has_hero_skill(ctx, player, hero::HeroSkill::PaoXiao))
-                return std::numeric_limits<int>::max();
-            return rules_of(ctx).sha_limit;
         }
 
         inline bool EquipQuery::sha_multi_target(
@@ -133,20 +107,6 @@ namespace tkw
         {
             return has_ability(ctx, player, card::Ability::MultiTargetSha) &&
                    ctx.cards->hand_size(player) == cards_consumed;
-        }
-
-        inline bool EquipQuery::has_equip_slot(
-            const ReadOnlyContext &ctx, const std::string &entity_id,
-            card::EquipSlot slot)
-        {
-            for (const auto &c : ctx.cards->equip(entity_id))
-            {
-                const auto def = ctx.catalog->find(c.def_id);
-                if (def.is_some() && def.unwrap()->equip.is_some() &&
-                    def.unwrap()->equip.unwrap().slot == slot)
-                    return true;
-            }
-            return false;
         }
     }
 }
