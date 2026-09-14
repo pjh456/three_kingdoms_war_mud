@@ -2,8 +2,10 @@
 
 #include <filesystem>
 #include <string>
+#ifndef _WIN32
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 #include <pjh_platform/fs.hpp>
 
@@ -88,6 +90,7 @@ TEST_CASE("io: write_text overwrites existing content")
     CHECK(r.unwrap() == "abc");
 }
 
+#ifndef _WIN32
 TEST_CASE("io: unreadable file is Permission")
 {
     if (geteuid() == 0)
@@ -104,6 +107,7 @@ TEST_CASE("io: unreadable file is Permission")
     REQUIRE(r.is_err());
     CHECK(r.unwrap_err() == tkw::io::IoError::Permission);
 }
+#endif  // !_WIN32
 
 TEST_CASE("io: large content round-trip (mmap read path)")
 {
