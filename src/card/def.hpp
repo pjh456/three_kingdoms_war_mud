@@ -84,7 +84,11 @@ namespace tkw
             Thunder, /**< 雷电伤害（雷杀/闪电） */
         };
 
-        /** @brief 装备被动能力（一件装备可带多个，经 equip.hpp 查询）。 */
+        /**
+         * @brief 装备的被动能力。
+         * @details 一件装备在装备区时可同时具备多项被动规则，每项对应一条在
+         *          对应结算点触发的效果；不含任何被动时该列表为空。
+         */
         enum class Ability : std::uint8_t
         {
             NoShaLimit,            /**< 诸葛连弩：杀无次数限制 */

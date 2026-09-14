@@ -1,8 +1,8 @@
 /**
  * @file   catalog.hpp
  * @brief  卡牌目录：`deck.json` + `cards/<id>.json` 的加载与语义校验。
- * @details 语义校验归本域（`config` 只管「文件 → `Document`」，见 `resource.hpp`
- *          注记）：
+ * @details 本域负责「数据 → 值类型」的语义校验；底层 `config` 只把文件读成
+ *          `Document`，不解释任何卡牌语义。校验规则：
  *          - `deck.json` 引用一张卡 → 按 `<root>/cards/<id>.json` 加载单卡文件；
  *          - 未知 `effect.kind` / `scope` / `suit` / `equip` 等在加载时立即
  *            `InvalidValue` 失败（detail 为字段路径，如
