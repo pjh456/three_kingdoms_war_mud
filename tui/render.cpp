@@ -33,6 +33,10 @@ namespace
     /** 棋盘/状态面板行数上限，避免多玩家局挤占中段。 */
     constexpr int kBoardMaxRows = 12;
     constexpr int kStatusMaxRows = 6;
+    /** 中段宽度分配：手牌 1 份、日志 3 份，固定为 1:3。 */
+    constexpr int kHandWidthRatioNum = 1;
+    constexpr int kLogWidthRatioNum = 3;
+    constexpr int kWidthRatioDen = kHandWidthRatioNum + kLogWidthRatioNum;
 
     /**
      * @brief 单个带圆角边框与粗体标题的面板。
@@ -266,12 +270,22 @@ namespace tkw
 
                 if (mode == LayoutMode::Full)
                 {
+                    const int hand_w =
+                        spec.size.dimx * kHandWidthRatioNum / kWidthRatioDen;
+                    const int log_w = spec.size.dimx - hand_w;
+
                     const ftxui::Element board =
                         panel("棋盘", render_board(spec.snap)) |
                         ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN,
                                     kBoardMaxRows);
+                    // 手牌/日志按 1:3 固定宽度：日志 min 宽随最长行增长时不再
+                    // 挤扁手牌，两块宽度之和恒等于整屏宽。
                     const ftxui::Element hand =
-                        panel("手牌", render_hand(spec.snap)) | ftxui::flex;
+                        panel("手牌", render_hand(spec.snap)) |
+                        ftxui::size(ftxui::WIDTH, ftxui::EQUAL, hand_w);
+                    const ftxui::Element log =
+                        log_panel |
+                        ftxui::size(ftxui::WIDTH, ftxui::EQUAL, log_w);
                     const ftxui::Element status =
                         panel("状态", render_status(spec.snap)) |
                         ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN,
@@ -281,8 +295,7 @@ namespace tkw
                     // 不随日志行数浮动；日志内容进 yframe 后行数不改变面板外高。
                     return ftxui::vbox({
                         board,
-                        ftxui::hbox({hand, log_panel | ftxui::flex}) |
-                            ftxui::flex,
+                        ftxui::hbox({hand, log}) | ftxui::flex,
                         status,
                         spec.bottom,
                         notice,

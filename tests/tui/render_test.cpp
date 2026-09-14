@@ -49,6 +49,32 @@ namespace
         }
     }
 
+    /** needle 首次出现所在行内的终端列号（跳过 ANSI 转义）；未出现返回 -1。 */
+    int column_of(const std::string &out, const std::string &needle)
+    {
+        const std::size_t pos = out.find(needle);
+        if (pos == std::string::npos)
+            return -1;
+        std::size_t start = out.rfind("\r\n", pos);
+        start = start == std::string::npos ? 0 : start + 2;
+
+        std::string prefix;
+        for (std::size_t i = start; i < pos;)
+        {
+            if (out[i] == '\x1b' && i + 1 < pos && out[i + 1] == '[')
+            {
+                i += 2;
+                while (i < pos && out[i] != 'm')
+                    ++i;
+                if (i < pos)
+                    ++i;
+                continue;
+            }
+            prefix += out[i++];
+        }
+        return ftxui::string_width(prefix);
+    }
+
     /** 单玩家、未开局快照：棋盘/状态均有稳定可断言的文本。 */
     UiSnapshot base_snapshot()
     {
@@ -89,6 +115,30 @@ TEST_CASE("tui render: full layout keeps board hand status and command row")
     CHECK(out.find("手牌") != std::string::npos);
     CHECK(out.find("状态") != std::string::npos);
     CHECK(out.find("终端过小") == std::string::npos);
+}
+
+TEST_CASE("tui render: hand holds a quarter of the width next to long log lines")
+{
+    UiSnapshot snap = base_snapshot();
+    snap.players[0].hand.revealed = true;
+    CardRow card;
+    card.instance_id = "c2";
+    card.def_id = "sha";
+    card.display_name = "杀";
+    card.suit = tkw::card::Suit::Spade;
+    card.number = 7;
+    snap.players[0].hand.cards.push_back(std::move(card));
+
+    std::vector<std::string> lines(1, std::string(200, 'X'));
+    std::string notice = "提示";
+    const std::string out =
+        render_text(snap, lines, notice, ftxui::text("__INPUT__"), 100, 30);
+
+    // 长日志行只撑自己的面板：手牌内容完整可见，分界面落在约 1/4 宽处。
+    CHECK(out.find("1. 杀") != std::string::npos);
+    const int log_col = column_of(out, "日志");
+    CHECK(log_col >= 20);
+    CHECK(log_col <= 35);
 }
 
 TEST_CASE("tui render: log growth does not shift board or command row")
