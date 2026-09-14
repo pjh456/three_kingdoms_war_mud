@@ -48,17 +48,7 @@ namespace tkw
              * @retval Some 已从本区移除。
              * @retval None 本区无此 `instance_id`。
              */
-            Option<Card> remove(const std::string &instance_id)
-            {
-                const auto it = std::find_if(
-                    m_cards.begin(), m_cards.end(),
-                    [&](const Card &c) { return c.instance_id == instance_id; });
-                if (it == m_cards.end())
-                    return Option<Card>::None();
-                Card c = std::move(*it);
-                m_cards.erase(it);
-                return Option<Card>::Some(std::move(c));
-            }
+            Option<Card> remove(const std::string &instance_id);
 
             /**
              * @brief  当前牌数。
@@ -141,44 +131,16 @@ namespace tkw
              * @brief  完整快照（牌堆保序；区域按 entity id 排序）。
              * @return 含摸牌堆/弃牌堆与三实体区的快照。
              */
-            CardManagerSnapshot snapshot() const
-            {
-                CardManagerSnapshot s;
-                s.instance_seq = instance_seq;
-                s.draw = draw_pile.view();
-                s.discard = discard_pile.view();
-                s.hand = zone_snapshot(zones_of(Zone::Hand));
-                s.equip = zone_snapshot(zones_of(Zone::Equip));
-                s.judge = zone_snapshot(zones_of(Zone::Judge));
-                return s;
-            }
+            CardManagerSnapshot snapshot() const;
 
             /**
              * @brief  从快照恢复：清空后按序重建（含 `instance_seq`）。
              * @param[in] s 快照。
              */
-            void restore(const CardManagerSnapshot &s)
-            {
-                clear();
-                instance_seq = s.instance_seq;
-                for (const auto &c : s.draw)
-                    draw_pile.push(c);
-                for (const auto &c : s.discard)
-                    discard_pile.push(c);
-                restore_zone(zones_of(Zone::Hand), s.hand);
-                restore_zone(zones_of(Zone::Equip), s.equip);
-                restore_zone(zones_of(Zone::Judge), s.judge);
-            }
+            void restore(const CardManagerSnapshot &s);
 
             /** @brief 清空全部牌与实例序号。 */
-            void clear()
-            {
-                instance_seq = 0;
-                draw_pile = CardStack{};
-                discard_pile = CardStack{};
-                for (auto &zones : entity_zones)
-                    zones.clear();
-            }
+            void clear();
 
             // ── 摸牌堆 / 弃牌堆 ──────────────────────────────────────────
 
@@ -227,18 +189,7 @@ namespace tkw
              * @param[in,out] rng 随机源。
              * @note   弃牌堆为空时无操作；转移后原地洗牌。
              */
-            void refill_draw(Rng &rng)
-            {
-                while (true)
-                {
-                    auto c = discard_pile.pop();
-                    if (c.is_none())
-                        break;
-                    draw_pile.push(std::move(c).unwrap());
-                }
-                if (draw_pile.size() > 1)
-                    draw_pile.shuffle(rng);
-            }
+            void refill_draw(Rng &rng);
 
             /**
              * @brief  摸牌堆张数。
@@ -407,20 +358,7 @@ namespace tkw
              */
             Option<Card> remove_from_any(
                 const std::string &entity_id, const std::string &instance_id,
-                Zone *from = nullptr)
-            {
-                for (const Zone z : kSlotZones)
-                {
-                    if (auto c = remove_from_zone(z, entity_id, instance_id);
-                        c.is_some())
-                    {
-                        if (from)
-                            *from = z;
-                        return c;
-                    }
-                }
-                return Option<Card>::None();
-            }
+                Zone *from = nullptr);
 
             /**
              * @brief  该牌是否在实体的任一区域（hand/equip/judge）。
@@ -430,44 +368,14 @@ namespace tkw
              * @note   结算前校验用：避免决策源返回不存在的牌时才在结算中途失败。
              */
             bool has_card(
-                const std::string &entity_id, const std::string &instance_id) const
-            {
-                for (const Zone z : kSlotZones)
-                {
-                    const auto *zone = find_zone(z, entity_id);
-                    if (zone == nullptr)
-                        continue;
-                    for (const auto &c : zone->view())
-                        if (c.instance_id == instance_id)
-                            return true;
-                }
-                return false;
-            }
+                const std::string &entity_id, const std::string &instance_id) const;
 
             /**
              * @brief  死亡清场：手牌/装备/判定区全部置入弃牌堆。
              * @param[in] entity_id 实体 id。
              * @return 被弃置的牌（供调用方发布弃置事件）。
              */
-            std::vector<Card> discard_all(const std::string &entity_id)
-            {
-                std::vector<Card> out;
-                for (const Zone z : kSlotZones)
-                {
-                    ZoneMap &zones = zones_of(z);
-                    auto it = zones.find(entity_id);
-                    if (it == zones.end())
-                        continue;
-                    auto cards = it->second.drain();
-                    for (auto &c : cards)
-                    {
-                        out.push_back(c);
-                        discard_pile.push(std::move(c));
-                    }
-                    zones.erase(it);
-                }
-                return out;
-            }
+            std::vector<Card> discard_all(const std::string &entity_id);
 
         private:
             using ZoneMap = std::unordered_map<std::string, CardZone>;
@@ -506,51 +414,18 @@ namespace tkw
             }
 
             static std::vector<std::pair<std::string, std::vector<Card>>> zone_snapshot(
-                const ZoneMap &zones)
-            {
-                std::vector<std::pair<std::string, std::vector<Card>>> out;
-                out.reserve(zones.size());
-                for (const auto &[id, zone] : zones)
-                {
-                    if (zone.empty())  // 空区域不入快照（规范化，便于往返稳定）
-                        continue;
-                    out.emplace_back(id, zone.view());
-                }
-                std::sort(out.begin(), out.end(),
-                          [](const auto &a, const auto &b)
-                          { return a.first < b.first; });
-                return out;
-            }
+                const ZoneMap &zones);
 
             static void restore_zone(
                 ZoneMap &zones,
-                const std::vector<std::pair<std::string, std::vector<Card>>> &in)
-            {
-                for (const auto &[id, cards] : in)
-                    for (const auto &c : cards)
-                        zones[id].add(c);
-            }
+                const std::vector<std::pair<std::string, std::vector<Card>>> &in);
 
-            static const std::vector<Card> &empty_list()
-            {
-                static const std::vector<Card> empty;
-                return empty;
-            }
+            static const std::vector<Card> &empty_list();
 
-            CardZone *find_zone(Zone zone, const std::string &entity_id)
-            {
-                ZoneMap &zones = zones_of(zone);
-                auto it = zones.find(entity_id);
-                return it == zones.end() ? nullptr : &it->second;
-            }
+            CardZone *find_zone(Zone zone, const std::string &entity_id);
 
             const CardZone *find_zone(
-                Zone zone, const std::string &entity_id) const
-            {
-                const ZoneMap &zones = zones_of(zone);
-                auto it = zones.find(entity_id);
-                return it == zones.end() ? nullptr : &it->second;
-            }
+                Zone zone, const std::string &entity_id) const;
 
             Option<Card> remove_from_zone(
                 Zone zone, const std::string &entity_id,
@@ -573,12 +448,7 @@ namespace tkw
                 return z ? z->view() : empty_list();
             }
 
-            Card make_card(const std::string &def_id, const CardCopy &copy)
-            {
-                return Card{
-                    def_id + "#" + std::to_string(instance_seq++), def_id, copy.suit,
-                    copy.number};
-            }
+            Card make_card(const std::string &def_id, const CardCopy &copy);
         };
     }
 }

@@ -86,14 +86,7 @@ namespace tkw
              * @retval Some 已从堆中移除的牌。
              * @retval None 空堆，不做任何改变。
              */
-            Option<Card> pop()
-            {
-                if (cards.empty())
-                    return Option<Card>::None();
-                Card c = std::move(cards.back());
-                cards.pop_back();
-                return Option<Card>::Some(std::move(c));
-            }
+            Option<Card> pop();
 
             /**
              * @brief  看顶（不取走）。
@@ -101,12 +94,7 @@ namespace tkw
              * @retval Some 指针在下次 `pop`/`push`/`shuffle` 前稳定。
              * @retval None 空堆。
              */
-            Option<const Card *> top() const
-            {
-                if (cards.empty())
-                    return Option<const Card *>::None();
-                return Option<const Card *>::Some(&cards.back());
-            }
+            Option<const Card *> top() const;
 
             /**
              * @brief  按 `instance_id` 移除一张牌（结算回滚用）。
@@ -115,33 +103,13 @@ namespace tkw
              * @retval Some 已从堆中移除该牌。
              * @retval None 堆中无此 `instance_id`。
              */
-            Option<Card> remove(const std::string &instance_id)
-            {
-                for (auto it = cards.begin(); it != cards.end(); ++it)
-                {
-                    if (it->instance_id == instance_id)
-                    {
-                        Card c = std::move(*it);
-                        cards.erase(it);
-                        return Option<Card>::Some(std::move(c));
-                    }
-                }
-                return Option<Card>::None();
-            }
+            Option<Card> remove(const std::string &instance_id);
 
             /**
              * @brief  Fisher–Yates 原地洗牌。
              * @param[in,out] rng 随机源；被调用以产生全部交换。
              */
-            void shuffle(Rng &rng)
-            {
-                for (std::size_t i = cards.size(); i > 1; --i)
-                {
-                    const std::size_t j =
-                        uniform_below(rng, static_cast<std::uint32_t>(i));
-                    std::swap(cards[i - 1], cards[j]);
-                }
-            }
+            void shuffle(Rng &rng);
 
         private:
             std::vector<Card> cards;

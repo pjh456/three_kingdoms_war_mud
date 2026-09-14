@@ -45,11 +45,15 @@ add_library(tkw_event STATIC
 
 target_include_directories(tkw_event PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-add_library(tkw_card INTERFACE)
+add_library(tkw_card STATIC
+    card/card.cpp
+    card/catalog.cpp
+    card/manager.cpp
+)
 
-target_include_directories(tkw_card INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(tkw_card PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(tkw_card INTERFACE tkw_config pjh_json tkw_util)
+target_link_libraries(tkw_card PUBLIC tkw_config pjh_json tkw_util)
 
 # 武将支撑域：值类型/目录加载，复用 entity::Gender；game 层向下引用，武将域不引用 game。
 add_library(tkw_hero INTERFACE)
