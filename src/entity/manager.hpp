@@ -56,7 +56,7 @@ namespace tkw
          * @param[in] injected_bus 事件总线；必须比本管理器及其中实体存活更久。
          * @warning 总线存活时长不足会使实体发布事件时悬空。
          */
-        explicit EntityManager(EventBus &injected_bus) : bus(&injected_bus) {}
+        explicit EntityManager(EventBus &injected_bus) : m_bus(&injected_bus) {}
 
         EntityManager(const EntityManager &) = delete;
         EntityManager &operator=(const EntityManager &) = delete;
@@ -122,13 +122,13 @@ namespace tkw
          * @brief  返回当前实体数量。
          * @return 容器内实体个数。
          */
-        std::size_t size() const noexcept { return entities.size(); }
+        std::size_t size() const noexcept { return m_entities.size(); }
 
         /**
          * @brief  判断容器是否为空。
          * @return `true` 表示无实体。
          */
-        bool empty() const noexcept { return entities.empty(); }
+        bool empty() const noexcept { return m_entities.empty(); }
 
         /**
          * @brief  按创建序导出快照。
@@ -191,18 +191,18 @@ namespace tkw
          * @warning 有意不提供 const 重载：const 管理器经 `unique_ptr` 迭代仍会得到
          *          可变 `Entity*`，故只读路径一律走 `const_view()`，从类型上封住出口。
          */
-        auto begin() noexcept { return entities.begin(); }
+        auto begin() noexcept { return m_entities.begin(); }
 
         /**
          * @brief  返回按创建序迭代的结束哨兵。
          * @return 指向容器末后位置的迭代器。
          */
-        auto end() noexcept { return entities.end(); }
+        auto end() noexcept { return m_entities.end(); }
 
     private:
-        EventBus *bus;
-        std::vector<std::unique_ptr<entity::Entity>> entities;
-        std::unordered_map<std::string, std::size_t> index;
+        EventBus *m_bus;
+        std::vector<std::unique_ptr<entity::Entity>> m_entities;
+        std::unordered_map<std::string, std::size_t> m_index;
 
         void rebuild_index();
     };

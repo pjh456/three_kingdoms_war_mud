@@ -21,51 +21,51 @@ namespace tkw
         if (contains(id))
             return entity::EntityResult<entity::Entity *>::Err(
                 entity::EntityError::DuplicateId);
-        const std::size_t at = entities.size();
-        entities.push_back(
+        const std::size_t at = m_entities.size();
+        m_entities.push_back(
             std::make_unique<entity::Entity>(
-                std::move(id), seat, std::move(hp), *bus, gender, chained,
+                std::move(id), seat, std::move(hp), *m_bus, gender, chained,
                 std::move(hero)));
-        index.emplace(entities[at]->get_id(), at);
-        return entity::EntityResult<entity::Entity *>::Ok(entities[at].get());
+        m_index.emplace(m_entities[at]->get_id(), at);
+        return entity::EntityResult<entity::Entity *>::Ok(m_entities[at].get());
     }
 
     Option<entity::Entity *> EntityManager::find(const std::string &id)
     {
-        auto it = index.find(id);
-        if (it == index.end())
+        auto it = m_index.find(id);
+        if (it == m_index.end())
             return Option<entity::Entity *>::None();
-        return Option<entity::Entity *>::Some(entities[it->second].get());
+        return Option<entity::Entity *>::Some(m_entities[it->second].get());
     }
 
     Option<const entity::Entity *> EntityManager::find(
         const std::string &id) const
     {
-        auto it = index.find(id);
-        if (it == index.end())
+        auto it = m_index.find(id);
+        if (it == m_index.end())
             return Option<const entity::Entity *>::None();
-        return Option<const entity::Entity *>::Some(entities[it->second].get());
+        return Option<const entity::Entity *>::Some(m_entities[it->second].get());
     }
 
     bool EntityManager::contains(const std::string &id) const
     {
-        return index.find(id) != index.end();
+        return m_index.find(id) != m_index.end();
     }
 
     void EntityManager::remove(const std::string &id)
     {
-        auto it = index.find(id);
-        if (it == index.end())
+        auto it = m_index.find(id);
+        if (it == m_index.end())
             return;
-        entities.erase(entities.begin() + std::ptrdiff_t(it->second));
+        m_entities.erase(m_entities.begin() + std::ptrdiff_t(it->second));
         rebuild_index();
     }
 
     std::vector<EntitySnapshot> EntityManager::snapshot() const
     {
         std::vector<EntitySnapshot> out;
-        out.reserve(entities.size());
-        for (const auto &e : entities)
+        out.reserve(m_entities.size());
+        for (const auto &e : m_entities)
             out.push_back(EntitySnapshot{
                 e->get_id(), e->get_seat(), e->get_hp(),
                 e->get_hp_bar().get_max(), e->get_gender(), e->get_chained(),
@@ -87,15 +87,15 @@ namespace tkw
 
     void EntityManager::clear()
     {
-        entities.clear();
-        index.clear();
+        m_entities.clear();
+        m_index.clear();
     }
 
     std::vector<std::string> EntityManager::ordered_ids() const
     {
         std::vector<std::pair<int, std::string>> tmp;
-        tmp.reserve(entities.size());
-        for (const auto &e : entities)
+        tmp.reserve(m_entities.size());
+        for (const auto &e : m_entities)
             tmp.emplace_back(e->get_seat(), e->get_id());
         std::stable_sort(
             tmp.begin(), tmp.end(),
@@ -132,16 +132,16 @@ namespace tkw
     std::vector<const entity::Entity *> EntityManager::const_view() const
     {
         std::vector<const entity::Entity *> out;
-        out.reserve(entities.size());
-        for (const auto &e : entities)
+        out.reserve(m_entities.size());
+        for (const auto &e : m_entities)
             out.push_back(e.get());
         return out;
     }
 
     void EntityManager::rebuild_index()
     {
-        index.clear();
-        for (std::size_t i = 0; i < entities.size(); ++i)
-            index.emplace(entities[i]->get_id(), i);
+        m_index.clear();
+        for (std::size_t i = 0; i < m_entities.size(); ++i)
+            m_index.emplace(m_entities[i]->get_id(), i);
     }
 }
