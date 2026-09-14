@@ -43,10 +43,7 @@ namespace tkw
         {
             namespace json = pjh::json;
 
-            inline SaveResult<void> fail(SaveErrorKind kind, std::string detail)
-            {
-                return SaveResult<void>::Err(SaveError{kind, std::move(detail)});
-            }
+            SaveResult<void> fail(SaveErrorKind kind, std::string detail);
 
             /**
              * @brief  int64 → int：收窄前检查值域，不静默截断。
@@ -56,150 +53,30 @@ namespace tkw
              * @retval true  `v` 在 int 值域内，`out` 已写入。
              * @retval false `v` 越界，`out` 不被修改。
              */
-            inline bool narrow_to_int(std::int64_t v, int &out) noexcept
-            {
-                if (v < std::numeric_limits<int>::min() ||
-                    v > std::numeric_limits<int>::max())
-                    return false;
-                out = static_cast<int>(v);
-                return true;
-            }
+            bool narrow_to_int(std::int64_t v, int &out) noexcept;
 
-            inline bool read_int(const json::Object &o, std::string_view key, int &out)
-            {
-                if (!o.contains(key))
-                    return false;
-                auto v = o[key].try_as_int();
-                if (!v)
-                    return false;
-                return narrow_to_int(*v, out);
-            }
+            bool read_int(const json::Object &o, std::string_view key, int &out);
 
-            inline bool read_bool(
-                const json::Object &o, std::string_view key, bool &out)
-            {
-                if (!o.contains(key))
-                    return false;
-                auto v = o[key].try_as_boolean();
-                if (!v)
-                    return false;
-                out = *v;
-                return true;
-            }
+            bool read_bool(const json::Object &o, std::string_view key, bool &out);
 
-            inline bool read_str(
-                const json::Object &o, std::string_view key, std::string &out)
-            {
-                if (!o.contains(key))
-                    return false;
-                auto v = o[key].try_as_string();
-                if (!v)
-                    return false;
-                out = std::string(*v);
-                return true;
-            }
+            bool read_str(
+                const json::Object &o, std::string_view key, std::string &out);
 
-            inline bool read_card(const json::Json &j, card::Card &out)
-            {
-                const auto *o = j.try_as_object();
-                if (!o)
-                    return false;
-                std::string iid;
-                std::string def;
-                std::string suit;
-                int number = 0;
-                if (!read_str(*o, "iid", iid) || !read_str(*o, "def", def) ||
-                    !read_str(*o, "suit", suit) || !read_int(*o, "number", number))
-                    return false;
-                card::Suit s{};
-                if (!suit_from(suit, s) || number < 1 || number > 13)
-                    return false;
-                out = card::Card{std::move(iid), std::move(def), s, number};
-                return true;
-            }
+            bool read_card(const json::Json &j, card::Card &out);
 
-            inline bool read_cards(
-                const json::Json &j, std::vector<card::Card> &out)
-            {
-                const auto *arr = j.try_as_array();
-                if (!arr)
-                    return false;
-                for (std::size_t i = 0; i < arr->size(); ++i)
-                {
-                    card::Card c;
-                    if (!read_card((*arr)[i], c))
-                        return false;
-                    out.push_back(std::move(c));
-                }
-                return true;
-            }
+            bool read_cards(const json::Json &j, std::vector<card::Card> &out);
 
-            inline bool read_zones(
+            bool read_zones(
                 const json::Json &j,
-                std::vector<std::pair<std::string, std::vector<card::Card>>> &out)
-            {
-                const auto *o = j.try_as_object();
-                if (!o)
-                    return false;
-                for (std::string_view k : o->keys())
-                {
-                    std::vector<card::Card> cards;
-                    if (!read_cards((*o)[k], cards))
-                        return false;
-                    out.emplace_back(std::string(k), std::move(cards));
-                }
-                return true;
-            }
+                std::vector<std::pair<std::string, std::vector<card::Card>>> &out);
 
-            inline bool read_int_map(
-                const json::Json &j, std::map<std::string, int> &out)
-            {
-                const auto *o = j.try_as_object();
-                if (!o)
-                    return false;
-                for (std::string_view k : o->keys())
-                {
-                    auto v = (*o)[k].try_as_int();
-                    if (!v)
-                        return false;
-                    int n = 0;
-                    if (!narrow_to_int(*v, n))
-                        return false;
-                    out[std::string(k)] = n;
-                }
-                return true;
-            }
+            bool read_int_map(
+                const json::Json &j, std::map<std::string, int> &out);
 
-            inline bool read_str_map(
-                const json::Json &j, std::map<std::string, std::string> &out)
-            {
-                const auto *o = j.try_as_object();
-                if (!o)
-                    return false;
-                for (std::string_view k : o->keys())
-                {
-                    auto v = (*o)[k].try_as_string();
-                    if (!v)
-                        return false;
-                    out[std::string(k)] = std::string(*v);
-                }
-                return true;
-            }
+            bool read_str_map(
+                const json::Json &j, std::map<std::string, std::string> &out);
 
-            inline bool read_str_set(const json::Json &j, std::set<std::string> &out)
-            {
-                const auto *arr = j.try_as_array();
-                if (!arr)
-                    return false;
-                for (std::size_t i = 0; i < arr->size(); ++i)
-                {
-                    auto v = (*arr)[i].try_as_string();
-                    if (!v)
-                        return false;
-                    out.insert(std::string(*v));
-                }
-                return true;
-            }
+            bool read_str_set(const json::Json &j, std::set<std::string> &out);
         }
 
         /**
@@ -229,243 +106,9 @@ namespace tkw
          *        数据化」时期写出的历史标准档值。
          * @see   save::write, deck_hash
          */
-        inline SaveResult<void> read(
+        SaveResult<void> read(
             std::string_view text, game::Game &g, game::GameSession &session,
-            SessionMeta *meta = nullptr)
-        {
-            namespace json = pjh::json;
-
-            auto doc_r = json::parse_copy_result(text);
-            if (doc_r.is_err())
-                return detail::fail(SaveErrorKind::ParseError, "JSON 解析失败");
-            json::Document doc = std::move(doc_r).unwrap();
-            const json::Json &root = doc.root();
-            const auto *obj = root.try_as_object();
-            if (!obj)
-                return detail::fail(SaveErrorKind::StructureError, "root");
-
-            // format / version
-            auto fmt = obj->contains("format") ? (*obj)["format"].try_as_string()
-                                               : std::optional<std::string_view>{};
-            if (!fmt || *fmt != kFormat)
-                return detail::fail(SaveErrorKind::VersionMismatch, "format");
-            int version = 0;
-            if (!detail::read_int(*obj, "version", version) ||
-                (version != kVersion && version != kVersionChained &&
-                 version != kVersionHeroes))
-                return detail::fail(SaveErrorKind::VersionMismatch, "version");
-
-            // deck hash：写出侧按 int64 位型承载，高位指纹在此逐位还原为 uint64
-            if (!obj->contains("deck") || !(*obj)["deck"].try_as_object())
-                return detail::fail(SaveErrorKind::StructureError, "deck");
-            const auto &deck = (*obj)["deck"].as_object();
-            auto hash = deck.contains("hash") ? deck["hash"].try_as_int()
-                                              : std::optional<std::int64_t>{};
-            if (!hash)
-                return detail::fail(SaveErrorKind::StructureError, "deck.hash");
-            // 当前指纹；或「判定属性尚未数据化」时期写出的历史标准档指纹
-            // （闪电当时按普通伤哈希）。先算当前值，仅在不匹配时再算降级值。
-            const std::uint64_t stored = static_cast<std::uint64_t>(*hash);
-            if (stored != deck_hash(g.catalog) &&
-                stored != deck_hash(g.catalog, /*include_judge_damage_type=*/false))
-                return detail::fail(SaveErrorKind::DeckMismatch, "deck.hash");
-
-            // rules
-            if (!obj->contains("rules") || !(*obj)["rules"].try_as_object())
-                return detail::fail(SaveErrorKind::StructureError, "rules");
-            const auto &rules = (*obj)["rules"].as_object();
-            game::RulesConfig rc;
-            if (!detail::read_int(rules, "draw_per_turn", rc.draw_per_turn) ||
-                !detail::read_int(rules, "sha_limit", rc.sha_limit) ||
-                !detail::read_int(rules, "kill_reward", rc.kill_reward) ||
-                !detail::read_int(rules, "initial_hand", rc.initial_hand) ||
-                !detail::read_int(rules, "max_turns", rc.max_turns) ||
-                !detail::read_int(rules, "dying_rounds", rc.dying_rounds) ||
-                !detail::read_int(rules, "wuxie_rounds", rc.wuxie_rounds) ||
-                !detail::read_int(rules, "duel_rounds", rc.duel_rounds) ||
-                !detail::read_int(rules, "base_hp", rc.base_hp) ||
-                !detail::read_int(rules, "min_players", rc.min_players) ||
-                !detail::read_int(rules, "max_players", rc.max_players))
-                return detail::fail(SaveErrorKind::StructureError, "rules");
-
-            // rng
-            if (!obj->contains("rng") || !(*obj)["rng"].try_as_object())
-                return detail::fail(SaveErrorKind::StructureError, "rng");
-            std::string rng_data;
-            if (!detail::read_str((*obj)["rng"].as_object(), "data", rng_data))
-                return detail::fail(SaveErrorKind::StructureError, "rng.data");
-
-            // session（进度 + 可选元数据：ai / stats）
-            if (!obj->contains("session") || !(*obj)["session"].try_as_object())
-                return detail::fail(SaveErrorKind::StructureError, "session");
-            const auto &sess = (*obj)["session"].as_object();
-            game::GameSession s;
-            if (!detail::read_str(sess, "current", s.current) ||
-                !detail::read_int(sess, "turns", s.turns) ||
-                !detail::read_bool(sess, "started", s.started))
-                return detail::fail(SaveErrorKind::StructureError, "session");
-            SessionMeta parsed;
-            if (sess.contains("ai"))
-            {
-                auto ai = sess["ai"].try_as_string();
-                if (!ai)
-                    return detail::fail(SaveErrorKind::StructureError, "session.ai");
-                parsed.ai = std::string(*ai);
-            }
-            if (sess.contains("stats"))
-            {
-                const auto *st = sess["stats"].try_as_object();
-                if (!st)
-                    return detail::fail(
-                        SaveErrorKind::StructureError, "session.stats");
-                if ((st->contains("damage_dealt") &&
-                     !detail::read_int_map(
-                         (*st)["damage_dealt"], parsed.stats.damage_dealt)) ||
-                    (st->contains("healing") &&
-                     !detail::read_int_map((*st)["healing"], parsed.stats.healing)) ||
-                    (st->contains("kills") &&
-                     !detail::read_int_map((*st)["kills"], parsed.stats.kills)) ||
-                    (st->contains("last_hit_source") &&
-                     !detail::read_str_map((*st)["last_hit_source"],
-                                           parsed.stats.last_hit_source)) ||
-                    (st->contains("died") &&
-                     !detail::read_str_set((*st)["died"], parsed.stats.died)))
-                    return detail::fail(
-                        SaveErrorKind::StructureError, "session.stats");
-            }
-
-            // mode / roles（均可选；缺失回落乱斗 + 空表；值域在此先行校验）
-            game::GameMode parsed_mode = game::GameMode::Brawl;
-            if (obj->contains("mode"))
-            {
-                std::string mode_text;
-                if (!detail::read_str(*obj, "mode", mode_text) ||
-                    !mode_from(mode_text, parsed_mode))
-                    return detail::fail(SaveErrorKind::StructureError, "mode");
-            }
-
-            game::RoleTable parsed_roles;
-            if (obj->contains("roles"))
-            {
-                const auto *ro = (*obj)["roles"].try_as_object();
-                if (!ro)
-                    return detail::fail(SaveErrorKind::StructureError, "roles");
-                for (std::string_view key : ro->keys())
-                {
-                    auto rv = (*ro)[key].try_as_string();
-                    game::Role role{};
-                    if (!rv || !role_from(*rv, role))
-                        return detail::fail(
-                            SaveErrorKind::StructureError,
-                            "roles." + std::string(key));
-                    parsed_roles[std::string(key)] = role;
-                }
-            }
-            if (parsed_mode != game::GameMode::Identity && !parsed_roles.empty())
-                return detail::fail(SaveErrorKind::StructureError, "roles");
-
-            // cards
-            if (!obj->contains("cards") || !(*obj)["cards"].try_as_object())
-                return detail::fail(SaveErrorKind::StructureError, "cards");
-            const auto &cards = (*obj)["cards"].as_object();
-            card::CardManagerSnapshot snap;
-            {
-                auto seq = cards.contains("instance_seq")
-                               ? cards["instance_seq"].try_as_int()
-                               : std::optional<std::int64_t>{};
-                if (!seq || *seq < 0)
-                    return detail::fail(
-                        SaveErrorKind::StructureError, "cards.instance_seq");
-                snap.instance_seq = static_cast<std::uint64_t>(*seq);
-            }
-            if (!cards.contains("draw") || !cards.contains("discard") ||
-                !cards.contains("hand") || !cards.contains("equip") ||
-                !cards.contains("judge"))
-                return detail::fail(SaveErrorKind::StructureError, "cards");
-            if (!detail::read_cards(cards["draw"], snap.draw) ||
-                !detail::read_cards(cards["discard"], snap.discard) ||
-                !detail::read_zones(cards["hand"], snap.hand) ||
-                !detail::read_zones(cards["equip"], snap.equip) ||
-                !detail::read_zones(cards["judge"], snap.judge))
-                return detail::fail(SaveErrorKind::StructureError, "cards");
-
-            // entities
-            if (!obj->contains("entities") || !(*obj)["entities"].try_as_array())
-                return detail::fail(SaveErrorKind::StructureError, "entities");
-            const auto &arr = (*obj)["entities"].as_array();
-            std::vector<EntitySnapshot> ents;
-            for (std::size_t i = 0; i < arr.size(); ++i)
-            {
-                const auto *eo = arr[i].try_as_object();
-                if (!eo)
-                    return detail::fail(SaveErrorKind::StructureError, "entities");
-                EntitySnapshot e;
-                if (!detail::read_str(*eo, "id", e.id) ||
-                    !detail::read_int(*eo, "seat", e.seat) ||
-                    !detail::read_int(*eo, "hp", e.hp) ||
-                    !detail::read_int(*eo, "max_hp", e.max_hp))
-                    return detail::fail(SaveErrorKind::StructureError, "entities");
-                // 旧档无 gender 字段：回落 Male，不拒绝旧档
-                if (eo->contains("gender"))
-                {
-                    auto gv = (*eo)["gender"].try_as_string();
-                    if (!gv || !gender_from(*gv, e.gender))
-                        return detail::fail(
-                            SaveErrorKind::StructureError, "entities.gender");
-                }
-                // 旧档无 chained 字段：回落 false（未横置），不拒绝旧档
-                if (eo->contains("chained") &&
-                    !detail::read_bool(*eo, "chained", e.chained))
-                    return detail::fail(
-                        SaveErrorKind::StructureError, "entities.chained");
-                // 旧档无 hero 字段：回落空（通用座位）；非空 hero 必须命中本局
-                // 目录，否则技能错配，显式拒绝而非静默算错
-                if (eo->contains("hero"))
-                {
-                    std::string hid;
-                    if (!detail::read_str(*eo, "hero", hid) || hid.empty())
-                        return detail::fail(
-                            SaveErrorKind::StructureError, "entities.hero");
-                    if (g.hero_catalog.find(hid).is_none())
-                        return detail::fail(
-                            SaveErrorKind::StructureError, "entities.hero");
-                    e.hero = std::move(hid);
-                }
-                ents.push_back(std::move(e));
-            }
-
-            // 身份局：角色表须覆盖全部存活实体且恰含一名主公；角色分配对整场
-            // 固定，阵亡只移出实体，故角色表允许保留已阵亡玩家的条目
-            if (parsed_mode == game::GameMode::Identity)
-            {
-                if (!obj->contains("roles"))
-                    return detail::fail(SaveErrorKind::StructureError, "roles");
-
-                int lord_count = 0;
-                for (const auto &entry : parsed_roles)
-                    if (entry.second == game::Role::Lord)
-                        ++lord_count;
-
-                for (const auto &e : ents)
-                    if (parsed_roles.find(e.id) == parsed_roles.end())
-                        return detail::fail(SaveErrorKind::StructureError, "roles");
-                if (lord_count != 1)
-                    return detail::fail(SaveErrorKind::StructureError, "roles");
-            }
-
-            // ── 全部校验通过后再落子；rng 恢复是唯一可能失败的阶段，先于其余赋值 ──
-            if (g.rng && !g.rng->load_state(RngState{rng_data}))
-                return detail::fail(SaveErrorKind::RngError, "rng.data");
-            g.rules = rc;
-            g.mode = parsed_mode;
-            g.roles = std::move(parsed_roles);
-            session = std::move(s);
-            g.cards.restore(snap);
-            g.entities.restore(ents);
-            if (meta)
-                *meta = std::move(parsed);
-            return SaveResult<void>::Ok();
-        }
+            SessionMeta *meta = nullptr);
     }
 }
 

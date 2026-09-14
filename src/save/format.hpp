@@ -66,16 +66,7 @@ namespace tkw
          * @retval true  `s` 为 `"male"` 或 `"female"`，`out` 已写入。
          * @retval false `s` 非法，`out` 不被修改。
          */
-        inline bool gender_from(std::string_view s, entity::Gender &out)
-        {
-            if (s == "male")
-                out = entity::Gender::Male;
-            else if (s == "female")
-                out = entity::Gender::Female;
-            else
-                return false;
-            return true;
-        }
+        bool gender_from(std::string_view s, entity::Gender &out);
 
         /**
          * @brief  花色 → 存档文本。
@@ -106,20 +97,7 @@ namespace tkw
          * @retval true  `s` 为四种合法花色文本之一，`out` 已写入。
          * @retval false `s` 非法，`out` 不被修改。
          */
-        inline bool suit_from(std::string_view s, card::Suit &out)
-        {
-            if (s == "spade")
-                out = card::Suit::Spade;
-            else if (s == "club")
-                out = card::Suit::Club;
-            else if (s == "heart")
-                out = card::Suit::Heart;
-            else if (s == "diamond")
-                out = card::Suit::Diamond;
-            else
-                return false;
-            return true;
-        }
+        bool suit_from(std::string_view s, card::Suit &out);
 
         /**
          * @brief  对局模式 → 存档文本。
@@ -146,16 +124,7 @@ namespace tkw
          * @retval true  `s` 为 `"brawl"` 或 `"identity"`，`out` 已写入。
          * @retval false `s` 非法，`out` 不被修改。
          */
-        inline bool mode_from(std::string_view s, game::GameMode &out)
-        {
-            if (s == "brawl")
-                out = game::GameMode::Brawl;
-            else if (s == "identity")
-                out = game::GameMode::Identity;
-            else
-                return false;
-            return true;
-        }
+        bool mode_from(std::string_view s, game::GameMode &out);
 
         /**
          * @brief  角色 → 存档文本。
@@ -189,20 +158,7 @@ namespace tkw
          * @retval true  `s` 为四个合法角色文本之一，`out` 已写入。
          * @retval false `s` 未知或为 `"none"`，`out` 不被修改。
          */
-        inline bool role_from(std::string_view s, game::Role &out)
-        {
-            if (s == "lord")
-                out = game::Role::Lord;
-            else if (s == "loyalist")
-                out = game::Role::Loyalist;
-            else if (s == "rebel")
-                out = game::Role::Rebel;
-            else if (s == "traitor")
-                out = game::Role::Traitor;
-            else
-                return false;
-            return true;
-        }
+        bool role_from(std::string_view s, game::Role &out);
     }
 }
 

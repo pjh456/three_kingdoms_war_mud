@@ -113,11 +113,25 @@ target_link_libraries(tkw_game INTERFACE tkw_game_core tkw_game_query
                                          tkw_game_resolve tkw_game_flow tkw_game_ai
                                          tkw_entity tkw_card tkw_event pjh_result)
 
+# 存档域：序列化/反序列化对局运行时；消费 game/card/entity/hero 与 pjh_json，
+# 被 tkw_core 聚合后向前端暴露；game 各层不反向引用本域。
+add_library(tkw_save STATIC
+    save/writer.cpp
+    save/reader.cpp
+    save/deck_hash.cpp
+    save/format.cpp
+)
+
+target_include_directories(tkw_save PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(tkw_save PUBLIC tkw_game_flow tkw_config tkw_entity
+                                     tkw_card tkw_hero tkw_util pjh_json)
+
 add_library(tkw_core INTERFACE)
 
 target_include_directories(tkw_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(tkw_core INTERFACE tkw_entity tkw_config tkw_card tkw_game tkw_event tkw_io pjh_result)
+target_link_libraries(tkw_core INTERFACE tkw_entity tkw_config tkw_card tkw_game tkw_event tkw_io tkw_save pjh_result)
 
 add_library(tkw_cli INTERFACE)
 
