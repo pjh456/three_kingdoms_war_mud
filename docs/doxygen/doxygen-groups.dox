@@ -1,0 +1,96 @@
+/**
+ * @defgroup tkw_root tkw 对局引擎
+ * @brief 三国杀式卡牌对局引擎：header-only C++20 引擎 + CLI/TUI 前端。
+ *
+ * 模块按依赖方向组织，稳定阅读顺序从 util 起，经支撑域到 game 四层，最后前端。
+ */
+
+/**
+ * @defgroup tkw_util 基础设施
+ * @brief `Result`/`Option` 别名、随机数、通用宏。
+ * @ingroup tkw_root
+ */
+
+/**
+ * @defgroup tkw_io IO
+ * @brief 平台无关文本读写与原子写。
+ * @ingroup tkw_root
+ */
+
+/**
+ * @defgroup tkw_config Config
+ * @brief 资源寻址（`ResourceStore`）与字段解析。
+ * @ingroup tkw_root
+ */
+
+/**
+ * @defgroup tkw_event Event
+ * @brief 精确类型事件总线与处理器。
+ * @ingroup tkw_root
+ */
+
+/**
+ * @defgroup tkw_entity Entity
+ * @brief 玩家实体、体力与实体容器。
+ * @ingroup tkw_root
+ */
+
+/**
+ * @defgroup tkw_card Card
+ * @brief 卡牌值类型、目录加载、牌区容器。
+ * @ingroup tkw_root
+ */
+
+/**
+ * @defgroup tkw_hero Hero
+ * @brief 武将值类型与目录加载。
+ * @ingroup tkw_root
+ */
+
+/**
+ * @defgroup tkw_save Save
+ * @brief 存档序列化/反序列化与牌表指纹。
+ * @ingroup tkw_root
+ */
+
+/**
+ * @defgroup tkw_game_core Game Core
+ * @brief 值类型与状态原语；`RulesConfig` 为规则数值唯一事实源。
+ * @ingroup tkw_root
+ */
+
+/**
+ * @defgroup tkw_game_query Game Query
+ * @brief 只读查询：距离、装备、判定、武将。
+ * @ingroup tkw_root
+ */
+
+/**
+ * @defgroup tkw_game_resolve Game Resolve
+ * @brief 效果结算（对局状态的单一写者）。
+ * @ingroup tkw_root
+ */
+
+/**
+ * @defgroup tkw_game_flow Game Flow
+ * @brief 回合四阶段、主循环、建局装配、运行时容器。
+ * @ingroup tkw_root
+ */
+
+/**
+ * @defgroup tkw_game_ai Game AI
+ * @brief 只读 AI 决策层：观察、合法动作、决策源。
+ * @ingroup tkw_root
+ */
+
+/**
+ * @defgroup tkw_cli CLI
+ * @brief 命令树、跨命令会话、中文渲染。
+ * @ingroup tkw_root
+ */
+
+/**
+ * @defgroup tkw_tui TUI View Model
+ * @brief TUI 纯视图模型（无 FTXUI、无终端 I/O）。
+ * @ingroup tkw_root
+ */

@@ -1,0 +1,57 @@
+# Doxyfile — tkw 接口文档（纳入版本控制）
+# 权威门禁：从仓库根运行 `doxygen docs/doxygen/Doxyfile`，
+# 必须在 WARN_AS_ERROR=YES 下零警告。
+# 相对路径按运行时的当前工作目录解析，故须从仓库根运行。
+# 规范见 docs/doxygen/doxygen-style.md；分组定义见 docs/doxygen/doxygen-groups.dox。
+
+PROJECT_NAME           = "tkw"
+PROJECT_BRIEF          = "三国杀式卡牌对局引擎"
+OUTPUT_DIRECTORY       = build/docs
+OUTPUT_LANGUAGE        = Chinese
+
+# 输入：引擎头文件 + 分组定义（不含 tui/、tests/、thirdparty/）
+INPUT                  = src docs/doxygen/doxygen-groups.dox
+RECURSIVE              = YES
+FILE_PATTERNS          = *.hpp *.dox
+EXCLUDE                = thirdparty build build-tui
+EXCLUDE_SYMBOLS        = detail
+EXCLUDE_PATTERNS       = */thirdparty/*
+
+# 提取：面向公共接口，不抽私有实现
+# EXTRACT_ALL=NO 才能让 WARN_IF_UNDOCUMENTED 对缺失文档报警
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+EXTRACT_LOCAL_CLASSES  = NO
+
+# 生成
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+GENERATE_TREEVIEW      = YES
+SEARCHENGINE           = YES
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+HAVE_DOT               = NO
+
+# 解析
+MARKDOWN_SUPPORT       = YES
+JAVADOC_AUTOBRIEF      = NO
+QT_AUTOBRIEF           = NO
+TAB_SIZE               = 4
+INPUT_ENCODING         = UTF-8
+STRIP_FROM_PATH        = .
+
+# 警告（门禁）
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_NO_PARAMDOC       = YES
+WARN_AS_ERROR          = YES
+WARN_LOGFILE           = build/docs/doxygen-warnings.log
+
+# 自定义宏：无
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = NO
