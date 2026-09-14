@@ -48,6 +48,7 @@ ctest --test-dir build --output-on-failure   # 跑测试，可选
 ```
 
 - 产物路径：`build/src/tkw`；Windows 下是 `.\build\src\tkw.exe`。
+- TUI 默认不构建。单独建一个目录：`-B build-tui`，产物 `build-tui/tui/tkw-tui`（Windows 下 `.exe`）。见「终端界面（TUI）」。
 - 开关：`-DTKW_ENABLE_TESTS=ON|OFF`（默认 ON）、`-DTKW_ENABLE_TUI=ON|OFF`（默认 OFF）。
 - 只在仓库根目录运行。默认牌表 `resources/` 相对当前目录解析。
 - 资源与存档的相对路径都相对启动时的工作目录。
