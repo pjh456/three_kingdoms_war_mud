@@ -54,7 +54,7 @@ namespace tkw
                  * @param[in] out 输出流，用于渲染提示与候选；生命周期须覆盖本对象。
                  */
                 HumanDecider(std::istream &in, std::ostream &out) :
-                    in_(in), out_(out)
+                    m_in(in), m_out(out)
                 {
                 }
 
@@ -62,7 +62,7 @@ namespace tkw
                  * @brief  按决策类别渲染窗口并读取玩家选择。
                  * @param[in] request 决策请求。
                  * @return 玩家选择；EOF 或放弃时返回空选择。
-                 * @post 不修改对局状态；仅向 `out_` 写提示并消费 `in_`。
+                 * @post 不修改对局状态；仅向 `m_out` 写提示并消费 `m_in`。
                  */
                 DecisionChoice decide(const DecisionRequest &request) override
                 {
@@ -75,7 +75,7 @@ namespace tkw
                             return decide_response_pair(request);
                         if (request.options.empty())
                         {
-                            out_ << "无可用响应牌。\n";
+                            m_out << "无可用响应牌。\n";
                             return DecisionChoice{};
                         }
                         return decide_choose_id(
@@ -83,7 +83,7 @@ namespace tkw
                     case DecisionKind::Peach:
                         if (request.options.empty())
                         {
-                            out_ << "无可用救场牌。\n";
+                            m_out << "无可用救场牌。\n";
                             return DecisionChoice{};
                         }
                         return decide_choose_id(
@@ -92,7 +92,7 @@ namespace tkw
                     case DecisionKind::Counter:
                         if (request.options.empty())
                         {
-                            out_ << "无可用无懈可击。\n";
+                            m_out << "无可用无懈可击。\n";
                             return DecisionChoice{};
                         }
                         return decide_choose_id(request, counter_title(request));
@@ -112,8 +112,8 @@ namespace tkw
                 }
 
             private:
-                std::istream &in_;
-                std::ostream &out_;
+                std::istream &m_in;
+                std::ostream &m_out;
 
                 /**
                  * @brief  读一行并去掉行尾 CR；EOF/读失败返回 false。
@@ -125,7 +125,7 @@ namespace tkw
                  */
                 bool read_line(std::string &line)
                 {
-                    if (!std::getline(in_, line))
+                    if (!std::getline(m_in, line))
                         return false;
                     if (!line.empty() && line.back() == '\r')
                         line.pop_back();
@@ -172,13 +172,13 @@ namespace tkw
                     std::string line;
                     if (!read_line(line))
                     {
-                        out_ << "\n输入已结束，按放弃处理。\n";
+                        m_out << "\n输入已结束，按放弃处理。\n";
                         return Option<std::vector<std::string>>::None();
                     }
 
                     auto tokens = tokenize(line);
                     if (tokens.empty())
-                        out_ << "\n";
+                        m_out << "\n";
                     return Option<std::vector<std::string>>::Some(std::move(tokens));
                 }
 
@@ -209,7 +209,7 @@ namespace tkw
                  */
                 void print_help(const std::string &tip)
                 {
-                    out_ << "用法：" << tip << "\n";
+                    m_out << "用法：" << tip << "\n";
                 }
 
                 /**
@@ -264,7 +264,7 @@ namespace tkw
                  * @brief 打印决策者视角的局面摘要：己方体力/完整手牌/装备/判定，
                  *        其余角色逐行给体力/手牌数/装备/距离。
                  * @param[in] req 决策请求（渲染其 `view`）。
-                 * @post 只写 `out_`，不改变对局状态与候选。
+                 * @post 只写 `m_out`，不改变对局状态与候选。
                  * @note 严格渲染 req.view 的可见性边界：己方手牌展开牌名，其他
                  *       角色手牌只出数量，绝不展开牌面内容。
                  * @note 纯展示，不改变候选与输入语法；每次重提示都会重绘。
@@ -272,12 +272,12 @@ namespace tkw
                 void print_view(const DecisionRequest &req)
                 {
                     const auto &v = req.view;
-                    out_ << "[" << v.self << "] 体力 " << v.self_hp << "/"
+                    m_out << "[" << v.self << "] 体力 " << v.self_hp << "/"
                          << v.self_max_hp << "  手牌 " << zone_names(req, v.hand)
                          << "  装备 " << zone_names(req, v.equip) << "  判定 "
                          << zone_names(req, v.judge) << "\n";
                     for (const auto &e : v.others)
-                        out_ << e.id << " 体力 " << e.hp << "/" << e.max_hp
+                        m_out << e.id << " 体力 " << e.hp << "/" << e.max_hp
                              << "  手牌 " << e.hand_size << "  装备 "
                              << zone_names(req, e.equip) << "  距离 " << e.distance
                              << "\n";
@@ -287,7 +287,7 @@ namespace tkw
                  * @brief 打印单张候选牌的效果文案（数据源 CardDef.text）。
                  * @param[in] req    决策请求（提供卡牌目录）。
                  * @param[in] def_id 卡牌定义 id；目录未收录回落 id 展示。
-                 * @post 只写 `out_`，不改变对局状态。
+                 * @post 只写 `m_out`，不改变对局状态。
                  * @note 文案缺失时打印「（无说明）」占位；只读查询，不改状态。
                  */
                 void print_card_text(
@@ -300,7 +300,7 @@ namespace tkw
                         if (def.is_some() && !def.unwrap()->text.empty())
                             text = def.unwrap()->text;
                     }
-                    out_ << card::display_name(req.catalog, def_id) << "：" << text
+                    m_out << card::display_name(req.catalog, def_id) << "：" << text
                          << "\n";
                 }
 
@@ -355,7 +355,7 @@ namespace tkw
                     }
                     if (is_hidden_option(req, static_cast<std::size_t>(index - 1)))
                     {
-                        out_ << kHiddenHandCardHint << "\n";
+                        m_out << kHiddenHandCardHint << "\n";
                         return;
                     }
                     print_card_text(
@@ -388,7 +388,7 @@ namespace tkw
                  * @brief 打印 1 基编号的牌候选列表。
                  * @param[in] req     决策请求（提供目录与分区标签）。
                  * @param[in] options 候选牌列表。
-                 * @post 只写 `out_`，不改变对局状态。
+                 * @post 只写 `m_out`，不改变对局状态。
                  * @note 候选带来源分区标签（选目标牌）时在牌名前标注
                  *       `[手]/[装]/[判]`，其余决策无标签保持原样。选目标牌的
                  *       手牌候选只打印分区标签与遮挡占位，不显示牌名与实例号；
@@ -401,15 +401,15 @@ namespace tkw
                     const bool has_zones = req.zone_labels.size() == options.size();
                     for (std::size_t i = 0; i < options.size(); ++i)
                     {
-                        out_ << "  " << (i + 1) << ") ";
+                        m_out << "  " << (i + 1) << ") ";
                         if (has_zones)
-                            out_ << zone_tag(req.zone_labels[i]) << " ";
+                            m_out << zone_tag(req.zone_labels[i]) << " ";
                         if (is_hidden_option(req, i))
                         {
-                            out_ << kHiddenHandPlaceholder << "\n";
+                            m_out << kHiddenHandPlaceholder << "\n";
                             continue;
                         }
-                        out_ << card::display_name(req.catalog, options[i].def_id)
+                        m_out << card::display_name(req.catalog, options[i].def_id)
                              << " " << options[i].instance_id << "\n";
                     }
                 }
@@ -417,11 +417,11 @@ namespace tkw
                 /**
                  * @brief  打印重提示分隔行与具体原因，并附 `?` 出口，保留「输入无效」标识。
                  * @param[in] reason 具体原因文案。
-                 * @post 只写 `out_`，不改变对局状态。
+                 * @post 只写 `m_out`，不改变对局状态。
                  */
                 void print_invalid(const std::string &reason)
                 {
-                    out_ << "\n输入无效：" << reason << "（" << kHelpHint << "）\n";
+                    m_out << "\n输入无效：" << reason << "（" << kHelpHint << "）\n";
                 }
 
                 /**
@@ -697,37 +697,37 @@ namespace tkw
 
                     for (;;)
                     {
-                        out_ << "[" << req.actor << "] 出牌阶段：\n";
+                        m_out << "[" << req.actor << "] 出牌阶段：\n";
                         print_view(req);
                         for (std::size_t i = 0; i < req.legal.size(); ++i)
                         {
                             const auto &act = req.legal[i];
-                            out_ << "  " << (i + 1) << ") "
+                            m_out << "  " << (i + 1) << ") "
                                  << card::display_name(req.catalog, act.card.def_id)
                                  << " " << act.card.instance_id;
                             if (act.converted_sha)
-                                out_ << "（当杀）";
+                                m_out << "（当杀）";
                             if (!act.second_instance_id.empty())
-                                out_ << " + " << act.second_instance_id;
+                                m_out << " + " << act.second_instance_id;
                             if (!act.targets.empty())
                             {
-                                out_ << " -> ";
+                                m_out << " -> ";
                                 for (std::size_t j = 0; j < act.targets.size(); ++j)
                                 {
                                     if (j > 0)
-                                        out_ << ",";
-                                    out_ << act.targets[j];
+                                        m_out << ",";
+                                    m_out << act.targets[j];
                                 }
                             }
                             if (act.recast)
-                                out_ << "（重铸：弃置并摸一张）";
+                                m_out << "（重铸：弃置并摸一张）";
                             std::string holder;
                             if (is_self_target_borrowed_sword(req, act, holder))
-                                out_ << "（警告：" << holder
+                                m_out << "（警告：" << holder
                                      << " 将对你出杀，可能致你受伤或阵亡）";
-                            out_ << "\n";
+                            m_out << "\n";
                         }
-                        out_ << "输入 play <序号> 或 pass（" << kCardHint
+                        m_out << "输入 play <序号> 或 pass（" << kCardHint
                              << "）：" << std::flush;
 
                         const auto input = read_tokens();
@@ -795,10 +795,10 @@ namespace tkw
 
                     for (;;)
                     {
-                        out_ << "[" << req.actor << "] " << title << "：\n";
+                        m_out << "[" << req.actor << "] " << title << "：\n";
                         print_view(req);
                         print_options(req, req.options);
-                        out_ << "输入 play <序号> 或 pass（" << kCardHint
+                        m_out << "输入 play <序号> 或 pass（" << kCardHint
                              << "）：" << std::flush;
 
                         const auto input = read_tokens();
@@ -860,14 +860,14 @@ namespace tkw
 
                     for (;;)
                     {
-                        out_ << "[" << req.actor << "] "
+                        m_out << "[" << req.actor << "] "
                              << response_title(req, true) << "：\n";
                         print_view(req);
                         for (std::size_t i = 0; i < hand.size(); ++i)
-                            out_ << "  " << (i + 1) << ") "
+                            m_out << "  " << (i + 1) << ") "
                                  << card::display_name(req.catalog, hand[i].def_id)
                                  << " " << hand[i].instance_id << "\n";
-                        out_ << "输入 play <序号> + <序号> 或 pass（"
+                        m_out << "输入 play <序号> + <序号> 或 pass（"
                              << kCardHint << "）：" << std::flush;
 
                         const auto input = read_tokens();
@@ -942,17 +942,17 @@ namespace tkw
 
                     for (;;)
                     {
-                        out_ << "[" << req.actor << "] " << title;
+                        m_out << "[" << req.actor << "] " << title;
                         if (!req.target.empty())
-                            out_ << "（目标: " << req.target << "）";
-                        out_ << "：\n";
+                            m_out << "（目标: " << req.target << "）";
+                        m_out << "：\n";
                         print_view(req);
                         print_options(req, req.options);
                         if (allow_pass)
-                            out_ << "输入 pick <序号> 或 pass（" << kCardHint
+                            m_out << "输入 pick <序号> 或 pass（" << kCardHint
                                  << "）：" << std::flush;
                         else
-                            out_ << "输入 pick <序号>（" << kCardHint
+                            m_out << "输入 pick <序号>（" << kCardHint
                                  << "）：" << std::flush;
 
                         const auto input = read_tokens();
@@ -1022,16 +1022,16 @@ namespace tkw
 
                     for (;;)
                     {
-                        out_ << "[" << req.actor << "] 弃牌（"
+                        m_out << "[" << req.actor << "] 弃牌（"
                              << reason_text(req.discard_reason) << "，需弃 "
                              << req.count << " 张）：\n";
                         print_view(req);
                         print_options(req, req.options);
                         if (can_pass)
-                            out_ << "输入 discard <序号> ... 或 pass（放弃弃牌；"
+                            m_out << "输入 discard <序号> ... 或 pass（放弃弃牌；"
                                  << kCardHint << "）：" << std::flush;
                         else
-                            out_ << "输入 discard <序号> ...（" << kCardHint
+                            m_out << "输入 discard <序号> ...（" << kCardHint
                                  << "）：" << std::flush;
 
                         const auto input = read_tokens();
@@ -1127,7 +1127,7 @@ namespace tkw
                     for (;;)
                     {
                         print_view(req);
-                        out_ << "[" << req.actor << "] 发动 " << trigger_name(req)
+                        m_out << "[" << req.actor << "] 发动 " << trigger_name(req)
                              << "（" << trigger_hint(req) << "）？(y/n)（"
                              << kHelpHint << "）：" << std::flush;
 
@@ -1211,10 +1211,10 @@ namespace tkw
                 RoutedAI(
                     const std::vector<std::string> &humans, std::istream &in,
                     std::ostream &out, std::unique_ptr<DecisionSource> fallback) :
-                    fallback_(std::move(fallback))
+                    m_fallback(std::move(fallback))
                 {
                     for (const auto &id : humans)
-                        humans_.emplace(id, std::make_unique<HumanAI>(in, out));
+                        m_humans.emplace(id, std::make_unique<HumanAI>(in, out));
                 }
 
                 /**
@@ -1368,21 +1368,21 @@ namespace tkw
                 }
 
             private:
-                std::unique_ptr<DecisionSource> fallback_; /**< 非真人座位的回落决策源。 */
-                std::map<std::string, std::unique_ptr<HumanAI>> humans_; /**< 真人座位 → 交互决策源。 */
+                std::unique_ptr<DecisionSource> m_fallback; /**< 非真人座位的回落决策源。 */
+                std::map<std::string, std::unique_ptr<HumanAI>> m_humans; /**< 真人座位 → 交互决策源。 */
 
                 /**
                  * @brief  查表取得 actor 对应的决策源。
                  * @param[in] actor 决策发起者 id。
-                 * @return 命中真人座位返回其 `HumanAI`，否则返回 `fallback_`。
+                 * @return 命中真人座位返回其 `HumanAI`，否则返回 `m_fallback`。
                  * @post 不改变任何状态；返回引用生命周期覆盖本对象。
                  */
                 DecisionSource &route(const std::string &actor)
                 {
-                    const auto it = humans_.find(actor);
-                    if (it != humans_.end())
+                    const auto it = m_humans.find(actor);
+                    if (it != m_humans.end())
                         return static_cast<DecisionSource &>(*it->second);
-                    return *fallback_;
+                    return *m_fallback;
                 }
             };
         }

@@ -28,8 +28,8 @@ namespace tkw
         class Hp
         {
         private:
-            int cur_ = 0;
-            int max_ = 0;
+            int m_cur = 0;
+            int m_max = 0;
             std::function<void(int, int, int)> m_on_change;  // (old_cur, cur, max)
 
         public:
@@ -43,8 +43,8 @@ namespace tkw
             static Hp make(int initial)
             {
                 Hp hp;
-                hp.cur_ = initial;
-                hp.max_ = initial;
+                hp.m_cur = initial;
+                hp.m_max = initial;
                 return hp;
             }
 
@@ -52,33 +52,33 @@ namespace tkw
              * @brief  返回当前体力。
              * @return 当前体力值；可为非正 = 濒死值状态。
              */
-            int get_cur() const noexcept { return cur_; }
+            int get_cur() const noexcept { return m_cur; }
 
             /**
              * @brief  返回体力上限。
              * @return 当前体力上限。
              */
-            int get_max() const noexcept { return max_; }
+            int get_max() const noexcept { return m_max; }
 
             /**
              * @brief  直接设置体力。
-             * @param[in] val 目标体力；`val > max_` 拒绝，`val < 0` 合法
+             * @param[in] val 目标体力；`val > m_max` 拒绝，`val < 0` 合法
              *                （濒死值状态）。
              * @return 是否设置成功。
-             * @retval true  `val <= max_`（含与当前值相同、无回调触发）。
-             * @retval false `val > max_`，状态不变。
+             * @retval true  `val <= m_max`（含与当前值相同、无回调触发）。
+             * @retval false `val > m_max`，状态不变。
              * @post   若 `val` 与当前值不同且已注册回调，则触发一次 `on_change`。
              */
             bool set_cur(int val)
             {
-                if (val > max_)
+                if (val > m_max)
                     return false;
-                if (val == cur_)
+                if (val == m_cur)
                     return true;
-                const int old = cur_;
-                cur_ = val;
+                const int old = m_cur;
+                m_cur = val;
                 if (m_on_change)
-                    m_on_change(old, cur_, max_);
+                    m_on_change(old, m_cur, m_max);
                 return true;
             }
 
@@ -88,21 +88,21 @@ namespace tkw
              * @return 是否设置成功。
              * @retval true  `val >= 0`。
              * @retval false `val < 0`，状态不变。
-             * @post   若 `cur_` 超过新上限则夹紧为上限；仅就 `cur_` 的变化触发
+             * @post   若 `m_cur` 超过新上限则夹紧为上限；仅就 `m_cur` 的变化触发
              *          一次回调（上限自身变化不触发）。
              */
             bool set_max(int val)
             {
                 if (val < 0)
                     return false;
-                if (val == max_)
+                if (val == m_max)
                     return true;
-                max_ = val;
-                const int old_cur = cur_;
-                if (cur_ > max_)
-                    cur_ = max_;
-                if (cur_ != old_cur && m_on_change)
-                    m_on_change(old_cur, cur_, max_);
+                m_max = val;
+                const int old_cur = m_cur;
+                if (m_cur > m_max)
+                    m_cur = m_max;
+                if (m_cur != old_cur && m_on_change)
+                    m_on_change(old_cur, m_cur, m_max);
                 return true;
             }
 
@@ -113,9 +113,9 @@ namespace tkw
              */
             int add(int det)
             {
-                const int old = cur_;
-                set_cur(std::min(cur_ + det, max_));
-                return cur_ - old;
+                const int old = m_cur;
+                set_cur(std::min(m_cur + det, m_max));
+                return m_cur - old;
             }
 
             /**
@@ -125,15 +125,15 @@ namespace tkw
              */
             int sub(int det)
             {
-                const int old = cur_;
-                set_cur(cur_ - det);
-                return old - cur_;
+                const int old = m_cur;
+                set_cur(m_cur - det);
+                return old - m_cur;
             }
 
             /**
              * @brief  注册体力变化回调。
              * @param[in] cb 回调 `(old_cur, cur, max)`；覆盖式注册，仅保留最近一个。
-             * @post   此后 `cur_` 的任何实际变化都会以新值回调一次。
+             * @post   此后 `m_cur` 的任何实际变化都会以新值回调一次。
              * @note   传入空 `std::function` 可清除已有回调。
              */
             void on_change(std::function<void(int, int, int)> cb)

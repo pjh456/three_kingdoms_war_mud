@@ -149,7 +149,7 @@ namespace tkw
                  * @brief  以指定决策器构造适配器。
                  * @param[in] decider 决策实现；生命周期须覆盖本对象。
                  */
-                explicit RequestDecisionSource(Decider &decider) : decider_(&decider) {}
+                explicit RequestDecisionSource(Decider &decider) : m_decider(&decider) {}
 
                 /**
                  * @brief  响应窗口适配：枚举真响应牌与单张/两张转化候选并翻译选择。
@@ -190,7 +190,7 @@ namespace tkw
                         for (const auto &[first, second] :
                              two_cards_as_sha_pairs(ctx, entity))
                             req.legal.push_back(LegalAction{first, {}, second.instance_id});
-                    const auto choice = decider_->decide(req);
+                    const auto choice = m_decider->decide(req);
                     if (choice.instance_id.is_none())
                         return Option<PlayAction>::None();
                     return Option<PlayAction>::Some(PlayAction{
@@ -218,7 +218,7 @@ namespace tkw
                     for (const auto &c : ctx.cards->hand(saver))
                         if (is_rescue_card(ctx, c, is_self))
                             req.options.push_back(c);
-                    return decider_->decide(req).instance_id;
+                    return m_decider->decide(req).instance_id;
                 }
 
                 /**
@@ -250,7 +250,7 @@ namespace tkw
                     for (const auto &c : ctx.cards->hand(player))
                         if (is_counter_card(ctx, c))
                             req.options.push_back(c);
-                    return decider_->decide(req).instance_id;
+                    return m_decider->decide(req).instance_id;
                 }
 
                 /**
@@ -268,7 +268,7 @@ namespace tkw
                     DecisionRequest req = base_request(ctx, player);
                     req.kind = DecisionKind::Trigger;
                     req.ability = ability;
-                    return decider_->decide(req).accepted;
+                    return m_decider->decide(req).accepted;
                 }
 
                 /**
@@ -289,7 +289,7 @@ namespace tkw
                     req.hero_trigger = true;
                     req.hero_skill = skill;
                     req.trigger_cause = cause;
-                    return decider_->decide(req).accepted;
+                    return m_decider->decide(req).accepted;
                 }
 
                 /**
@@ -325,7 +325,7 @@ namespace tkw
                             req.options, req.zone_labels, ctx.cards->judge(target),
                             card::Zone::Judge);
 
-                    const auto choice = decider_->decide(req);
+                    const auto choice = m_decider->decide(req);
                     if (choice.option_index.is_none())
                         return Option<TargetPick>::None();
                     const std::size_t i = choice.option_index.unwrap();
@@ -362,7 +362,7 @@ namespace tkw
                     req.options = options;
                     req.reveal_source = source;
 
-                    const auto choice = decider_->decide(req);
+                    const auto choice = m_decider->decide(req);
                     if (choice.option_index.is_none())
                         return Option<card::Card>::None();
                     const std::size_t i = choice.option_index.unwrap();
@@ -387,7 +387,7 @@ namespace tkw
                     req.kind = DecisionKind::Play;
                     req.turn = turn;
                     req.legal = legal_actions(ctx, turn.player, turn);
-                    const auto choice = decider_->decide(req);
+                    const auto choice = m_decider->decide(req);
                     if (choice.instance_id.is_none())
                         return Option<PlayAction>::None();
                     return Option<PlayAction>::Some(PlayAction{
@@ -414,11 +414,11 @@ namespace tkw
                     req.count = count;
                     req.discard_reason = reason;
                     req.options = ctx.cards->hand(player);
-                    return decider_->decide(req).discards;
+                    return m_decider->decide(req).discards;
                 }
 
             private:
-                Decider *decider_; /**< 决策实现；生命周期由调用方保证覆盖本对象。 */
+                Decider *m_decider; /**< 决策实现；生命周期由调用方保证覆盖本对象。 */
 
                 /**
                  * @brief  构造只读基请求：填 actor/catalog/view，其余字段由各回调补齐。

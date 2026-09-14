@@ -822,8 +822,8 @@ namespace tkw
             TuiDecisionSource(
                 std::vector<std::string> humans,
                 std::unique_ptr<tkw::game::ai::Decider> fallback) :
-                humans_(humans.begin(), humans.end()),
-                fallback_(std::move(fallback))
+                m_humans(humans.begin(), humans.end()),
+                m_fallback(std::move(fallback))
             {
             }
 
@@ -837,17 +837,17 @@ namespace tkw
             tkw::game::ai::DecisionChoice decide(
                 const tkw::game::ai::DecisionRequest &req) override
             {
-                if (humans_.count(req.actor) == 0)
-                    return fallback_->decide(req);
+                if (m_humans.count(req.actor) == 0)
+                    return m_fallback->decide(req);
 
-                std::unique_lock<std::mutex> lock(m_);
-                if (cancelled_.load())
+                std::unique_lock<std::mutex> lock(m_mutex);
+                if (m_cancelled.load())
                     return {};
-                panel_ = make_panel(req);
+                m_panel = make_panel(req);
                 has_pending_ = true;
-                taken_ = false;
-                submitted_ = false;
-                std::function<void()> notify = notify_;
+                m_taken = false;
+                m_submitted = false;
+                std::function<void()> notify = m_notify;
                 std::function<void()> on_wait = on_wait_;
                 lock.unlock();
                 if (notify)
@@ -855,16 +855,16 @@ namespace tkw
                 if (on_wait)
                     on_wait();
                 lock.lock();
-                cv_.wait(lock, [this]
-                         { return submitted_ || cancelled_.load(); });
-                if (cancelled_.load())
+                m_cv.wait(lock, [this]
+                         { return m_submitted || m_cancelled.load(); });
+                if (m_cancelled.load())
                 {
                     has_pending_ = false;
                     return {};
                 }
                 has_pending_ = false;
-                taken_ = false;
-                return choice_;
+                m_taken = false;
+                return m_choice;
             }
 
             /**
@@ -874,11 +874,11 @@ namespace tkw
              */
             bool fetch_new(DecisionPanelView &out)
             {
-                std::lock_guard<std::mutex> lock(m_);
-                if (!has_pending_ || taken_ || cancelled_.load())
+                std::lock_guard<std::mutex> lock(m_mutex);
+                if (!has_pending_ || m_taken || m_cancelled.load())
                     return false;
-                out = *panel_;
-                taken_ = true;
+                out = *m_panel;
+                m_taken = true;
                 return true;
             }
 
@@ -886,8 +886,8 @@ namespace tkw
              * @return 存在待决且未被取走、未取消时为 true。 */
             bool has_pending() const
             {
-                std::lock_guard<std::mutex> lock(m_);
-                return has_pending_ && !taken_ && !cancelled_.load();
+                std::lock_guard<std::mutex> lock(m_mutex);
+                return has_pending_ && !m_taken && !m_cancelled.load();
             }
 
             /**
@@ -899,17 +899,17 @@ namespace tkw
              */
             bool submit(std::vector<std::size_t> selected, bool pass)
             {
-                std::lock_guard<std::mutex> lock(m_);
-                // submitted_ 关掉「首次提交到 worker 唤醒之间」的连击覆盖窗口；
+                std::lock_guard<std::mutex> lock(m_mutex);
+                // m_submitted 关掉「首次提交到 worker 唤醒之间」的连击覆盖窗口；
                 // worker 每次 decide 起始会重置它。
-                if (!has_pending_ || submitted_ || cancelled_.load())
+                if (!has_pending_ || m_submitted || m_cancelled.load())
                     return false;
                 tkw::game::ai::DecisionChoice choice;
-                if (!panel_ || !make_choice(*panel_, selected, pass, choice))
+                if (!m_panel || !make_choice(*m_panel, selected, pass, choice))
                     return false;
-                choice_ = std::move(choice);
-                submitted_ = true;
-                cv_.notify_all();
+                m_choice = std::move(choice);
+                m_submitted = true;
+                m_cv.notify_all();
                 return true;
             }
 
@@ -920,12 +920,12 @@ namespace tkw
             void cancel()
             {
                 {
-                    std::lock_guard<std::mutex> lock(m_);
-                    cancelled_.store(true);
+                    std::lock_guard<std::mutex> lock(m_mutex);
+                    m_cancelled.store(true);
                     has_pending_ = false;
-                    panel_.reset();
+                    m_panel.reset();
                 }
-                cv_.notify_all();
+                m_cv.notify_all();
             }
 
             /**
@@ -935,34 +935,34 @@ namespace tkw
              */
             void set_notify(std::function<void()> notify)
             {
-                std::lock_guard<std::mutex> lock(m_);
-                notify_ = std::move(notify);
+                std::lock_guard<std::mutex> lock(m_mutex);
+                m_notify = std::move(notify);
             }
 
             /**
              * @brief  设置「即将阻塞」回调；真人决策释放锁后、阻塞等待前调用一次。
-             * @param[in] on_wait 回调；在 `m_` 释放后调用。
+             * @param[in] on_wait 回调；在 `m_mutex` 释放后调用。
              * @note   可安全回送最新快照；不得在其中回调本对象的阻塞 API。
              */
             void set_on_wait(std::function<void()> on_wait)
             {
-                std::lock_guard<std::mutex> lock(m_);
+                std::lock_guard<std::mutex> lock(m_mutex);
                 on_wait_ = std::move(on_wait);
             }
 
         private:
-            mutable std::mutex m_;
-            std::condition_variable cv_;
-            std::set<std::string> humans_;
-            std::unique_ptr<tkw::game::ai::Decider> fallback_;
-            std::function<void()> notify_;
+            mutable std::mutex m_mutex;
+            std::condition_variable m_cv;
+            std::set<std::string> m_humans;
+            std::unique_ptr<tkw::game::ai::Decider> m_fallback;
+            std::function<void()> m_notify;
             std::function<void()> on_wait_;
-            std::optional<DecisionPanelView> panel_;
+            std::optional<DecisionPanelView> m_panel;
             bool has_pending_ = false;
-            bool taken_ = false;
-            bool submitted_ = false;
-            tkw::game::ai::DecisionChoice choice_;
-            std::atomic<bool> cancelled_{false};
+            bool m_taken = false;
+            bool m_submitted = false;
+            tkw::game::ai::DecisionChoice m_choice;
+            std::atomic<bool> m_cancelled{false};
         };
     }  // namespace tui
 }  // namespace tkw

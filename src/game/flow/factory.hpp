@@ -78,15 +78,15 @@ namespace tkw
 
             /**
              * @brief  常用四字段装配：`heroes` 留空。
-             * @param[in] deck_    牌堆资源目录。
-             * @param[in] players_ 玩家数（座位 `0..players_-1`）。
-             * @param[in] seed_    随机种子。
-             * @param[in] mode_    对局模式。
+             * @param[in] deck    牌堆资源目录。
+             * @param[in] players 玩家数（座位 `0..players-1`）。
+             * @param[in] seed    随机种子。
+             * @param[in] mode    对局模式。
              */
-            BuildOptions(std::filesystem::path deck_, int players_,
-                         std::uint32_t seed_, GameMode mode_)
-                : deck(std::move(deck_)), players(players_), seed(seed_),
-                  mode(mode_)
+            BuildOptions(std::filesystem::path deck, int players,
+                         std::uint32_t seed, GameMode mode)
+                : deck(std::move(deck)), players(players), seed(seed),
+                  mode(mode)
             {
             }
         };

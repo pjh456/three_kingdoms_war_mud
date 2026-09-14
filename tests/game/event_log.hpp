@@ -41,18 +41,18 @@ namespace tkw
         public:
             explicit EventLog(EventBus &bus) { subscribe_all(bus); }
 
-            const std::vector<std::string> &lines() const noexcept { return lines_; }
+            const std::vector<std::string> &lines() const noexcept { return m_lines; }
 
         private:
-            std::vector<EventBus::Handle> handles_;
-            std::vector<std::string> lines_;
+            std::vector<EventBus::Handle> m_handles;
+            std::vector<std::string> m_lines;
 
             template <typename E, typename F>
             void record(EventBus &bus, F fmt)
             {
-                handles_.push_back(bus.subscribe(Handler<E>(
+                m_handles.push_back(bus.subscribe(Handler<E>(
                     [this, fmt](HandlerContext<E> &c)
-                    { lines_.push_back(fmt(c.event)); })));
+                    { m_lines.push_back(fmt(c.event)); })));
             }
 
             void subscribe_all(EventBus &bus)

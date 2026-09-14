@@ -70,13 +70,13 @@ namespace tkw
          * @brief  以种子构造。
          * @param[in] seed 初始种子。
          */
-        explicit SeededRng(std::uint32_t seed) : engine_(seed) {}
+        explicit SeededRng(std::uint32_t seed) : m_engine(seed) {}
 
         /**
          * @brief  取自 `mt19937` 的下一个值。
          * @return 底层引擎产生的 32 位无符号整数。
          */
-        std::uint32_t next() override { return engine_(); }
+        std::uint32_t next() override { return m_engine(); }
 
         /**
          * @brief  导出 `mt19937` 当前状态。
@@ -85,7 +85,7 @@ namespace tkw
         RngState save_state() const override
         {
             std::ostringstream os;
-            os << engine_;
+            os << m_engine;
             return RngState{os.str()};
         }
 
@@ -118,12 +118,12 @@ namespace tkw
             }
             if (is.fail())
                 return false;
-            engine_ = restored;
+            m_engine = restored;
             return true;
         }
 
     private:
-        std::mt19937 engine_;
+        std::mt19937 m_engine;
     };
 
     /**

@@ -39,7 +39,7 @@ namespace tkw
              * @brief  追加一张牌。
              * @param[in] card 要加入的牌。
              */
-            void add(Card card) { cards_.push_back(std::move(card)); }
+            void add(Card card) { m_cards.push_back(std::move(card)); }
 
             /**
              * @brief  按 `instance_id` 移除并返回。
@@ -51,12 +51,12 @@ namespace tkw
             Option<Card> remove(const std::string &instance_id)
             {
                 const auto it = std::find_if(
-                    cards_.begin(), cards_.end(),
+                    m_cards.begin(), m_cards.end(),
                     [&](const Card &c) { return c.instance_id == instance_id; });
-                if (it == cards_.end())
+                if (it == m_cards.end())
                     return Option<Card>::None();
                 Card c = std::move(*it);
-                cards_.erase(it);
+                m_cards.erase(it);
                 return Option<Card>::Some(std::move(c));
             }
 
@@ -64,28 +64,28 @@ namespace tkw
              * @brief  当前牌数。
              * @return 本区张数。
              */
-            std::size_t size() const noexcept { return cards_.size(); }
+            std::size_t size() const noexcept { return m_cards.size(); }
 
             /**
              * @brief  是否为空。
              * @return `true` = 本区无牌。
              */
-            bool empty() const noexcept { return cards_.empty(); }
+            bool empty() const noexcept { return m_cards.empty(); }
 
             /**
              * @brief  只读牌序列。
              * @return 引用指向内部序列，生命周期同本对象。
              */
-            const std::vector<Card> &view() const noexcept { return cards_; }
+            const std::vector<Card> &view() const noexcept { return m_cards; }
 
             /**
              * @brief  取走全部牌（死亡清场）。
              * @return 本区原牌序列；调用后本区为空。
              */
-            std::vector<Card> drain() { return std::move(cards_); }
+            std::vector<Card> drain() { return std::move(m_cards); }
 
         private:
-            std::vector<Card> cards_; /**< 按 `instance_id` 管理的牌序列（顺序 = 加入序）。 */
+            std::vector<Card> m_cards; /**< 按 `instance_id` 管理的牌序列（顺序 = 加入序）。 */
         };
 
         /**

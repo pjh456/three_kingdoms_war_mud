@@ -37,7 +37,7 @@ namespace tkw
              * @brief  构造指定容量的日志缓冲。
              * @param[in] cap 最大保留行数；超出时从最旧行开始丢弃。
              */
-            explicit LogBuffer(std::size_t cap = 256) : cap_(cap) {}
+            explicit LogBuffer(std::size_t cap = 256) : m_cap(cap) {}
 
             LogBuffer(const LogBuffer &) = delete;            /**< 不可拷贝。 */
             LogBuffer &operator=(const LogBuffer &) = delete; /**< 不可拷贝赋值。 */
@@ -56,42 +56,42 @@ namespace tkw
             {
                 unbind();
                 const std::set<std::string> visible(humans.begin(), humans.end());
-                handles_ = tkw::cli::detail::subscribe_event_log_to(
+                m_handles = tkw::cli::detail::subscribe_event_log_to(
                     game, [this](std::string line) { push(std::move(line)); },
                     [visible](const std::string &entity)
                     { return visible.empty() || visible.count(entity) > 0; });
             }
 
             /** @brief 退订全部句柄；Game 析构/覆盖前必须调用。 */
-            void unbind() noexcept { handles_.clear(); }
+            void unbind() noexcept { m_handles.clear(); }
 
             /** @brief 追加一行；超过容量时丢弃最旧行。
              * @param[in] line 要追加的文本行。 */
             void push(std::string line)
             {
-                lines_.push_back(std::move(line));
-                while (lines_.size() > cap_)
-                    lines_.pop_front();
+                m_lines.push_back(std::move(line));
+                while (m_lines.size() > m_cap)
+                    m_lines.pop_front();
             }
 
             /** @brief 清空缓冲内容（不影响订阅）。 */
-            void clear() { lines_.clear(); }
+            void clear() { m_lines.clear(); }
 
             /** @brief 只读行序列。
              * @return 引用指向内部环形缓冲，生命周期同本对象。 */
             const std::deque<std::string> &lines() const noexcept
             {
-                return lines_;
+                return m_lines;
             }
 
             /** @brief 缓冲容量上限。
              * @return 最大保留行数。 */
-            std::size_t capacity() const noexcept { return cap_; }
+            std::size_t capacity() const noexcept { return m_cap; }
 
         private:
-            std::deque<std::string> lines_;
-            std::size_t cap_ = 256;
-            std::vector<tkw::EventBus::Handle> handles_;
+            std::deque<std::string> m_lines;
+            std::size_t m_cap = 256;
+            std::vector<tkw::EventBus::Handle> m_handles;
         };
     }  // namespace tui
 }  // namespace tkw
