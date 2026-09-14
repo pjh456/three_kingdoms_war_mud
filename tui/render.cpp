@@ -26,6 +26,8 @@ namespace
     /** Full 模式的最小终端行列。 */
     constexpr int kFullMinRows = 24;
     constexpr int kFullMinCols = 80;
+    /** 决策面板展开时的 Full 最小行数：面板占去中上空间后仍须容纳四面板。 */
+    constexpr int kFullExpandedMinRows = kFullMinRows + 10;
     /** Compact 模式的最小终端行数；更小进 Minimal。 */
     constexpr int kCompactMinRows = 12;
     /** 极端兜底：小于此行数只保留底部交互区。 */
@@ -80,9 +82,21 @@ namespace
         return joined;
     }
 
-    /** @brief 降级提示文案：按模式说明已被隐藏的面板。 */
-    std::string degradation_notice(const ftxui::Dimensions &size, LayoutMode mode)
+    /**
+     * @brief 降级提示文案：按模式与决策面板状态说明已被隐藏的面板。
+     * @param size 终端行列。
+     * @param mode 布局分级。
+     * @param bottom_expanded 底部是否为展开的决策面板。
+     * @return 尺寸低于 Full 门槛时说明终端过小；仅因决策面板展开而降级时
+     *         说明隐藏原因，不误报尺寸问题。
+     */
+    std::string degradation_notice(const ftxui::Dimensions &size,
+                                   LayoutMode mode, bool bottom_expanded)
     {
+        if (bottom_expanded && size.dimx >= kFullMinCols &&
+            size.dimy >= kFullMinRows)
+            return "决策面板已展开：暂隐藏棋盘与手牌";
+
         const std::string hidden = mode == LayoutMode::Minimal
                                        ? "已隐藏棋盘、手牌与状态"
                                        : "已隐藏棋盘与手牌";
@@ -99,8 +113,10 @@ namespace tkw
         {
             LayoutMode plan_layout(ftxui::Dimensions size, bool bottom_expanded)
             {
-                if (!bottom_expanded && size.dimy >= kFullMinRows &&
-                    size.dimx >= kFullMinCols)
+                // 决策面板展开时让出中上部空间，Full 需要更多行数。
+                const int full_min_rows =
+                    bottom_expanded ? kFullExpandedMinRows : kFullMinRows;
+                if (size.dimx >= kFullMinCols && size.dimy >= full_min_rows)
                     return LayoutMode::Full;
                 if (size.dimy >= kCompactMinRows)
                     return LayoutMode::Compact;
@@ -266,7 +282,9 @@ namespace tkw
                 const ftxui::Element log_panel =
                     panel("日志", render_log(spec.log_lines, spec.log_ratio));
                 const ftxui::Element degrade =
-                    ftxui::text(degradation_notice(spec.size, mode)) | ftxui::dim;
+                    ftxui::text(degradation_notice(spec.size, mode,
+                                                   spec.bottom_expanded)) |
+                    ftxui::dim;
 
                 if (mode == LayoutMode::Full)
                 {

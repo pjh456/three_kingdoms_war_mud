@@ -34,7 +34,8 @@ namespace tkw
              * @brief 按终端尺寸挑选布局分级。
              * @param size 终端行列；异常尺寸由调用方回退后再传入。
              * @param bottom_expanded 底部是否为展开的决策面板；展开时让出中上部空间。
-             * @return 尺寸足够且无展开面板 → Full；行数够 → Compact；否则 Minimal。
+             * @return 尺寸达标（展开面板时需更多行数）→ Full；行数够 → Compact；
+             *         否则 Minimal。
              */
             LayoutMode plan_layout(ftxui::Dimensions size, bool bottom_expanded);
 

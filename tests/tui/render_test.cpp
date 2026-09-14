@@ -247,8 +247,38 @@ TEST_CASE("tui render: expanded bottom forces compact layout")
                                         true);
 
     CHECK(out.find("__INPUT__") != std::string::npos);
-    CHECK(out.find("终端过小") != std::string::npos);
+    // 尺寸其实达标，只是决策面板让位：不得误报终端过小。
+    CHECK(out.find("终端过小") == std::string::npos);
+    CHECK(out.find("决策面板已展开") != std::string::npos);
     CHECK(out.find("体力") == std::string::npos);  // 棋盘为决策面板让位
+}
+
+TEST_CASE("tui render: expanded bottom on a large terminal keeps full layout")
+{
+    UiSnapshot snap = base_snapshot();
+    std::vector<std::string> lines{"L1"};
+    std::string notice = "提示";
+    const std::string out = render_text(snap, lines, notice,
+                                        ftxui::text("__INPUT__"), 163, 41, 1.0f,
+                                        true);
+
+    CHECK(out.find("__INPUT__") != std::string::npos);
+    CHECK(out.find("终端过小") == std::string::npos);
+    CHECK(out.find("棋盘") != std::string::npos);
+    CHECK(out.find("手牌") != std::string::npos);
+}
+
+TEST_CASE("tui render: expanded bottom below full threshold warns")
+{
+    UiSnapshot snap = base_snapshot();
+    std::vector<std::string> lines{"L1"};
+    std::string notice = "提示";
+    const std::string out = render_text(snap, lines, notice,
+                                        ftxui::text("__INPUT__"), 80, 20, 1.0f,
+                                        true);
+
+    CHECK(out.find("__INPUT__") != std::string::npos);
+    CHECK(out.find("终端过小") != std::string::npos);
 }
 
 TEST_CASE("tui render: layout tiers follow terminal rows")
@@ -258,6 +288,14 @@ TEST_CASE("tui render: layout tiers follow terminal rows")
     CHECK(plan_layout({79, 24}, false) == LayoutMode::Compact);
     CHECK(plan_layout({80, 20}, false) == LayoutMode::Compact);
     CHECK(plan_layout({80, 10}, false) == LayoutMode::Minimal);
+
+    // 决策面板展开需要更多行数：大尺寸仍 Full，仅过线者降为 Compact。
+    CHECK(plan_layout({163, 41}, true) == LayoutMode::Full);
+    CHECK(plan_layout({120, 40}, true) == LayoutMode::Full);
+    CHECK(plan_layout({80, 34}, true) == LayoutMode::Full);
+    CHECK(plan_layout({80, 33}, true) == LayoutMode::Compact);
+    CHECK(plan_layout({100, 30}, true) == LayoutMode::Compact);
+    CHECK(plan_layout({80, 10}, true) == LayoutMode::Minimal);
 }
 
 TEST_CASE("tui render: single panels keep board fields and viewer hand")
