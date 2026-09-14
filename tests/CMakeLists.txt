@@ -546,13 +546,19 @@ set_tests_properties(cli_deal_human_default_verbose PROPERTIES
 
 # 真人局日志隐藏对手摸牌牌名：AI 座位摸牌渲染「未知牌」，真人座位仍出牌名。
 # deal 跑全回合，初始发牌即覆盖 P1 的进手牌；EOF 可能中途失败，故只钉文本不钉 rc。
+# 判定只做锚定整行的字节比较，不由 awk 按字段号取多字节行的 $3：字段切分与字符
+# 比较在 BSD awk 上跨平台口径不一致；失败时回显原始输出便于跨平台诊断。
 add_test(NAME cli_human_event_log_hides_opponent_draws
          COMMAND sh -c
                  "out=$(printf '' | $<TARGET_FILE:tkw> --human P0 --verbose deal 2 1 2>&1); \
-                  printf '%s' \"$out\" | grep -q '\\[摸牌\\] P1 未知牌' && \
-                  printf '%s' \"$out\" | awk '/^\\[摸牌\\] P1 / && $3 != \"未知牌\" { bad=1 } END { exit !!bad }' && \
-                  printf '%s' \"$out\" | awk '/^\\[摸牌\\] P0 / && $3 == \"未知牌\" { bad=1 } END { exit !!bad }' && \
-                  printf '%s' \"$out\" | grep -q '\\[摸牌\\] P0 '")
+                  dump() { printf '%s\\n' '--- tkw output ---' >&2; printf '%s\\n' \"$out\" >&2; }; \
+                  p1=$(printf '%s\\n' \"$out\" | grep '^\\[摸牌\\] P1 '); \
+                  p0=$(printf '%s\\n' \"$out\" | grep '^\\[摸牌\\] P0 '); \
+                  if [ -z \"$p1\" ]; then echo 'FAIL: P1 无摸牌日志' >&2; dump; exit 1; fi; \
+                  if printf '%s\\n' \"$p1\" | grep -qv '^\\[摸牌\\] P1 未知牌$'; then echo 'FAIL: P1 摸牌行泄露牌名' >&2; dump; exit 1; fi; \
+                  if [ -z \"$p0\" ]; then echo 'FAIL: P0 无摸牌日志' >&2; dump; exit 1; fi; \
+                  if printf '%s\\n' \"$p0\" | grep -q '^\\[摸牌\\] P0 未知牌'; then echo 'FAIL: P0 摸牌行被错误遮挡' >&2; dump; exit 1; fi; \
+                  exit 0")
 set_tests_properties(cli_human_event_log_hides_opponent_draws PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
