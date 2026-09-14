@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <string>
+#include <string_view>
 
 #include "config/resource.hpp"
 #include "game/core/effect.hpp"
@@ -57,7 +58,7 @@ TEST_CASE("hero: standard catalog loads heroes and skill metadata")
     CHECK(zf.hp == 4);
     CHECK(has_skill(zf, hero::HeroSkill::PaoXiao));
     CHECK(hero::display_hero_name(zf) == "张飞");
-    CHECK(hero::display_skill_name(hero::HeroSkill::PaoXiao) == "咆哮");
+    CHECK(std::string_view(hero::display_skill_name(hero::HeroSkill::PaoXiao)) == "咆哮");
 
     const auto zhouyu = catalog.find("zhouyu");
     REQUIRE(zhouyu.is_some());
@@ -67,7 +68,7 @@ TEST_CASE("hero: standard catalog loads heroes and skill metadata")
     CHECK(zy.gender.unwrap() == entity::Gender::Male);
     CHECK(zy.hp == 3);
     CHECK(has_skill(zy, hero::HeroSkill::YingZi));
-    CHECK(hero::display_skill_name(hero::HeroSkill::YingZi) == "英姿");
+    CHECK(std::string_view(hero::display_skill_name(hero::HeroSkill::YingZi)) == "英姿");
 
     const auto simayi = catalog.find("simayi");
     REQUIRE(simayi.is_some());
@@ -77,7 +78,7 @@ TEST_CASE("hero: standard catalog loads heroes and skill metadata")
     CHECK(sm.gender.unwrap() == entity::Gender::Male);
     CHECK(sm.hp == 3);
     CHECK(has_skill(sm, hero::HeroSkill::FanKui));
-    CHECK(hero::display_skill_name(hero::HeroSkill::FanKui) == "反馈");
+    CHECK(std::string_view(hero::display_skill_name(hero::HeroSkill::FanKui)) == "反馈");
 
     const auto machao = catalog.find("machao");
     REQUIRE(machao.is_some());
@@ -87,7 +88,7 @@ TEST_CASE("hero: standard catalog loads heroes and skill metadata")
     CHECK(mc.gender.unwrap() == entity::Gender::Male);
     CHECK(mc.hp == 4);
     CHECK(has_skill(mc, hero::HeroSkill::MaShu));
-    CHECK(hero::display_skill_name(hero::HeroSkill::MaShu) == "马术");
+    CHECK(std::string_view(hero::display_skill_name(hero::HeroSkill::MaShu)) == "马术");
 
     const auto huangyueying = catalog.find("huangyueying");
     REQUIRE(huangyueying.is_some());
@@ -97,7 +98,7 @@ TEST_CASE("hero: standard catalog loads heroes and skill metadata")
     CHECK(hy.gender.unwrap() == entity::Gender::Female);
     CHECK(hy.hp == 3);
     CHECK(has_skill(hy, hero::HeroSkill::QiCai));
-    CHECK(hero::display_skill_name(hero::HeroSkill::QiCai) == "奇才");
+    CHECK(std::string_view(hero::display_skill_name(hero::HeroSkill::QiCai)) == "奇才");
 
     const auto zhaoyun = catalog.find("zhaoyun");
     REQUIRE(zhaoyun.is_some());
@@ -107,7 +108,7 @@ TEST_CASE("hero: standard catalog loads heroes and skill metadata")
     CHECK(zd.gender.unwrap() == entity::Gender::Male);
     CHECK(zd.hp == 4);
     CHECK(has_skill(zd, hero::HeroSkill::LongDan));
-    CHECK(hero::display_skill_name(hero::HeroSkill::LongDan) == "龙胆");
+    CHECK(std::string_view(hero::display_skill_name(hero::HeroSkill::LongDan)) == "龙胆");
 
     const auto zhenji = catalog.find("zhenji");
     REQUIRE(zhenji.is_some());
@@ -117,7 +118,7 @@ TEST_CASE("hero: standard catalog loads heroes and skill metadata")
     CHECK(zj.gender.unwrap() == entity::Gender::Female);
     CHECK(zj.hp == 3);
     CHECK(has_skill(zj, hero::HeroSkill::QingGuo));
-    CHECK(hero::display_skill_name(hero::HeroSkill::QingGuo) == "倾国");
+    CHECK(std::string_view(hero::display_skill_name(hero::HeroSkill::QingGuo)) == "倾国");
 
     // 标准目录内全部技能均已实现：审计面不再标记为未实现
     CHECK_FALSE(game::is_unimplemented_skill(hero::HeroSkill::PaoXiao));
