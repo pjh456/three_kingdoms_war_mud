@@ -144,7 +144,7 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 
 注意：TUI 的 `heroes` / `decks` 只接受 `--deck <路径>`，不接受位置参数 `[目录]`。CLI 的 `heroes` / `decks` 才接受位置参数目录。
 
-其他：TUI 事件日志恒开，没有 `--verbose` / `--no-verbose`。退出时若有进行中的会话会自动存档，退出信息写到 stderr。Windows/MSVC 下的 TUI 未经验证（Windows + MinGW 实测能构建并启动）。
+其他：TUI 事件日志恒开，没有 `--verbose` / `--no-verbose`。退出时若有进行中的会话会自动存档，退出信息写到 stderr。
 
 ## 命令
 
