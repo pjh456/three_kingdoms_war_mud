@@ -60,20 +60,7 @@ namespace tkw
          * @note  与 CLI status 的装备/判定口径一致。
          * @warning 不得传入未展开的对手手牌：`count > 0` 但 `cards` 空会误显「无」。
          */
-        inline std::string zone_names(const ZoneView &zone)
-        {
-            if (zone.cards.empty())
-                return "无";
-
-            std::string out;
-            for (std::size_t i = 0; i < zone.cards.size(); ++i)
-            {
-                if (i > 0)
-                    out += "/";
-                out += zone.cards[i].display_name;
-            }
-            return out;
-        }
+        std::string zone_names(const ZoneView &zone);
 
         /**
          * @brief  身份局角色是否向人类视角可见。
@@ -87,15 +74,8 @@ namespace tkw
          * @note   与 CLI status 的身份可见性同口径（主公 ∪ 真人 ∪ 终局），
          *         非身份局/全 AI 局不受影响。
          */
-        inline bool role_visible(const std::vector<std::string> &humans, bool over,
-                                 const std::string &id, tkw::game::Role role)
-        {
-            if (humans.empty() || over)
-                return true;
-            if (role == tkw::game::Role::Lord)
-                return true;
-            return std::find(humans.begin(), humans.end(), id) != humans.end();
-        }
+        bool role_visible(const std::vector<std::string> &humans, bool over,
+                          const std::string &id, tkw::game::Role role);
 
         /**
          * @brief  按 viewer 视角取 target 手牌：仅 viewer == target 时展开实体牌。
@@ -107,27 +87,9 @@ namespace tkw
          * @post  本接口不改变对局状态。
          * @warning 可见性红线单点：对手只取 `hand_size`，绝不拷贝 `hand()`。
          */
-        inline ZoneView visible_hand(
-            const tkw::game::ReadOnlyContext &ctx, const std::string &viewer,
-            const std::string &target)
-        {
-            ZoneView view;
-            if (ctx.cards == nullptr)
-                return view;
-
-            view.count = ctx.cards->hand_size(target);
-            if (viewer != target)
-                return view;
-
-            view.revealed = true;
-            view.cards.reserve(view.count);
-            for (const auto &c : ctx.cards->hand(target))
-                view.cards.push_back(CardRow{c.instance_id, c.def_id,
-                                             tkw::card::display_name(
-                                                 ctx.catalog, c.def_id),
-                                             c.suit, c.number});
-            return view;
-        }
+        ZoneView visible_hand(const tkw::game::ReadOnlyContext &ctx,
+                              const std::string &viewer,
+                              const std::string &target);
 
         /**
          * @brief  装备区/判定区明置：任何 viewer 均可展开。
@@ -135,21 +97,8 @@ namespace tkw
          * @param[in] zone 待转换的实体牌区。
          * @return `cards` 为整区牌副本，`count` 为区大小，`revealed` 恒为真。
          */
-        inline ZoneView public_zone(
-            const tkw::game::ReadOnlyContext &ctx,
-            const std::vector<tkw::card::Card> &zone)
-        {
-            ZoneView view;
-            view.count = zone.size();
-            view.revealed = true;
-            view.cards.reserve(zone.size());
-            for (const auto &c : zone)
-                view.cards.push_back(CardRow{c.instance_id, c.def_id,
-                                             tkw::card::display_name(
-                                                 ctx.catalog, c.def_id),
-                                             c.suit, c.number});
-            return view;
-        }
+        ZoneView public_zone(const tkw::game::ReadOnlyContext &ctx,
+                             const std::vector<tkw::card::Card> &zone);
     }  // namespace tui
 }  // namespace tkw
 

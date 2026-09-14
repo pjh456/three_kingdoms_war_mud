@@ -37,14 +37,7 @@ namespace tkw
              * @param[in] total 当前日志总行数。
              * @return 跟随或行数 ≤ 1 时恒 1；否则锚定行下标占总行数的比例。
              */
-            float ratio(std::size_t total) const noexcept
-            {
-                if (total <= 1 || follow)
-                    return 1.0f;
-                const std::size_t a = std::min(anchor, total - 1);
-                return static_cast<float>(a) /
-                       static_cast<float>(total - 1);
-            }
+            float ratio(std::size_t total) const noexcept;
 
             /**
              * @brief  按行滚动视口。
@@ -54,40 +47,20 @@ namespace tkw
              * @note  贴尾时以最后一行为起点，非跟随时以锚定行为起点；两端钳位，
              *        滚到尾部恢复跟随。`total == 0` 时无操作。
              */
-            void scroll(int delta, std::size_t total) noexcept
-            {
-                if (total == 0)
-                    return;
-
-                const int last = static_cast<int>(total - 1);
-                int base = follow
-                               ? last
-                               : static_cast<int>(std::min(anchor, total - 1));
-                base = std::clamp(base + delta, 0, last);
-                anchor = static_cast<std::size_t>(base);
-                follow = base >= last;
-            }
+            void scroll(int delta, std::size_t total) noexcept;
 
             /**
              * @brief  回到最新行并恢复跟随（End）。
              * @param[in] total 当前日志总行数；0 时锚到 0 并保持跟随。
              */
-            void to_tail(std::size_t total) noexcept
-            {
-                anchor = total == 0 ? 0 : total - 1;
-                follow = true;
-            }
+            void to_tail(std::size_t total) noexcept;
 
             /**
              * @brief  跳到最早行并停止跟随（Home）。
              * @note   顶部恒为下标 0；参数 `total` 保留与 `to_tail` 对称，本实现
              *         不使用。
              */
-            void to_top(std::size_t /*total*/) noexcept
-            {
-                anchor = 0;
-                follow = false;
-            }
+            void to_top(std::size_t /*total*/) noexcept;
         };
 
         /** @brief 日志键位映射：仅描述语义，不绑定具体 UI 事件类型。 */
@@ -112,32 +85,8 @@ namespace tkw
          * @note   `PageUp`/`PageDown` 无输入门控；`Home`/`End` 仅命令输入为空时
          *         消费，避免抢占单行编辑的光标键。
          */
-        inline bool handle_log_key(LogKey key, bool input_empty,
-                                   LogScroll &scroll,
-                                   std::size_t total) noexcept
-        {
-            if (key == LogKey::None)
-                return false;
-            if (key == LogKey::PageUp)
-            {
-                scroll.scroll(-kLogScrollPage, total);
-                return true;
-            }
-            if (key == LogKey::PageDown)
-            {
-                scroll.scroll(kLogScrollPage, total);
-                return true;
-            }
-            if (!input_empty)
-                return false;
-            if (key == LogKey::Home)
-            {
-                scroll.to_top(total);
-                return true;
-            }
-            scroll.to_tail(total);
-            return true;
-        }
+        bool handle_log_key(LogKey key, bool input_empty, LogScroll &scroll,
+                            std::size_t total) noexcept;
     }  // namespace tui
 }  // namespace tkw
 

@@ -52,27 +52,14 @@ namespace tkw
              * @note  可见性口径与 CLI 事件日志同谓词同占位，单一事实源。
              */
             void bind(tkw::game::Game &game,
-                      const std::vector<std::string> &humans = {})
-            {
-                unbind();
-                const std::set<std::string> visible(humans.begin(), humans.end());
-                m_handles = tkw::cli::detail::subscribe_event_log_to(
-                    game, [this](std::string line) { push(std::move(line)); },
-                    [visible](const std::string &entity)
-                    { return visible.empty() || visible.count(entity) > 0; });
-            }
+                      const std::vector<std::string> &humans = {});
 
             /** @brief 退订全部句柄；Game 析构/覆盖前必须调用。 */
             void unbind() noexcept { m_handles.clear(); }
 
             /** @brief 追加一行；超过容量时丢弃最旧行。
              * @param[in] line 要追加的文本行。 */
-            void push(std::string line)
-            {
-                m_lines.push_back(std::move(line));
-                while (m_lines.size() > m_cap)
-                    m_lines.pop_front();
-            }
+            void push(std::string line);
 
             /** @brief 清空缓冲内容（不影响订阅）。 */
             void clear() { m_lines.clear(); }
