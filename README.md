@@ -1,12 +1,37 @@
-# 三国杀式卡牌对局引擎（tkw）
+# 跨平台 MUD 三国杀单机游戏（tkw）
 
 三国杀式卡牌对局引擎：C++20 header-only 引擎 + `tkw` 命令行/REPL，牌表数据驱动
 （`resources/` 下的 JSON）。AI 与真人混坐对局：判定 → 摸牌 → 出牌（杀/锦囊/装备）→
 弃牌，结算伤害、濒死救场与阵亡，可一键跑完整局，也可进 REPL 逐回合参与。
 
+本项目以终端文本交互呈现三国杀式对局：玩家在本机与 AI 对战，
+通过命令或决策面板出牌、响应与选择目标。CLI/REPL 可用于逐回合游玩与脚本运行，
+可选 TUI 则提供棋盘、手牌、日志和状态面板。对局运行不需要服务器或账号；
+获取子模块与首次下载构建依赖时可能需要联网。
+
+## 功能概览
+
+- **对局模式**：2–8 人乱斗、4–8 人身份局；支持真人与 AI 混合座位。
+- **规则结算**：判定、摸牌、出牌、弃牌、距离与攻击范围、装备、
+  普通/火焰/雷电伤害、铁索连环、濒死救援与无懈可击链。
+- **资源内容**：标准版 32 种/108 张牌、军争篇 17 种/83 张牌，
+  以及标准目录中的 8 名武将；两套随附牌表目前均可通过结算审计。
+- **交互与查询**：中文命令帮助、手牌决策、牌面说明、牌表与武将扫描。
+- **会话管理**：逐回合推进、运行到结束、JSON 存读档、退出自动存档与命令历史。
+- **模拟与开发**：两档 AI、随机种子、跨局统计、header-only 核心和分层测试。
+
+## 文档导航
+
+[构建与测试](#构建与测试) · [跨平台构建与运行](#跨平台构建与运行) ·
+[快速开始](#快速开始) · [可选终端界面](#可选终端界面tkw-tui) ·
+[命令速查](#命令速查) · [REPL 用法](#repl-用法) · [内置牌表](#内置牌表) ·
+[武将](#武将) · [自定义牌表](#自定义牌表) · [规则简表](#规则简表默认值) ·
+[存档说明](#存档说明) · [开发与测试](#开发与测试) · [常见问题](#常见问题)
+
 ## 构建与测试
 
-依赖 C++20 编译器、CMake ≥ 3.21、Ninja。第三方库是 git 子模块且为**两层**结构
+依赖支持 C++20 的编译器、CMake ≥ 3.21；以下示例使用 Ninja，亦可使用其他 CMake 生成器。
+第三方库是 git 子模块且为**两层**结构
 （`thirdparty/pjh_json` 内还嵌套子模块），克隆后必须用 `--recursive` 补齐：
 
 ```sh
@@ -14,9 +39,9 @@ git clone <仓库地址> three_kingdoms_war_mud
 cd three_kingdoms_war_mud
 git submodule update --init --recursive
 
-cmake -B build -G Ninja       # 配置（首次构建需联网拉取 doctest v2.5.0）
+cmake -S . -B build -G Ninja  # 配置（首次构建需联网拉取 doctest v2.5.0）
 cmake --build build           # 构建，产物 build/src/tkw
-ctest --test-dir build        # 运行全部测试
+ctest --test-dir build --output-on-failure  # 运行全部测试，失败时显示输出
 ```
 
 - 测试构建开关 `-DTKW_ENABLE_TESTS=ON|OFF`（默认 ON）；OFF 时 `tests/` 不进入构建。
@@ -25,6 +50,82 @@ ctest --test-dir build        # 运行全部测试
 - `build/` 是构建产物，不入库。
 - 下文示例中 `tkw` 均指 `./build/src/tkw`，且在仓库根目录执行（默认牌表路径
   `resources/` 相对当前工作目录）。
+
+## 跨平台构建与运行
+
+项目使用 CMake 和平台适配库面向 Windows、Linux、macOS。
+编译器需要支持项目实际使用的 C++20 功能（包括 `std::jthread` 等标准库功能）；
+仅启用 `-std=c++20` 并不能补齐旧标准库缺少的实现。
+
+### Windows：Ninja / MinGW 或 MSVC
+
+MinGW 的 C++ 编译器与 Ninja 需要位于 `PATH` 中。使用 MSVC + Ninja 时，
+请先进入 Visual Studio 的开发者命令行，使编译器与 Windows SDK 可用。
+在仓库根目录的 PowerShell 中执行：
+
+```powershell
+cmake -S . -B build -G Ninja
+cmake --build build
+ctest --test-dir build --output-on-failure
+
+.\build\src\tkw.exe --help
+.\build\src\tkw.exe --human P0 repl
+```
+
+若使用 Visual Studio 多配置生成器，构建与测试需指定配置，产物路径也会多一层：
+
+```powershell
+cmake -S . -B build-msvc -G "Visual Studio 17 2022"
+cmake --build build-msvc --config Release
+ctest --test-dir build-msvc -C Release --output-on-failure
+.\build-msvc\src\Release\tkw.exe --human P0 repl
+```
+
+源码与资源使用 UTF-8，顶层 CMake 为 MSVC 添加 `/utf-8`。
+终端还需能显示中文；推荐使用支持 UTF-8 和中文字体的终端。
+本地已有 Windows/MinGW 的 CLI 构建产物；MSVC、macOS、Linux
+及各平台 TUI 的实际验证范围应以相应构建与测试结果为准。
+
+### Linux / macOS
+
+安装支持 C++20 的编译器、CMake、Git 和 Ninja 后，在仓库根目录执行：
+
+```sh
+cmake -S . -B build -G Ninja
+cmake --build build
+ctest --test-dir build --output-on-failure
+./build/src/tkw --human P0 repl
+```
+
+如需明确选择编译器，可在首次配置时追加 `-DCMAKE_CXX_COMPILER=clang++`
+或 `-DCMAKE_CXX_COMPILER=g++`。切换生成器或编译器时请使用新的构建目录。
+
+### 仅构建游戏与离线依赖
+
+只需 CLI 时，可关闭测试下载；TUI 默认为 OFF：
+
+```sh
+cmake -S . -B build-cli -G Ninja -DTKW_ENABLE_TESTS=OFF -DTKW_ENABLE_TUI=OFF
+cmake --build build-cli --target tkw
+```
+
+离线构建需要提前初始化所有递归子模块。启用测试时，
+可用 `-DFETCHCONTENT_SOURCE_DIR_DOCTEST=<doctest-src>` 指向预置源码；
+FTXUI 的离线配置见「可选终端界面（tkw-tui）」一节。
+
+`thirdparty/pjh_cli` 在当前 `.gitmodules` 中使用 GitHub SSH 地址。
+若未配置 SSH 密钥，可在本地覆盖该子模块地址后再初始化：
+
+```sh
+git submodule init
+git config submodule.thirdparty/pjh_cli.url https://github.com/pjh456/pjh_cli
+git submodule update --init --recursive
+```
+
+下文 shell 示例中的 `tkw` 为可执行文件的简称，并非构建后自动加入 `PATH` 的命令。
+Windows/Ninja 下请替换为 `.\build\src\tkw.exe`，
+Linux/macOS 下替换为 `./build/src/tkw`。
+资源与存档的相对路径均从启动程序时的工作目录解析。
 
 ## 快速开始
 
@@ -50,6 +151,19 @@ discard 1 2                # 弃牌阶段手牌超上限，按提示弃够张数
 
 对局结束打印胜者（或平局）与对局统计块（回合数/每人体力/击杀/伤害/治疗）。
 
+`step` 推进的是一个角色的完整回合；期间可能出现出牌、响应、触发技能、
+选目标与弃牌等多个真人决策窗口。`run` 在真人局中仍会等待真人决策。
+上面的出牌与弃牌序号仅用于示范，实际请按当前窗口显示的候选项与所需张数操作。
+
+座位从 `P0` 到 `P<人数-1>`。未指定 `--hero` 时使用无名座位，
+不会自动随机选将。想以张飞参与身份局，可这样启动：
+
+```sh
+tkw --human P0 --hero P0=zhangfei --mode identity --players 5 --seed 1 repl
+```
+
+进入后执行 `new` 继承启动选项，再用 `step` 或 `run` 推进。
+
 ## 可选终端界面（tkw-tui）
 
 除 CLI/REPL 外，另有一个可选的 FTXUI 全屏前端，默认关闭：
@@ -69,9 +183,9 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 - 四面板展示棋盘/手牌/日志/状态（棋盘逐座显示体力/手牌数/装备/判定/距离，
   空区显示「无」），底部命令栏：`new [--players N] [--seed S]
   [--mode brawl|identity] [--ai simple|aggressive] [--deck P] [--hand N]
-  [--human <座位>] [--no-human]`、`deal <players> <seed>`、`step`、`run`/`r`、
+  [--human <座位>] [--no-human] [--hero <座位=id>]`、`deal <players> <seed>`、`step`、`run`/`r`、
    `status`/`st`、`save`/`w <file>`、`load`/`l <file>`、`cards [--text] [--deck 路径]`、
-    `rules [关键词] [--deck 路径]`、`audit [--deck 路径]`、`decks [--deck 路径]`、
+    `rules [关键词] [--deck 路径]`、`audit [--deck 路径]`、`decks [--deck 路径]`、`heroes [目录] [--deck 路径]`、
     `simulate <局数> [玩家数] [--seed S] [--ai simple|aggressive] [--hand N]
     [--mode brawl|identity] [--deck 路径]`、`quit`/`q`、
    `help [命令]`/`? [关键词]`；`Esc`/`Ctrl-C` 退出。
@@ -115,7 +229,9 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
   退出冒烟外还覆盖真人决策面板（`tui_pty_human_smoke` 钉面板出现，
   `tui_pty_human_quit_pending` 钉待决中退出无 hang）与小终端
   （`tui_pty_small_terminal` 钉 24×80 下命令输入可见）。
-- Windows/MSVC 未验证。
+- Windows/MSVC TUI 未验证；上述类 Unix 可执行路径在 Windows/Ninja 下对应
+  `.\build-tui\tui\tkw-tui.exe`。Visual Studio 多配置生成器还需加入配置目录，
+  如 `build-tui/tui/Release/tkw-tui.exe`。
 
 ## 命令速查
 
@@ -239,6 +355,11 @@ tkw --deck resources/junzheng repl      # 或进 REPL 逐回合玩（再 new/ste
 
 TUI 命令栏同样支持 `decks [--deck 路径]` 就地列出，结果写入日志面板。
 
+军争篇是一套独立牌表，不会自动叠加标准版卡牌；当前目录不含
+`heroes.json`，所以直接切换到军争篇不会加载标准目录的武将。
+其中包含火杀、雷杀、酒、兵粮寸断、铁索连环、火攻、藤甲、
+白银狮子、古锭刀与朱雀羽扇等定义；具体构成以 `cards --text` 输出为准。
+
 ## 武将
 
 武将数据与牌表同根（`<deck>/heroes.json` + `<deck>/heroes/<id>.json`），独立于
@@ -275,6 +396,25 @@ tkw --hero P0=zhangfei repl         # 或进 REPL：new --hero P0=zhangfei --pla
 尚无 `heroes.json` 的自定义牌表照常可玩（武将回落无名座位）。被选中武将若含
 引擎尚未实现的技能，建局入口会打印中文警告，不会静默按无技能结算。
 
+## AI 与批量模拟
+
+`simple` 采用贪心策略，`aggressive` 优先考虑伤害与多目标动作；
+两者共享合法动作与响应机制。身份局 AI 会按角色阵营进行决策。
+这两档是策略区别，并不保证 aggressive 在所有牌表或局面中胜率更高。
+
+```sh
+tkw --ai aggressive deal 4 42
+tkw simulate 100 4 --seed 1 --ai aggressive
+tkw simulate 100 5 --mode identity --seed 1
+tkw --deck resources/junzheng simulate 100 2
+```
+
+`simulate` 为全 AI 模拟，拒绝真人座位；缺省基种子为 1，
+每局使用递增的种子。结果包含局数、种子区间、AI 档、
+胜场/阵营胜场、平局和平均回合等汇总信息。
+在相同代码、资源、参数和决策序列下，固定种子便于复现与比较；
+修改代码或牌表后，结果可能随之变化。
+
 ## 自定义牌表
 
 牌表是纯数据目录，默认 `resources/`：
@@ -291,36 +431,71 @@ tkw --hero P0=zhangfei repl         # 或进 REPL：new --hero P0=zhangfei --pla
 - 卡文件定义 `id`/`name`/`type`/`subtype`/`copies`（逐张列花色与点数，条数即
   张数）/`text`（效果文案），按需再带 `effect`（主动效果）/`equip`（装备）/
   `judge`（判定）/`abilities`（被动能力）；
-- 新增卡牌只改牌表目录，代码零改动；`tkw --deck <dir> audit` 可审计未实现卡
+- 使用引擎已支持的机制新增卡牌时，只需修改牌表目录；新增机制仍需实现对应代码与测试。
+  `tkw --deck <dir> audit` 可审计未实现卡
   （未知机制名逐卡列出，只审机制、不建局；`deal`/`simulate` 遇到未知机制仍会拒绝建局）；
 - 用 `--deck <dir>` 指向自定义牌表，如 `tkw --deck mydeck deal 2 1`。
 
 标准版牌表共 32 个卡牌定义、108 张牌。
 
+卡牌 ID 需要同时对应入口引用、文件名和文件中的 `id`；
+`copies` 中每个对象表示一张实体牌，不能仅修改文字说明来改变效果。
+`effect.kind`、`abilities` 与武将 `skills` 使用引擎支持的机制名，
+未知机制可能通过审计被列出，但正常资源加载会拒绝它们。
+
+完成修改后，先检查加载与机制覆盖，再运行实际对局：
+
+```sh
+tkw --deck mydeck cards --text
+tkw --deck mydeck audit
+tkw --deck mydeck deal 2 1
+```
+
+`audit` 是机制覆盖检查，不能替代规则测试。定义字段与可用枚举可参照
+`resources/cards/`、`resources/heroes/` 中的现有 JSON，
+以及 `src/card/catalog.hpp`、`src/hero/catalog.hpp` 的解析表。
+
 ## 规则简表（默认值）
 
 | 项 | 值 |
 |---|---|
-| 初始/上限体力 | 4 |
+| 初始/上限体力 | 无名座位默认 4；选将后以武将配置为准 |
 | 初始手牌 | 每人 4 张 |
 | 摸牌阶段 | 每回合摸 2 张 |
-| 「杀」次数 | 每回合 1 次（装备诸葛连弩不限） |
+| 「杀」次数 | 每回合 1 次（诸葛连弩或咆哮可解除限制） |
 | 手牌上限 | 当前体力值（超出时弃牌） |
 | 击杀奖励（乱斗） | 摸 3 张牌 |
 | 身份局击杀奖惩 | 击杀反贼摸 3 张；主公击杀忠臣弃光手牌与装备；其余身份无奖励 |
 | 玩家数 | 2–8 人（身份局需 4–8 人） |
-| 胜利条件 | 唯一存活；达到 1000 回合上限判平局 |
-| 身份局胜利 | 主公阵营胜（主公存活）/ 反贼胜（主公阵亡且内奸非唯一存活者）/ 内奸胜（唯一存活内奸）；同归于尽为平局 |
+| 乱斗胜利条件 | 唯一存活；无存活者为平局，未终局且超出默认 1000 回合上限时按平局处理 |
+| 身份局胜利 | 主公阵营胜（主公存活且反贼、内奸全部阵亡）/ 反贼胜（主公阵亡且内奸非唯一存活者）/ 内奸胜（唯一存活内奸）；同归于尽为平局 |
 
-规则数值数据驱动；每张牌的效果文案可直接查询：`tkw rules` 列出全部、
+全局默认数值集中在 `src/game/core/rules.hpp` 的 `RulesConfig` 中；
+CLI 提供人数与初始手牌等选项，其他数值可通过引擎配置修改，
+并非所有规则都能直接从牌表 JSON 调整。每张牌的效果文案可直接查询：`tkw rules` 列出全部、
 `tkw rules <关键词>` 过滤，`tkw cards --text` 在牌表后附文案。详细规则以
 `tkw --help` 与卡面文案为准。
+
+身份局主公固定为 `P0`，其余角色按种子随机分配，配比如下：
+
+| 人数 | 主公 | 忠臣 | 反贼 | 内奸 |
+|---|---|---|---|---|
+| 4 | 1 | 1 | 1 | 1 |
+| 5 | 1 | 1 | 2 | 1 |
+| 6 | 1 | 1 | 3 | 1 |
+| 7 | 1 | 2 | 3 | 1 |
+| 8 | 1 | 2 | 4 | 1 |
+
+界面中“回合数”按每个角色执行一次回合计数，并非全体角色各行动一次才加 1。
 
 ## 存档说明
 
 - `save <file>` / `load <file>`（别名 `w` / `l`）手动存读；存档为 JSON
-  （`format: tkw-save`，version 1），写入走原子替换（先写临时文件再 rename），
+  （`format: tkw-save`，基础格式 version 1），写入走原子替换（先写临时文件再 rename），
   读取时全量校验通过后才落子。
+- **格式版本**：写入时按实际状态选择版本，无连环和武将状态时为 v1，
+  含连环状态时为 v2，含武将选择时为 v3；当前读取端接受这三个版本。
+  旧二进制不支持的新版本会被明确拒绝，避免丢失规则状态。
 - **牌表指纹校验**：存档记录保存时牌表语义字段的 FNV-1a 指纹；加载时与当前
   `--deck` 牌表比对，牌表已改动则拒绝加载：
   `存档加载失败（牌表不符）: deck.hash`。
@@ -333,6 +508,16 @@ tkw --hero P0=zhangfei repl         # 或进 REPL：new --hero P0=zhangfei --pla
   语义刻意区分）。乱斗存档不写这两项，旧档缺字段时回落乱斗 + 空角色表，仍可加载。
 - **自动存档**：REPL 退出时若有进行中的会话，自动存档到当前目录
   `tkw-autosave.json`；`--autosave <path>` 改路径，空串关闭。
+
+存档还包含牌堆与各区域牌、实体状态、随机数状态和下一回合进度，
+用于在回合边界继续对局。手动保存适合在一次 `step` 完成后执行；
+不能把它理解为任意决策窗口的即时快照。
+
+读取非默认牌表的存档时，需要选回保存时的资源目录。
+例如先执行 `tkw --deck resources/junzheng repl`，再输入
+`load save.json`；也可在已有 REPL 中使用
+`load save.json --deck resources/junzheng`。牌表语义发生变化导致指纹不符时，
+请使用对应旧资源读档，或新建对局。
 
 ## 目录结构
 
@@ -347,11 +532,77 @@ three_kingdoms_war_mud/
 │   ├── tui/                #   TUI 纯视图模型（可见性/快照/日志/命令/控制器，无 FTXUI）
 │   └── save/  util/        #   存档 / 通用（Result、随机源）
 ├── tui/                    # 可选终端界面（TKW_ENABLE_TUI=ON 时构建 tkw-tui，含 FTXUI）
-├── tests/                  # doctest，目录镜像 src，12 个测试可执行文件
+├── tests/                  # doctest，目录镜像 src，默认 13 个测试可执行文件
 ├── resources/              # 数据驱动牌表：deck.json + cards/<id>.json
 ├── thirdparty/             # 子模块：pjh_result / pjh_json / pjh_cli / pjh_platform
 └── build/                  # 构建产物（不入库）
 ```
+
+## 开发与测试
+
+默认配置构建核心测试与 CLI 测试，也构建不依赖 FTXUI 的 TUI 共享逻辑测试；
+启用 `TKW_ENABLE_TUI` 后会额外构建面板/渲染测试。
+使用 shell 与 PTY 的端到端测试按平台和工具条件注册，
+所以不同平台的 CTest 用例数量可能不同。
+
+```sh
+cmake --build build
+ctest --test-dir build --output-on-failure
+ctest --test-dir build -N                     # 列出已注册用例
+cmake --build build --target game_tests      # 单独构建游戏规则测试目标
+```
+
+Visual Studio 多配置构建的上述构建/测试命令需分别追加
+`--config Release` 与 `-C Release`。默认测试目标覆盖实体、事件、
+文件与配置、卡牌与武将目录、规则结算、AI、回放、随机数、
+存档以及 CLI/TUI 交互。
+
+开发入口可按改动范围查找：
+
+| 改动内容 | 主要位置 |
+|---|---|
+| 卡牌/武将 JSON 及解析 | `resources/`、`src/card/catalog.hpp`、`src/hero/catalog.hpp` |
+| 全局数值与角色配比 | `src/game/core/rules.hpp`、`src/game/core/roles.hpp` |
+| 回合与终局流程 | `src/game/flow/` |
+| 效果、响应与装备结算 | `src/game/resolve/`、`src/game/core/effect.hpp` |
+| AI 与真人决策 | `src/game/ai/`、`src/game/core/decision.hpp` |
+| 命令与中文帮助 | `src/cli/` |
+| 存档格式、读取与写入 | `src/save/` |
+| TUI 共享状态与 FTXUI 前端 | `src/tui/`、`tui/` |
+
+新增结算机制时，应更新解析映射、机制实现状态与结算路径，
+并在 `tests/` 中补充相应回归用例；涉及可交互动作时，也要核对
+AI 与两种真人前端是否能完成选择。
+
+## 常见问题
+
+- **输入 `tkw` 提示找不到命令**：请使用构建产物的完整相对路径，
+  例如 PowerShell 中的 `.\build\src\tkw.exe`。
+- **找不到资源或加载牌堆失败**：默认 `resources/` 相对工作目录。
+  请从仓库根目录运行，或传入 `--deck <资源目录>`；路径含空格时加引号。
+- **子模块初始化失败**：先执行递归初始化；SSH 认证失败可使用前文的
+  `pjh_cli` HTTPS 本地覆盖方式。
+- **编译器不支持某个标准库功能**：检查编译器及其标准库的 C++20 支持，
+  并确认 CMake 选中了预期编译器。
+- **TUI 提示需要交互式终端**：它要求 stdin/stdout 均为 TTY，
+  管道或重定向场景请使用 `tkw repl`；`tkw-tui --help` 可在非 TTY 下查看帮助。
+- **读档提示牌表不符**：选回保存时的牌表和资源版本；模式与武将从存档恢复，
+  `--mode` 不能强制更改存档模式。
+- **关闭真人后仍出现决策提示**：在 REPL 中用 `new --no-human` 新建全 AI 局；
+  真人配置与事件日志开关是不同设置。
+
+## 第三方依赖
+
+| 组件 | 用途 | 获取方式 |
+|---|---|---|
+| `pjh_result` | Result/Option 与错误传播 | Git 子模块 |
+| `pjh_json` | JSON 资源与存档处理 | Git 子模块，含嵌套依赖 |
+| `pjh_platform` | 文件系统与终端平台适配 | Git 子模块 |
+| `pjh_cli` | 命令行解析与 REPL | Git 子模块 |
+| doctest v2.5.0 | 测试框架 | 启用测试时由 FetchContent 获取 |
+| FTXUI | 可选全屏终端界面 | 优先使用已安装包，否则获取 v7.0.3 |
+
+各第三方组件的许可证与详细说明请查看相应目录。
 
 ## 免责说明
 
