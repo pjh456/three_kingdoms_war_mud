@@ -14,37 +14,51 @@
   </p>
 </div>
 
-这是一个在终端里玩的单机卡牌游戏，规则脱胎自三国杀。
+本仓库游戏灵感来源自《三国杀》桌游，提供 TUI 与 CLI 两种方式进行游玩。
 
-- C++20 编写。对局不需要服务器、不需要账号、不联网。
-- 你和 AI 混坐一桌。一回合的流程是：判定 → 摸牌 → 出牌（杀 / 锦囊 / 装备）→ 弃牌。
-- 结算含伤害、濒死救援、阵亡。
-- 可以一键跑完整局，也可以进 REPL 逐回合自己操作。
-- 还有一个可选的全屏终端界面（TUI）。
+目前已完全实现单机的多人混战基础模式，并在此基础上添加了测试性的武将、性别与军争玩法。
 
-## 要求
+## 游戏特性
 
-- 支持 C++20 的编译器
-- CMake ≥ 3.21
-- Ninja
+- 全仓库使用 C++20 编写，在开发过程中使用现代 C++ 语法与设计；
+- 对局全程离线，无需联网，存档数据可在本地读写；
+- 添加基于状态机驱动的 AI，并能根据回合进行不同决策；
+- 完整实现《三国杀》的基础玩法；
+- 支持 REPL 逐回合解释操作与一键模拟全局等多种模式；
+- 支持 CLI 与 TUI 两种游玩方式。
+
+## 环境依赖
+
+- 支持 C++20 的编译器，目前已在 GCC、Clang 与 MSVC 下进行测试，详见仓库 CI
+- CMake 版本 ≥ 3.21
+- Ninja（可选）
 - Git
 
-## 构建
+## 快速开始
 
-第三方库是 git 子模块，而且是两层结构，必须递归拉取：
+仓库的依赖作为子模块在 Github 平台进行分层管理，在构建前需要递归克隆：
 
 ```sh
-git clone https://github.com/pjh456/three_kingdoms_war_mud.git three_kingdoms_war_mud
-cd three_kingdoms_war_mud
+git clone https://github.com/pjh456/three_kingdoms_war_mud.git --recursive
+```
+
+如果已经克隆仓库，进入仓库目录后执行：
+
+```sh
 git submodule update --init --recursive
 ```
 
-构建：
+在递归拉取子模块后，使用 CMake 开始构建项目：
 
 ```sh
-cmake -S . -B build -G Ninja   # 首次需联网拉取 doctest v2.5.0
-cmake --build build            # 产物 build/src/tkw
-ctest --test-dir build --output-on-failure   # 跑测试，可选
+cmake -S . -B build  # 配置 CMake 项目
+cmake --build build  # 构建 CMake 项目
+```
+
+除此之外，还可以通过以下指令运行项目自带的单元测试：
+
+```sh
+ctest --test-dir build --output-on-failure
 ```
 
 - 产物路径：`build/src/tkw`；Windows 下是 `.\build\src\tkw.exe`。
