@@ -304,6 +304,7 @@ tkw --deck resources/junzheng repl   # 再 load save.json
   git config submodule.thirdparty/pjh_cli.url https://github.com/pjh456/pjh_cli
   ```
 
+- **Windows 下运行产生乱码**：终端窗口不支持 UTF-8 编码导致，在运行前先使用 `chcd 65001` 切换终端编码即可。
 - **提示需要交互式终端（TUI）**：它要求 stdin/stdout 都是 TTY。管道或重定向场景请用 `tkw repl`。
 - **读档提示牌表不符**：选回保存时的牌表，或新建对局。
 - **关掉真人后还出现决策提示**：在 REPL 里用 `new --no-human` 新建全 AI 局。
