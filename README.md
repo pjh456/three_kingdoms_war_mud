@@ -61,15 +61,16 @@ cmake --build build  # 构建 CMake 项目
 ctest --test-dir build --output-on-failure
 ```
 
-- 产物路径：`build/src/tkw`；Windows 下是 `.\build\src\tkw.exe`。
-- TUI 默认不构建。单独建一个目录：`-B build-tui`，产物 `build-tui/tui/tkw-tui`（Windows 下 `.exe`）。见「终端界面（TUI）」。
-- 开关：`-DTKW_ENABLE_TESTS=ON|OFF`（默认 ON）、`-DTKW_ENABLE_TUI=ON|OFF`（默认 OFF）。
-- 只在仓库根目录运行。默认牌表 `resources/` 相对当前目录解析。
-- 资源与存档的相对路径都相对启动时的工作目录。
+构建产物说明如下：
 
-## 玩法
+- CLI 产物路径在 `build/src` 下，有一个 `tkw` 的可执行程序
+- TUI 默认不构建。可以通过下述编译开关选项指定开启，产物在 `build/tui` 下，有一个 `tkw-tui` 的可执行程序
+- CMake 编译开关：`-DTKW_ENABLE_TESTS=ON|OFF`（是否编译测试，默认 ON）、`-DTKW_ENABLE_TUI=ON|OFF`（是否编译 TUI，默认 OFF）。
+- 可执行程序只建议在仓库根目录运行，因为卡牌表需要在运行路径下解析 `resources/` 配置路径；同样地，资源与存档的相对路径都相对启动时的工作目录。
 
-### AI 局
+## 快速开始
+
+### 全员 AI 模拟对局
 
 ```sh
 tkw                            # 直接跑一局 AI 对局（默认 4 人、种子 42）
@@ -79,23 +80,23 @@ tkw --mode identity deal 5 1   # 身份局：5 人、种子 1
 
 `deal <玩家数> <种子>` 是位置参数，两个都必填。
 
-批量模拟：
+同时还支持批量模拟：
 
 ```sh
 tkw simulate 100 4   # 100 局、4 人（第二个参数可选）
 ```
 
-`simulate` 只跑全 AI，会拒绝真人座位。基种子缺省 1，每局种子递增。结果含局数、种子区间、AI 档、胜场 / 阵营胜场、平局、平均回合。
+`simulate` 只跑全 AI 对局，会拒绝真人座位参数。默认情况下随机种子为 `1`，且每局种子递增。模拟的输出结果含局数、种子区间、胜场 / 阵营胜场、平局、平均回合。
 
-AI 有两档：`simple`（贪心，默认）和 `aggressive`（优先伤害与多目标）。两者共享同一套合法动作与响应机制。`aggressive` 不保证在所有局面更优。
+AI 包含两种决策：`simple`（贪心，默认）和 `aggressive`（优先伤害与多目标）。两者共享同一套合法动作与响应机制。`aggressive` 不保证在所有局面更优。
 
-### 真人局
+### 真人游玩对局
 
 ```sh
-tkw --human P0 repl   # P0 由你操作，进 REPL
+tkw --human P0 repl   # P0 由玩家操作，进入 REPL 对局
 ```
 
-第一局可以照抄：
+初始游玩的时候可以通过以下指令快速游玩：
 
 ```sh
 tkw --human P0 repl        # 进 REPL，P0 由你操作
@@ -103,10 +104,10 @@ new --players 2 --seed 1   # 开新局
 step                       # 推进一个回合
 ```
 
-轮到你时，按窗口提示操作：
+轮到玩家时，按窗口提示操作：
 
 - 出牌窗口：`play <序号>` 出牌（可连续出牌），`pass` 结束出牌阶段。
-- 弃牌窗口：手牌超过当前体力时出现，`discard <序号> ...` 弃够张数（这个窗口不能 `pass`）。
+- 弃牌窗口：手牌超过当前体力时出现，`discard <序号> ...` 弃足够张数（这个窗口不能 `pass`）。
 - 响应 / 濒死救场 / 无懈可击 / 五谷丰登亮牌：都用 `play <序号>`，`pass` 放弃（强制选择的除外）。
 - 窗口里输入 `?` 或 `help` 看用法；`card <序号>` 查看候选牌的完整效果文案。
 
@@ -124,16 +125,17 @@ REPL 里的常用命令：
 
 ## 终端界面（TUI）
 
-TUI 默认关闭。想用就单独构建：
+TUI 默认关闭，可以通过以下内容开始构建：
 
 ```sh
-cmake -B build-tui -G Ninja -DTKW_ENABLE_TUI=ON   # 首次联网拉取 FTXUI v7.0.3
-cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
-.\build-tui\tui\tkw-tui.exe                       # Windows 下的产物
+cmake -B build -DTKW_ENABLE_TUI=ON  # 首次联网拉取 FTXUI v7.0.3
+cmake --build build # 产物 build/tui/tkw-tui
+.\build\tui\tkw-tui.exe # Windows 下的产物
+./build/tui/tkw-tui # Linux 下的产物
 ```
 
 - 关闭时不探测也不下载 FTXUI，对 CLI 零影响。
-- 必须在仓库根目录运行。需要在真正的交互式终端里跑（stdin/stdout 都必须是 TTY）。
+- 同样地，构建产物必须在仓库根目录运行。需要在真正的交互式终端里跑（stdin/stdout 都必须是 TTY）。
 - 不是 TTY 会打印「需要交互式终端」并以退出码 1 退出。
 - 查看帮助用 `tkw-tui --help`，非 TTY 也能用，退出码 0。
 - 四个面板：棋盘 / 手牌 / 日志 / 状态。
@@ -160,7 +162,7 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 
 其他：TUI 事件日志恒开，没有 `--verbose` / `--no-verbose`。退出时若有进行中的会话会自动存档，退出信息写到 stderr。
 
-## 命令
+## 命令速查
 
 | 命令                       | 别名 | 说明                                                     |
 | -------------------------- | ---- | -------------------------------------------------------- |
@@ -180,7 +182,7 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 | `load <file>`              | `l`  | 加载存档                                                 |
 | `repl`                     | —    | 进入交互模式（`?` 查看命令，`quit` 退出）                |
 
-## 选项
+## 启动选项
 
 | 选项                        | 说明                                                        |
 | --------------------------- | ----------------------------------------------------------- |
@@ -240,7 +242,7 @@ cmake --build build-tui --target tkw-tui          # 产物 build-tui/tui/tkw-tui
 仓库自带两副牌表：
 
 - `resources/`：标准版，32 种 / 108 张。
-- `resources/junzheng/`：军争篇，17 种 / 83 张。
+- `resources/junzheng/`：军争篇，17 种 / 83 张（测试版）。
 
 `tkw decks` 可以一览。用 `--deck <路径>` 选牌表：
 
